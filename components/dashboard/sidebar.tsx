@@ -85,7 +85,7 @@ const secondaryNavigation: SidebarNavItem[] = [
     title: "Integrations",
     href: "/dashboard#integrations",
     icon: <Cog className="size-4" />,
-    disabled: true,
+    badge: "New",
   },
 ];
 

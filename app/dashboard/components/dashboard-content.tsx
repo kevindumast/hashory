@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQuery } from "convex/react";
 import {
   Area,
   AreaChart,
@@ -25,11 +26,32 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
+import { api } from "@/convex/_generated/api";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, ArrowDownRight, CalendarDays, RefreshCw, ShieldAlert, Zap } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  CalendarDays,
+  FileLock,
+  Plug,
+  RefreshCw,
+  ShieldAlert,
+  Zap,
+} from "lucide-react";
 
 type DashboardContentProps = {
   userName?: string | null;
+};
+
+type IntegrationRecord = {
+  _id: string;
+  provider: string;
+  displayName?: string;
+  readOnly: boolean;
+  scopes: string[];
+  createdAt: number;
+  updatedAt: number;
 };
 
 const overviewMetrics = [
@@ -64,15 +86,15 @@ const overviewMetrics = [
 ];
 
 const navPerformance = [
-  { date: "Juin 10", nav: 21.2 },
-  { date: "Juin 14", nav: 21.9 },
-  { date: "Juin 18", nav: 22.4 },
-  { date: "Juin 22", nav: 22.1 },
-  { date: "Juin 26", nav: 22.8 },
-  { date: "Juin 30", nav: 23.2 },
-  { date: "Juil 4", nav: 23.6 },
-  { date: "Juil 8", nav: 24.1 },
-  { date: "Juil 12", nav: 24.5 },
+  { date: "Jun 10", nav: 21.2 },
+  { date: "Jun 14", nav: 21.9 },
+  { date: "Jun 18", nav: 22.4 },
+  { date: "Jun 22", nav: 22.1 },
+  { date: "Jun 26", nav: 22.8 },
+  { date: "Jun 30", nav: 23.2 },
+  { date: "Jul 4", nav: 23.6 },
+  { date: "Jul 8", nav: 24.1 },
+  { date: "Jul 12", nav: 24.5 },
 ];
 
 const allocationBreakdown = [
@@ -122,17 +144,17 @@ const automationRules = [
   {
     name: "Rebalance BTC/ETH spread",
     status: "Active",
-    description: "Trigger delta-neutral hedge when spread variance > 2.5σ",
+    description: "Trigger delta-neutral hedge when spread variance > 2.5 sigma.",
   },
   {
     name: "Stablecoin buffer",
     status: "Active",
-    description: "Maintain 15% minimum allocation to USD stablecoins",
+    description: "Maintain 15% minimum allocation to USD stablecoins.",
   },
   {
     name: "SOL trailing stop",
     status: "Paused",
-    description: "Dynamic stop-loss based on 14d ATR",
+    description: "Dynamic stop-loss based on 14 day ATR.",
   },
 ];
 
@@ -140,23 +162,41 @@ const riskAlerts = [
   {
     title: "Funding rate spike detected on BTC perpetuals",
     severity: "high",
-    timestamp: "Il y a 12 min",
+    timestamp: "12 min ago",
   },
   {
     title: "Delegated wallet signed a high-value transaction",
     severity: "medium",
-    timestamp: "Il y a 27 min",
+    timestamp: "27 min ago",
   },
   {
     title: "Compliance check required for new client wallet",
     severity: "low",
-    timestamp: "Il y a 1 h",
+    timestamp: "1 hour ago",
   },
 ];
 
+const providerMeta: Record<
+  string,
+  {
+    label: string;
+    type: string;
+  }
+> = {
+  binance: {
+    label: "Binance",
+    type: "Exchange API",
+  },
+};
+
 export function DashboardContent({ userName }: DashboardContentProps) {
-  const formattedUser = userName ? `${userName}` : "Gestionnaire";
+  const formattedUser = userName ?? "Gestionnaire";
   const performanceDelta = useMemo(() => navPerformance.at(-1)!.nav - navPerformance[0]!.nav, []);
+  const integrations = useQuery(api.integrations.list);
+  const { openDialog } = useProviderDialog();
+
+  const integrationsList = integrations ?? [];
+  const integrationsCount = integrationsList.length;
 
   return (
     <div className="space-y-10">
@@ -168,11 +208,11 @@ export function DashboardContent({ userName }: DashboardContentProps) {
           </div>
           <Badge variant="outline" className="gap-2 rounded-full border-primary/40 bg-primary/10 px-3 py-1 text-xs">
             <CalendarDays className="size-3" />
-            Mise à jour {new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
+            Mise a jour {new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long" })}
           </Badge>
         </div>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          {formattedUser}, votre cockpit consolidé pour suivre la performance, le risque et l’allocation des actifs
+          {formattedUser}, votre cockpit consolide pour suivre la performance, le risque et l allocation des actifs
           crypto de vos clients.
         </p>
       </div>
@@ -184,6 +224,9 @@ export function DashboardContent({ userName }: DashboardContentProps) {
           </TabsTrigger>
           <TabsTrigger value="analytics" className="rounded-full px-4 py-2 text-sm">
             Analytics
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="rounded-full px-4 py-2 text-sm">
+            Integrations
           </TabsTrigger>
         </TabsList>
 
@@ -206,7 +249,11 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                         : "bg-red-500/10 text-red-500"
                     )}
                   >
-                    {metric.trend === "positive" ? <ArrowUpRight className="size-3" /> : <ArrowDownRight className="size-3" />}
+                    {metric.trend === "positive" ? (
+                      <ArrowUpRight className="size-3" />
+                    ) : (
+                      <ArrowDownRight className="size-3" />
+                    )}
                     {metric.change}
                   </span>
                   <span>{metric.description}</span>
@@ -219,12 +266,12 @@ export function DashboardContent({ userName }: DashboardContentProps) {
             <Card className="border-border/60 bg-card/80 backdrop-blur lg:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
-                  <CardDescription>Courbe NAV consolidée</CardDescription>
+                  <CardDescription>Courbe NAV consolidee</CardDescription>
                   <CardTitle className="text-3xl text-foreground">${navPerformance.at(-1)?.nav.toFixed(1)}M</CardTitle>
                 </div>
                 <Badge variant="outline" className="gap-1 rounded-full border-emerald-500/20 bg-emerald-500/10 text-emerald-500">
                   <ArrowUpRight className="size-3" />
-                  {performanceDelta.toFixed(1)}% depuis 30j
+                  {performanceDelta.toFixed(1)}% sur 30j
                 </Badge>
               </CardHeader>
               <CardContent className="h-72">
@@ -254,15 +301,15 @@ export function DashboardContent({ userName }: DashboardContentProps) {
               </CardContent>
               <CardFooter className="justify-between text-xs text-muted-foreground">
                 <span>
-                  Baseline: 17.3M &nbsp;•&nbsp; Volatilité annualisée: <strong>18%</strong>
+                  Baseline: 17.3M • Volatilite annualisee: <strong>18%</strong>
                 </span>
-                <span>Corrélation BTC: <strong>0.72</strong></span>
+                <span>Correlation BTC: <strong>0.72</strong></span>
               </CardFooter>
             </Card>
 
             <Card className="border-border/60 bg-card/80 backdrop-blur">
               <CardHeader>
-                <CardDescription>Répartition des actifs</CardDescription>
+                <CardDescription>Repartition des actifs</CardDescription>
                 <CardTitle className="text-lg">Allocation cible vs actuelle</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -290,8 +337,8 @@ export function DashboardContent({ userName }: DashboardContentProps) {
           <section className="grid gap-5 lg:grid-cols-3">
             <Card className="border-border/60 bg-card/80 backdrop-blur lg:col-span-2" id="alerts">
               <CardHeader>
-                <CardDescription>Opérations récentes</CardDescription>
-                <CardTitle className="text-lg">Flux exécutés sur Binance</CardTitle>
+                <CardDescription>Operations recentes</CardDescription>
+                <CardTitle className="text-lg">Flux executes sur Binance</CardTitle>
               </CardHeader>
               <CardContent className="overflow-hidden rounded-xl border border-border/60">
                 <Table>
@@ -299,7 +346,7 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                     <TableRow>
                       <TableHead>Heure</TableHead>
                       <TableHead>Instrument</TableHead>
-                      <TableHead>Côté</TableHead>
+                      <TableHead>Cote</TableHead>
                       <TableHead>Taille</TableHead>
                       <TableHead>Prix</TableHead>
                       <TableHead className="text-right">P&L</TableHead>
@@ -342,15 +389,15 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                   Synchronisation auto toutes les 90 secondes via Convex
                 </div>
                 <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
-                  Voir tout l’historique
+                  Voir tout l historique
                 </Button>
               </CardFooter>
             </Card>
 
-            <Card className="border-border/60 bg-card/80 backdrop-blur">
+            <Card className="border-border/60 bg-card/80 backdrop-blur" id="automation">
               <CardHeader>
                 <CardDescription>Automations IA</CardDescription>
-                <CardTitle className="text-lg">Règles critiques</CardTitle>
+                <CardTitle className="text-lg">Regles critiques</CardTitle>
               </CardHeader>
               <CardContent className="space-y-5">
                 {automationRules.map((rule) => (
@@ -364,7 +411,9 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                       variant="outline"
                       className={cn(
                         "w-fit rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider",
-                        rule.status === "Active" ? "border-emerald-500/30 text-emerald-500" : "border-muted text-muted-foreground"
+                        rule.status === "Active"
+                          ? "border-emerald-500/30 text-emerald-500"
+                          : "border-muted text-muted-foreground"
                       )}
                     >
                       {rule.status}
@@ -376,7 +425,7 @@ export function DashboardContent({ userName }: DashboardContentProps) {
           </section>
         </TabsContent>
 
-        <TabsContent value="analytics" className="space-y-6">
+        <TabsContent value="analytics" className="space-y-6" id="analytics">
           <section className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
             <AnalyticsStat label="Beta vs BTC" value="0.62" trend="+0.04" />
             <AnalyticsStat label="Sortino Ratio" value="1.72" trend="+0.12" />
@@ -387,8 +436,8 @@ export function DashboardContent({ userName }: DashboardContentProps) {
           <section className="grid gap-5 lg:grid-cols-2">
             <Card className="border-border/60 bg-card/80 backdrop-blur">
               <CardHeader>
-                <CardDescription>Alertes & conformité</CardDescription>
-                <CardTitle className="text-lg">Radar temps réel</CardTitle>
+                <CardDescription>Alertes et conformite</CardDescription>
+                <CardTitle className="text-lg">Radar temps reel</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {riskAlerts.map((alert) => (
@@ -415,10 +464,10 @@ export function DashboardContent({ userName }: DashboardContentProps) {
               </CardContent>
             </Card>
 
-            <Card className="border-border/60 bg-card/80 backdrop-blur" id="analytics">
+            <Card className="border-border/60 bg-card/80 backdrop-blur">
               <CardHeader>
                 <CardDescription>Pipeline IA</CardDescription>
-                <CardTitle className="text-lg">Recommandations générées</CardTitle>
+                <CardTitle className="text-lg">Recommandations generees</CardTitle>
               </CardHeader>
               <CardContent className="h-72">
                 <ScrollArea className="h-full pr-4">
@@ -427,7 +476,7 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                       <div key={index} className="rounded-xl border border-border/50 bg-background/60 p-4">
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           <span>
-                            IA Oracly • {index % 2 === 0 ? "Réallocation" : "Risque"} • Ticket #{1124 + index}
+                            IA Oracly • {index % 2 === 0 ? "Reallocation" : "Risque"} • Ticket #{1124 + index}
                           </span>
                           <Badge variant="outline" className="border-primary/30 text-primary">
                             <Zap className="mr-1 size-3" />
@@ -436,14 +485,118 @@ export function DashboardContent({ userName }: DashboardContentProps) {
                         </div>
                         <p className="mt-3 text-sm text-foreground">
                           {index % 2 === 0
-                            ? "Réduire de 4% l’exposition BTC et augmenter SOL pour optimiser la corrélation au benchmark."
-                            : "Augmenter le buffer stablecoins de 2.5% pour réduire le risque de liquidité court terme."}
+                            ? "Reduire de 4% l exposition BTC et augmenter SOL pour optimiser la correlation au benchmark."
+                            : "Augmenter le buffer stablecoins de 2.5% pour reduire le risque de liquidite court terme."}
                         </p>
                       </div>
                     ))}
                   </div>
                 </ScrollArea>
               </CardContent>
+            </Card>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="integrations" className="space-y-6" id="integrations">
+          <section className="grid gap-5 lg:grid-cols-[2fr,1fr]">
+            <Card className="border-border/60 bg-card/80 backdrop-blur">
+              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardDescription>Connexion des plateformes</CardDescription>
+                  <CardTitle className="text-lg">Providers actifs</CardTitle>
+                </div>
+                <Button size="sm" className="inline-flex items-center gap-2" onClick={openDialog}>
+                  <Plug className="size-4" />
+                  Connecter une plateforme
+                </Button>
+              </CardHeader>
+              <CardContent className="rounded-xl border border-border/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Provider</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Lecture seule</TableHead>
+                      <TableHead>Scopes</TableHead>
+                      <TableHead>Date d ajout</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {integrationsCount === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                          Aucune connexion active pour le moment. Cliquez sur &quot;Connecter une plateforme&quot; pour commencer.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      integrationsList.map((integration: IntegrationRecord) => {
+                        const meta = providerMeta[integration.provider] ?? {
+                          label: integration.provider,
+                          type: "Custom",
+                        };
+                        return (
+                          <TableRow key={integration._id} className="text-sm">
+                            <TableCell className="font-medium text-foreground">
+                              {integration.displayName ?? meta.label}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">{meta.type}</TableCell>
+                            <TableCell>
+                              <Badge
+                                variant="outline"
+                                className={cn(
+                                  "rounded-full px-3 py-1 text-xs font-semibold",
+                                  integration.readOnly
+                                    ? "border-emerald-500/30 text-emerald-500"
+                                    : "border-amber-500/30 text-amber-500"
+                                )}
+                              >
+                                {integration.readOnly ? "Oui" : "Partiel"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {integration.scopes.length > 0 ? integration.scopes.join(", ") : "Lecture seule"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {new Date(integration.createdAt).toLocaleDateString("fr-FR")}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+              {integrationsCount > 0 ? (
+                <CardFooter className="flex items-center justify-end text-xs text-muted-foreground">
+                  Derniere mise a jour: {new Date(integrationsList[0].updatedAt).toLocaleString("fr-FR")}
+                </CardFooter>
+              ) : null}
+            </Card>
+
+            <Card className="border-border/60 bg-card/80 backdrop-blur">
+              <CardHeader>
+                <CardDescription>Bonnes pratiques</CardDescription>
+                <CardTitle className="text-lg">Stockage des secrets</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-primary">
+                  <FileLock className="size-4" />
+                  <span>Vos cles sont chiffreess avec ORACLY_ENCRYPTION_KEY avant stockage dans Convex.</span>
+                </div>
+                <ul className="list-disc space-y-2 pl-5">
+                  <li>Limitez les permissions au strict necessaire (lecture seule pour Binance).</li>
+                  <li>Revoquez les clees directement depuis l exchange si un doute survient.</li>
+                  <li>Planifiez une rotation periodique des clees pour rester conforme RGPD.</li>
+                  <li>
+                    Conservez les secrets dans un coffre interne; Oracly ne les affiche jamais en clair apres la saisie.
+                  </li>
+                </ul>
+              </CardContent>
+              <CardFooter>
+                <Button variant="ghost" className="text-xs" onClick={openDialog}>
+                  Ajouter une nouvelle connexion
+                </Button>
+              </CardFooter>
             </Card>
           </section>
         </TabsContent>

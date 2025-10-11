@@ -43,4 +43,19 @@ export default defineSchema({
     payload: v.optional(v.any()),
     generatedAt: v.number(),
   }).index("by_portfolio_type", ["portfolioId", "recommendationType"]),
+  integrations: defineTable({
+    clerkUserId: v.string(),
+    provider: v.string(),
+    displayName: v.optional(v.string()),
+    readOnly: v.boolean(),
+    encryptedCredentials: v.object({
+      apiKey: v.string(),
+      apiSecret: v.string(),
+    }),
+    scopes: v.optional(v.array(v.string())),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["clerkUserId"])
+    .index("by_user_provider", ["clerkUserId", "provider"]),
 });

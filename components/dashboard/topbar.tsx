@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { TrendingUp, Bell, Menu, Sparkles, HelpCircle } from "lucide-react";
+import { TrendingUp, Bell, Menu, Sparkles, HelpCircle, Plug } from "lucide-react";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,14 +11,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 type DashboardTopbarProps = {
   onOpenSidebar: () => void;
+  onConnectProvider: () => void;
 };
 
-export function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps) {
+export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardTopbarProps) {
   const [query, setQuery] = useState("");
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
+      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4">
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
@@ -36,18 +37,25 @@ export function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps) {
             </Badge>
           </div>
         </div>
-        <div className="flex w-full max-w-md items-center gap-2">
+        <div className="flex flex-1 items-center gap-2">
           <Input
             placeholder="Search assets, clients, or mandates..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="w-full"
           />
           <Button variant="outline" size="icon" className="hidden sm:inline-flex">
             <Sparkles className="size-4" />
           </Button>
         </div>
         <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" className="sm:hidden" onClick={onConnectProvider}>
+            <Plug className="size-4" />
+          </Button>
+          <Button className="hidden sm:inline-flex items-center gap-2" onClick={onConnectProvider}>
+            <Plug className="size-4" />
+            Connecter une plateforme
+          </Button>
+
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" className="relative">
@@ -82,7 +90,7 @@ export function DashboardTopbar({ onOpenSidebar }: DashboardTopbarProps) {
               <Link href="/sign-in">Se connecter</Link>
             </Button>
             <Button asChild size="sm" variant="secondary">
-              <Link href="/sign-up">Créer un compte</Link>
+              <Link href="/sign-up">Creer un compte</Link>
             </Button>
           </SignedOut>
         </div>
