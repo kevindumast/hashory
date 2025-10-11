@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TrendingUp, Bell, Menu, Sparkles, HelpCircle, Plug } from "lucide-react";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isConvexConfigured } from "@/convex/client";
 
 type DashboardTopbarProps = {
   onOpenSidebar: () => void;
@@ -16,6 +17,7 @@ type DashboardTopbarProps = {
 
 export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardTopbarProps) {
   const [query, setQuery] = useState("");
+  const isIntegrationEnabled = useMemo(() => isConvexConfigured, []);
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
@@ -48,10 +50,21 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
           </Button>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="sm:hidden" onClick={onConnectProvider}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="sm:hidden"
+            onClick={onConnectProvider}
+            disabled={!isIntegrationEnabled}
+            title={!isIntegrationEnabled ? "Configure Convex to activer les intégrations" : undefined}
+          >
             <Plug className="size-4" />
           </Button>
-          <Button className="hidden sm:inline-flex items-center gap-2" onClick={onConnectProvider}>
+          <Button
+            className="hidden sm:inline-flex items-center gap-2"
+            onClick={onConnectProvider}
+            disabled={!isIntegrationEnabled}
+          >
             <Plug className="size-4" />
             Connecter une plateforme
           </Button>

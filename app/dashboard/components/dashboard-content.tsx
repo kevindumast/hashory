@@ -28,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
 import { api } from "@/convex/_generated/api";
+import { isConvexConfigured } from "@/convex/client";
 import { cn } from "@/lib/utils";
 import {
   ArrowDownRight,
@@ -192,11 +193,7 @@ const providerMeta: Record<
 export function DashboardContent({ userName }: DashboardContentProps) {
   const formattedUser = userName ?? "Gestionnaire";
   const performanceDelta = useMemo(() => navPerformance.at(-1)!.nav - navPerformance[0]!.nav, []);
-  const integrations = useQuery(api.integrations.list);
   const { openDialog } = useProviderDialog();
-
-  const integrationsList = integrations ?? [];
-  const integrationsCount = integrationsList.length;
 
   return (
     <div className="space-y-10">
@@ -498,107 +495,11 @@ export function DashboardContent({ userName }: DashboardContentProps) {
         </TabsContent>
 
         <TabsContent value="integrations" className="space-y-6" id="integrations">
-          <section className="grid gap-5 lg:grid-cols-[2fr,1fr]">
-            <Card className="border-border/60 bg-card/80 backdrop-blur">
-              <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardDescription>Connexion des plateformes</CardDescription>
-                  <CardTitle className="text-lg">Providers actifs</CardTitle>
-                </div>
-                <Button size="sm" className="inline-flex items-center gap-2" onClick={openDialog}>
-                  <Plug className="size-4" />
-                  Connecter une plateforme
-                </Button>
-              </CardHeader>
-              <CardContent className="rounded-xl border border-border/60">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Provider</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Lecture seule</TableHead>
-                      <TableHead>Scopes</TableHead>
-                      <TableHead>Date d ajout</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {integrationsCount === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                          Aucune connexion active pour le moment. Cliquez sur &quot;Connecter une plateforme&quot; pour commencer.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      integrationsList.map((integration: IntegrationRecord) => {
-                        const meta = providerMeta[integration.provider] ?? {
-                          label: integration.provider,
-                          type: "Custom",
-                        };
-                        return (
-                          <TableRow key={integration._id} className="text-sm">
-                            <TableCell className="font-medium text-foreground">
-                              {integration.displayName ?? meta.label}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">{meta.type}</TableCell>
-                            <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  "rounded-full px-3 py-1 text-xs font-semibold",
-                                  integration.readOnly
-                                    ? "border-emerald-500/30 text-emerald-500"
-                                    : "border-amber-500/30 text-amber-500"
-                                )}
-                              >
-                                {integration.readOnly ? "Oui" : "Partiel"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {integration.scopes.length > 0 ? integration.scopes.join(", ") : "Lecture seule"}
-                            </TableCell>
-                            <TableCell className="text-muted-foreground">
-                              {new Date(integration.createdAt).toLocaleDateString("fr-FR")}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-              {integrationsCount > 0 ? (
-                <CardFooter className="flex items-center justify-end text-xs text-muted-foreground">
-                  Derniere mise a jour: {new Date(integrationsList[0].updatedAt).toLocaleString("fr-FR")}
-                </CardFooter>
-              ) : null}
-            </Card>
-
-            <Card className="border-border/60 bg-card/80 backdrop-blur">
-              <CardHeader>
-                <CardDescription>Bonnes pratiques</CardDescription>
-                <CardTitle className="text-lg">Stockage des secrets</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-primary">
-                  <FileLock className="size-4" />
-                  <span>Vos cles sont chiffreess avec ORACLY_ENCRYPTION_KEY avant stockage dans Convex.</span>
-                </div>
-                <ul className="list-disc space-y-2 pl-5">
-                  <li>Limitez les permissions au strict necessaire (lecture seule pour Binance).</li>
-                  <li>Revoquez les clees directement depuis l exchange si un doute survient.</li>
-                  <li>Planifiez une rotation periodique des clees pour rester conforme RGPD.</li>
-                  <li>
-                    Conservez les secrets dans un coffre interne; Oracly ne les affiche jamais en clair apres la saisie.
-                  </li>
-                </ul>
-              </CardContent>
-              <CardFooter>
-                <Button variant="ghost" className="text-xs" onClick={openDialog}>
-                  Ajouter une nouvelle connexion
-                </Button>
-              </CardFooter>
-            </Card>
-          </section>
+          {isConvexConfigured ? (
+            <IntegrationsPanel openDialog={openDialog} />
+          ) : (
+            <IntegrationsUnavailable openDialog={openDialog} />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -632,5 +533,151 @@ function AnalyticsStat({ label, value, trend, negative = false }: AnalyticsStatP
         </Badge>
       </CardContent>
     </Card>
+  );
+}
+
+function IntegrationsPanel({ openDialog }: { openDialog: () => void }) {
+  const integrations = useQuery(api.integrations.list) as IntegrationRecord[] | undefined;
+  const integrationsList = integrations ?? [];
+  const integrationsCount = integrationsList.length;
+
+  return (
+    <section className="grid gap-5 lg:grid-cols-[2fr,1fr]">
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardDescription>Connexion des plateformes</CardDescription>
+            <CardTitle className="text-lg">Providers actifs</CardTitle>
+          </div>
+          <Button size="sm" className="inline-flex items-center gap-2" onClick={openDialog}>
+            <Plug className="size-4" />
+            Connecter une plateforme
+          </Button>
+        </CardHeader>
+        <CardContent className="rounded-xl border border-border/60">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Provider</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Lecture seule</TableHead>
+                <TableHead>Scopes</TableHead>
+                <TableHead>Date d&apos;ajout</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {integrationsCount === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    Aucune connexion active pour le moment. Cliquez sur &quot;Connecter une plateforme&quot; pour
+                    commencer.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                integrationsList.map((integration) => {
+                  const meta = providerMeta[integration.provider] ?? {
+                    label: integration.provider,
+                    type: "Custom",
+                  };
+                  return (
+                    <TableRow key={integration._id} className="text-sm">
+                      <TableCell className="font-medium text-foreground">{integration.displayName ?? meta.label}</TableCell>
+                      <TableCell className="text-muted-foreground">{meta.type}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "rounded-full px-3 py-1 text-xs font-semibold",
+                            integration.readOnly
+                              ? "border-emerald-500/30 text-emerald-500"
+                              : "border-amber-500/30 text-amber-500"
+                          )}
+                        >
+                          {integration.readOnly ? "Oui" : "Partiel"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {integration.scopes.length > 0 ? integration.scopes.join(", ") : "Lecture seule"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(integration.createdAt).toLocaleDateString("fr-FR")}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+        {integrationsCount > 0 ? (
+          <CardFooter className="flex items-center justify-end text-xs text-muted-foreground">
+            Derniere mise a jour: {new Date(integrationsList[0].updatedAt).toLocaleString("fr-FR")}
+          </CardFooter>
+        ) : null}
+      </Card>
+
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
+        <CardHeader>
+          <CardDescription>Bonnes pratiques</CardDescription>
+          <CardTitle className="text-lg">Stockage des secrets</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-primary">
+            <FileLock className="size-4" />
+            <span>Les cles sont chiffrées avec ORACLY_ENCRYPTION_KEY avant stockage dans Convex.</span>
+          </div>
+          <ul className="list-disc space-y-2 pl-5">
+            <li>Limitez les permissions au strict nécessaire (lecture seule pour Binance).</li>
+            <li>Révoquez les clés directement depuis l&apos;exchange en cas de doute.</li>
+            <li>Planifiez une rotation périodique des clés pour rester conforme RGPD.</li>
+            <li>Conservez les secrets dans un coffre interne; Oracly ne les affiche jamais en clair.</li>
+          </ul>
+        </CardContent>
+        <CardFooter>
+          <Button variant="ghost" className="text-xs" onClick={openDialog}>
+            Ajouter une nouvelle connexion
+          </Button>
+        </CardFooter>
+      </Card>
+    </section>
+  );
+}
+
+function IntegrationsUnavailable({ openDialog }: { openDialog: () => void }) {
+  return (
+    <section className="grid gap-5 lg:grid-cols-[2fr,1fr]">
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
+        <CardHeader className="space-y-2">
+          <CardTitle>Activez les integrations</CardTitle>
+          <CardDescription>
+            Ajoutez `NEXT_PUBLIC_CONVEX_URL` et déployez votre backend Convex pour connecter Binance et autres
+            plateformes.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Une fois l&apos;URL Convex configurée et le schéma déployé, vous pourrez saisir vos cles API Binance en lecture
+            seule depuis ce tableau de bord.
+          </p>
+        </CardContent>
+        <CardFooter>
+          <Button onClick={openDialog} disabled title="Configurez Convex avant d&apos;ajouter des integrations.">
+            Connecter une plateforme
+          </Button>
+        </CardFooter>
+      </Card>
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
+        <CardHeader>
+          <CardDescription>Bonnes pratiques</CardDescription>
+          <CardTitle className="text-lg">Securite des secrets</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Préparez votre clé ORACLY_ENCRYPTION_KEY et stockez-la dans vos variables d&apos;environnement avant de connecter
+            une plateforme.
+          </p>
+        </CardContent>
+      </Card>
+    </section>
   );
 }

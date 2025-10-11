@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { isConvexConfigured } from "@/convex/client";
 
 type ConnectProviderDialogProps = {
   open: boolean;
@@ -46,13 +47,13 @@ const providerConfigs: ProviderConfig[] = [
         name: "apiKey",
         label: "API Key",
         placeholder: "Ex: aBcD1234...",
-        helper: "Accédez à votre clé API dans Binance > Gestion API.",
+        helper: "Depuis Binance > Gestion API > Créer une clé.",
       },
       {
         name: "apiSecret",
         label: "API Secret",
         placeholder: "Ex: zYxW9876...",
-        helper: "Conservez ce secret en lieu sûr, nous le chiffrons immédiatement.",
+        helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
       },
     ],
   },
@@ -72,7 +73,14 @@ const providerConfigs: ProviderConfig[] = [
   },
 ];
 
-export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDialogProps) {
+export function ConnectProviderDialog(props: ConnectProviderDialogProps) {
+  if (!isConvexConfigured) {
+    return <ConnectProviderDialogPlaceholder {...props} />;
+  }
+  return <ConnectProviderDialogInner {...props} />;
+}
+
+function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialogProps) {
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -119,7 +127,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
         onOpenChange(false);
       }, 900);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Impossible d’enregistrer la connexion.";
+      const message = err instanceof Error ? err.message : "Impossible d&apos;enregistrer la connexion.";
       setError(message);
     } finally {
       setSubmitting(false);
@@ -176,7 +184,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
                     onChange={(event) => setLabel(event.target.value)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Ce nom apparaîtra uniquement dans Oracly pour distinguer vos connexions.
+                    Ce nom apparait uniquement dans Oracly pour distinguer vos connexions.
                   </p>
                 </div>
 
@@ -206,7 +214,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground">Lecture seule obligatoire</p>
                     <p className="text-xs text-muted-foreground">
-                      Oracly ne déclenche aucune transaction. Vérifiez que vos clés sont limitées à la consultation.
+                      Oracly ne réalise aucune transaction. Limitez la clé aux permissions de lecture.
                     </p>
                   </div>
                 </div>
@@ -220,7 +228,7 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
-              Cette intégration sera disponible très bientôt. Restez informé dans notre changelog !
+              Cette intégration sera disponible très bientôt. Restez informé dans notre changelog.
             </div>
           )}
 
@@ -230,9 +238,9 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
               Sécurité & RGPD
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>Vos identifiants sont chiffrés côté serveur avec une clé dédiée.</li>
-              <li>Ils ne sont jamais exposés en clair et restent stockés dans Convex.</li>
-              <li>Vous pouvez révoquer une connexion à tout moment depuis la section Intégrations.</li>
+              <li>Les identifiants sont chiffrés côté serveur avec ORACLY_ENCRYPTION_KEY.</li>
+              <li>Ils ne sont jamais affichés en clair et restent stockés dans Convex.</li>
+              <li>Vous pouvez révoquer la connexion depuis l&apos;onglet Intégrations à tout moment.</li>
             </ul>
           </div>
 
@@ -265,6 +273,33 @@ export function ConnectProviderDialog({ open, onOpenChange }: ConnectProviderDia
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ConnectProviderDialogPlaceholder({ open, onOpenChange }: ConnectProviderDialogProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md bg-background/95">
+        <DialogHeader>
+          <DialogTitle>Intégrations indisponibles</DialogTitle>
+          <DialogDescription>
+            Configurez `NEXT_PUBLIC_CONVEX_URL` et déployez Convex pour activer la connexion des plateformes dans
+            Oracly.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            Ajoutez votre URL Convex dans les variables d&apos;environnement (local et Vercel), relancez le déploiement,
+            puis ouvrez à nouveau ce formulaire pour saisir vos clés API Binance.
+          </p>
+        </div>
+        <DialogFooter>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Compris
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
