@@ -4,7 +4,7 @@ import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { ConvexProvider } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import { ReactNode, Suspense } from "react";
+import { ReactNode } from "react";
 import { convexClient, isConvexConfigured } from "@/convex/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -17,7 +17,7 @@ export function Providers({ children }: ProvidersProps) {
 
   let content = (
     <TooltipProvider delayDuration={150}>
-      <Suspense fallback={null}>{children}</Suspense>
+      {children}
     </TooltipProvider>
   );
 
@@ -51,6 +51,7 @@ export function Providers({ children }: ProvidersProps) {
           colorPrimary: "#C9A646",
         },
       }}
+      dynamic
     >
       {content}
     </ClerkProvider>

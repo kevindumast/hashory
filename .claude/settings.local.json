@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npx convex env set CLERK_JWT_ISSUER_DOMAIN \"upward-kid-24.clerk.accounts.dev\")",
+      "Bash(npx convex:*)",
+      "Bash(npm run build:*)",
+      "Bash(vercel logs:*)",
+      "Bash(vercel:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
