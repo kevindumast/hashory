@@ -1,17 +1,16 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-const isProtectedRoute = createRouteMatcher([
-  "/dashboard(.*)",
-  "/convex(.*)",
-  "/api/(?!.*binance).*",
-]);
+const matchProtectedRoute = createRouteMatcher(["/dashboard(.*)", "/convex(.*)"]);
 
 export default clerkMiddleware(async (auth, request) => {
-  if (isProtectedRoute(request)) {
-    const session = await auth();
-    if (!session.userId) {
-      return session.redirectToSignIn();
-    }
+  const session = await auth();
+  const pathname = request.nextUrl.pathname;
+
+  const isApiRoute = pathname.startsWith("/api") && !pathname.startsWith("/api/binance");
+  const requiresAuth = matchProtectedRoute(request) || isApiRoute;
+
+  if (requiresAuth && !session.userId) {
+    return session.redirectToSignIn();
   }
 });
 
