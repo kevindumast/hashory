@@ -1,14 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
 
-export function requireUserId() {
-  const session = auth();
-  if (!session?.userId) {
+export async function requireUserId(): Promise<string> {
+  const { userId } = await auth();
+  if (!userId) {
     throw new Error("User is not authenticated.");
   }
-  return session.userId;
+  return userId;
 }
 
-export function optionalUserId() {
-  const session = auth();
-  return session?.userId ?? null;
+export async function optionalUserId(): Promise<string | null> {
+  const { userId } = await auth();
+  return userId ?? null;
 }
