@@ -1,3 +1,5 @@
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import { ShieldCheck, TrendingUp, Wallet } from "lucide-react";
 import { PortfolioCard } from "./components/PortfolioCard";
 import { MetricChart } from "./components/MetricChart";
@@ -48,7 +50,12 @@ const mockRecommendations = [
   },
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { userId } = await auth();
+  if (!userId) {
+    redirect("/sign-in");
+  }
+
   return (
     <div className="flex flex-col gap-12 px-6 pb-24 pt-12 lg:px-12">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

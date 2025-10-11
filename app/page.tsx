@@ -5,21 +5,21 @@ import { Button } from "@/components/ui/button";
 const features = [
   {
     icon: <BarChart3 className="h-6 w-6 text-primary" />,
-    title: "Vision 360°",
+    title: "Vision 360",
     description:
-      "Suivez la valeur temps réel de vos portefeuilles Binance et détectez les mouvements critiques instantanément.",
+      "Suivez la valeur temps reel de vos portefeuilles Binance et detectez les mouvements critiques instantanement.",
   },
   {
     icon: <Brain className="h-6 w-6 text-primary" />,
     title: "Intelligence Convex",
     description:
-      "Historisez vos positions et vos trades, préparez le terrain pour des analyses quantitatives avancées.",
+      "Historisez vos positions et vos trades, et preparez le terrain pour des analyses quantitatives avancees.",
   },
   {
     icon: <Sparkles className="h-6 w-6 text-primary" />,
-    title: "IA Personnalisée",
+    title: "IA Personnalisee",
     description:
-      "Générez des insights actionnables sur la performance, la réallocation d’actifs et la gestion du risque.",
+      "Generez des recommandations sur la performance, la reallocation d'actifs et la gestion du risque.",
   },
 ];
 
@@ -36,21 +36,18 @@ export default function Home() {
           Votre copilote IA pour piloter la performance de vos actifs crypto.
         </h1>
         <p className="mt-6 text-lg text-muted-foreground sm:text-xl">
-          Une base Next.js + Convex + Clerk solide pour connecter Binance,
-          visualiser vos métriques clés et activer une intelligence financière
-          proactive.
+          Une base Next.js + Convex + Clerk solide pour connecter Binance, visualiser vos metriques cles
+          et activer une intelligence financiere proactive.
         </p>
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Button asChild size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Link href="/dashboard">
-              Accéder au tableau de bord
+              Acceder au tableau de bord
               <ArrowRight className="ml-2 h-5 w-5" />
             </Link>
           </Button>
           <Button asChild size="lg" variant="outline" className="border-border text-foreground hover:bg-secondary">
-            <Link href="https://docs.convex.dev" target="_blank" rel="noreferrer">
-              Voir la roadmap technique
-            </Link>
+            <Link href="/sign-up">Creer un compte</Link>
           </Button>
         </div>
       </section>
