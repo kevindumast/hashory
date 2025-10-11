@@ -2,6 +2,7 @@
 
 import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
+import { ConvexProvider } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ReactNode, Suspense } from "react";
 import { convexClient, isConvexConfigured } from "@/convex/client";
@@ -11,8 +12,34 @@ type ProvidersProps = {
 };
 
 export function Providers({ children }: ProvidersProps) {
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  let content = <Suspense fallback={null}>{children}</Suspense>;
+
+  if (isConvexConfigured && convexClient) {
+    if (publishableKey) {
+      content = (
+        <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
+          {content}
+        </ConvexProviderWithClerk>
+      );
+    } else {
+      content = <ConvexProvider client={convexClient}>{content}</ConvexProvider>;
+    }
+  }
+
+  if (!publishableKey) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[oracly] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Clerk features are disabled for this build."
+      );
+    }
+    return content;
+  }
+
   return (
     <ClerkProvider
+      publishableKey={publishableKey}
       appearance={{
         baseTheme: dark,
         variables: {
@@ -20,13 +47,7 @@ export function Providers({ children }: ProvidersProps) {
         },
       }}
     >
-      {isConvexConfigured && convexClient ? (
-        <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
-          <Suspense fallback={null}>{children}</Suspense>
-        </ConvexProviderWithClerk>
-      ) : (
-        <Suspense fallback={null}>{children}</Suspense>
-      )}
+      {content}
     </ClerkProvider>
   );
 }
