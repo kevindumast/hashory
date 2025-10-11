@@ -17,14 +17,23 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
   trades: defineTable({
-    portfolioId: v.id("portfolios"),
+    integrationId: v.id("integrations"),
+    providerTradeId: v.string(),
+    portfolioId: v.optional(v.id("portfolios")),
     symbol: v.string(),
     side: v.union(v.literal("BUY"), v.literal("SELL")),
     quantity: v.number(),
     price: v.number(),
+    quoteQuantity: v.optional(v.number()),
     fee: v.optional(v.number()),
+    feeAsset: v.optional(v.string()),
+    isMaker: v.boolean(),
     executedAt: v.number(),
-  }).index("by_portfolio", ["portfolioId"]),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_trade", ["integrationId", "providerTradeId"]),
   analytics: defineTable({
     portfolioId: v.id("portfolios"),
     metric: v.string(),
@@ -55,7 +64,15 @@ export default defineSchema({
     scopes: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
+    lastSyncedAt: v.optional(v.number()),
   })
     .index("by_user", ["clerkUserId"])
     .index("by_user_provider", ["clerkUserId", "provider"]),
+  integrationSyncStates: defineTable({
+    integrationId: v.id("integrations"),
+    dataset: v.string(),
+    scope: v.string(),
+    cursor: v.string(),
+    updatedAt: v.number(),
+  }).index("by_integration_dataset_scope", ["integrationId", "dataset", "scope"]),
 });

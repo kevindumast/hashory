@@ -27,6 +27,7 @@ export const list = query({
       scopes: integration.scopes ?? [],
       createdAt: integration.createdAt,
       updatedAt: integration.updatedAt,
+      lastSyncedAt: integration.lastSyncedAt ?? null,
     }));
   },
 });
@@ -80,5 +81,87 @@ export const upsert = mutation({
     });
 
     return { status: "created", provider: args.provider };
+  },
+});
+
+export const getById = query({
+  args: { integrationId: v.id("integrations") },
+  handler: async (ctx, args) => {
+    const integration = await ctx.db.get(args.integrationId);
+    return integration ?? null;
+  },
+});
+
+export const getSyncState = query({
+  args: {
+    integrationId: v.id("integrations"),
+    dataset: v.string(),
+    scope: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db
+      .query("integrationSyncStates")
+      .withIndex("by_integration_dataset_scope", (q) =>
+        q.eq("integrationId", args.integrationId).eq("dataset", args.dataset).eq("scope", args.scope)
+      )
+      .first();
+
+    if (!record) {
+      return null;
+    }
+
+    let cursor: Record<string, unknown> | null = null;
+    try {
+      cursor = JSON.parse(record.cursor);
+    } catch (error) {
+      cursor = null;
+    }
+
+    return {
+      ...record,
+      cursor,
+    };
+  },
+});
+
+export const updateSyncState = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    dataset: v.string(),
+    scope: v.string(),
+    cursor: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const cursorJson = JSON.stringify(args.cursor ?? {});
+
+    const existing = await ctx.db
+      .query("integrationSyncStates")
+      .withIndex("by_integration_dataset_scope", (q) =>
+        q.eq("integrationId", args.integrationId).eq("dataset", args.dataset).eq("scope", args.scope)
+      )
+      .first();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        cursor: cursorJson,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.insert("integrationSyncStates", {
+        integrationId: args.integrationId,
+        dataset: args.dataset,
+        scope: args.scope,
+        cursor: cursorJson,
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.patch(args.integrationId, {
+      lastSyncedAt: now,
+      updatedAt: now,
+    });
+
+    return { status: "ok", updatedAt: now };
   },
 });

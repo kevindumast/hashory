@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { FormEvent, useMemo, useState } from "react";
+import { useAction, useQuery } from "convex/react";
 import {
   Area,
   AreaChart,
@@ -26,8 +26,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
 import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +41,7 @@ import {
   RefreshCw,
   ShieldAlert,
   Zap,
+  LoaderCircle,
 } from "lucide-react";
 
 type DashboardContentProps = {
@@ -46,13 +49,14 @@ type DashboardContentProps = {
 };
 
 type IntegrationRecord = {
-  _id: string;
+  _id: Id<"integrations">;
   provider: string;
   displayName?: string;
   readOnly: boolean;
   scopes: string[];
   createdAt: number;
   updatedAt: number;
+  lastSyncedAt?: number | null;
 };
 
 const overviewMetrics = [
@@ -627,19 +631,124 @@ function IntegrationsPanel({ openDialog }: { openDialog: () => void }) {
             <span>Les cles sont chiffrées avec ORACLY_ENCRYPTION_KEY avant stockage dans Convex.</span>
           </div>
           <ul className="list-disc space-y-2 pl-5">
-            <li>Limitez les permissions au strict nécessaire (lecture seule pour Binance).</li>
-            <li>Révoquez les clés directement depuis l&apos;exchange en cas de doute.</li>
-            <li>Planifiez une rotation périodique des clés pour rester conforme RGPD.</li>
+            <li>Limitez les permissions au strict necessaire (lecture seule pour Binance).</li>
+            <li>Revoquez les cles directement depuis l&amp;apos;exchange en cas de doute.</li>
+            <li>Planifiez une rotation periodique des cles pour rester conforme RGPD.</li>
             <li>Conservez les secrets dans un coffre interne; Oracly ne les affiche jamais en clair.</li>
           </ul>
         </CardContent>
         <CardFooter>
           <Button variant="ghost" className="text-xs" onClick={openDialog}>
-            Ajouter une nouvelle connexion
+          Ajouter une nouvelle connexion
+        </Button>
+      </CardFooter>
+    </Card>
+
+    <BinanceSyncForms integrations={integrationsList} />
+  </section>
+);
+}
+
+function BinanceSyncForms({ integrations }: { integrations: IntegrationRecord[] }) {
+  const binanceIntegrations = useMemo(
+    () => integrations.filter((integration) => integration.provider === "binance"),
+    [integrations]
+  );
+
+  if (binanceIntegrations.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card className="border-border/60 bg-card/80 backdrop-blur lg:col-span-2">
+      <CardHeader>
+        <CardDescription>Synchronisation Binance</CardDescription>
+        <CardTitle className="text-lg">Importer les transactions spot</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {binanceIntegrations.map((integration) => (
+          <BinanceSyncForm key={integration._id} integration={integration} />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+type BinanceSyncFormProps = {
+  integration: IntegrationRecord;
+};
+
+function BinanceSyncForm({ integration }: BinanceSyncFormProps) {
+  const syncTrades = useAction(api.binance.syncTrades);
+  const [symbol, setSymbol] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmed = symbol.trim().toUpperCase();
+    if (!trimmed) {
+      setError("Indiquez un symbole (ex: BTCUSDT).");
+      setMessage(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const result = await syncTrades({
+        integrationId: integration._id,
+        symbol: trimmed,
+      });
+      setMessage(
+        `Synchronisation terminee: ${result.inserted} nouvelles transactions (${result.fetched} recues).`
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Echec de la synchronisation.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-3 rounded-xl border border-border/60 bg-muted/30 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-foreground">
+            {integration.displayName ?? "Binance"} - {integration.readOnly ? "Lecture seule" : "Permissions elargies"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Derniere synchronisation:{" "}
+            {integration.lastSyncedAt ? new Date(integration.lastSyncedAt).toLocaleString("fr-FR") : "Jamais"}
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            value={symbol}
+            onChange={(event) => setSymbol(event.target.value)}
+            placeholder="Symbol (ex: BTCUSDT)"
+            className="sm:w-48"
+            required
+          />
+          <Button type="submit" disabled={loading}>
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <LoaderCircle className="size-4 animate-spin" /> Synchronisation...
+              </span>
+            ) : (
+              "Synchroniser"
+            )}
           </Button>
-        </CardFooter>
-      </Card>
-    </section>
+        </div>
+      </div>
+      {message ? <p className="text-xs text-emerald-500">{message}</p> : null}
+      {error ? <p className="text-xs text-red-500">{error}</p> : null}
+    </form>
   );
 }
 
@@ -650,14 +759,12 @@ function IntegrationsUnavailable({ openDialog }: { openDialog: () => void }) {
         <CardHeader className="space-y-2">
           <CardTitle>Activez les integrations</CardTitle>
           <CardDescription>
-            Ajoutez `NEXT_PUBLIC_CONVEX_URL` et déployez votre backend Convex pour connecter Binance et autres
-            plateformes.
+            Ajoutez `NEXT_PUBLIC_CONVEX_URL` et deployez votre backend Convex pour connecter Binance et autres plateformes.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Une fois l&apos;URL Convex configurée et le schéma déployé, vous pourrez saisir vos cles API Binance en lecture
-            seule depuis ce tableau de bord.
+            Une fois l&apos;URL Convex configuree et le schema deploye, vous pourrez saisir vos cles API Binance en lecture seule depuis ce tableau de bord.
           </p>
         </CardContent>
         <CardFooter>
@@ -673,11 +780,15 @@ function IntegrationsUnavailable({ openDialog }: { openDialog: () => void }) {
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <p>
-            Préparez votre clé ORACLY_ENCRYPTION_KEY et stockez-la dans vos variables d&apos;environnement avant de connecter
-            une plateforme.
+            Preparez votre cle ORACLY_ENCRYPTION_KEY et stockez-la dans vos variables d&apos;environnement avant de connecter une plateforme.
           </p>
         </CardContent>
       </Card>
     </section>
   );
 }
+
+
+
+
+
