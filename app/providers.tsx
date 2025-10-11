@@ -51,7 +51,6 @@ export function Providers({ children }: ProvidersProps) {
           colorPrimary: "#C9A646",
         },
       }}
-      dynamic
     >
       {content}
     </ClerkProvider>

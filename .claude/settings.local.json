@@ -8,7 +8,8 @@
       "Bash(npx convex:*)",
       "Bash(npm run build:*)",
       "Bash(vercel logs:*)",
-      "Bash(vercel:*)"
+      "Bash(vercel:*)",
+      "Bash(curl -s \"https://upward-kid-24.clerk.accounts.dev/.well-known/jwks.json\")"
     ],
     "deny": [],
     "ask": []
