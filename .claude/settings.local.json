@@ -10,7 +10,8 @@
       "Bash(vercel logs:*)",
       "Bash(vercel:*)",
       "Bash(curl -s \"https://upward-kid-24.clerk.accounts.dev/.well-known/jwks.json\")",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
