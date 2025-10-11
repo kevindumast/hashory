@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [{ href: "/dashboard", label: "Dashboard" }];
 
-const hiddenOnRoutes = ["/sign-in", "/sign-up"];
+const hiddenOnRoutes = ["/sign-in", "/sign-up", "/dashboard"];
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -31,10 +31,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              className={cn(
-                "transition hover:text-foreground",
-                pathname.startsWith(link.href) && "text-foreground"
-              )}
+              className={cn("transition hover:text-foreground", pathname.startsWith(link.href) && "text-foreground")}
             >
               {link.label}
             </Link>
@@ -46,7 +43,7 @@ export function SiteHeader() {
               <Link href="/sign-in">Se connecter</Link>
             </Button>
             <Button asChild className="hidden md:inline-flex">
-              <Link href="/sign-up">Créer un compte</Link>
+              <Link href="/sign-up">Creer un compte</Link>
             </Button>
           </SignedOut>
           <SignedIn>

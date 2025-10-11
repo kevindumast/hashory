@@ -6,6 +6,7 @@ import { ConvexProvider } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ReactNode, Suspense } from "react";
 import { convexClient, isConvexConfigured } from "@/convex/client";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 type ProvidersProps = {
   children: ReactNode;
@@ -14,7 +15,11 @@ type ProvidersProps = {
 export function Providers({ children }: ProvidersProps) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
-  let content = <Suspense fallback={null}>{children}</Suspense>;
+  let content = (
+    <TooltipProvider delayDuration={150}>
+      <Suspense fallback={null}>{children}</Suspense>
+    </TooltipProvider>
+  );
 
   if (isConvexConfigured && convexClient) {
     if (publishableKey) {
