@@ -154,6 +154,35 @@ export type TransactionEntry =
       direction: "OUT";
     };
 
+export type TokenTimelineEvent = {
+  id: string;
+  type: "BUY" | "SELL" | "DEPOSIT" | "WITHDRAWAL";
+  timestamp: number;
+  quantity: number;
+  price?: number;
+  valueUsd?: number;
+  fee?: number;
+  feeAsset?: string;
+  provider: string;
+  providerDisplayName: string;
+  integrationId: Id<"integrations">;
+};
+
+export type PortfolioToken = {
+  symbol: string;
+  currentQuantity: number;
+  buyQuantity: number;
+  sellQuantity: number;
+  depositQuantity: number;
+  withdrawalQuantity: number;
+  investedUsd: number;
+  realizedUsd: number;
+  averageBuyPrice?: number;
+  averageSellPrice?: number;
+  lastActivityAt: number;
+  events: TokenTimelineEvent[];
+};
+
 const QUOTE_ASSETS = [
   "USDT",
   "USDC",
@@ -467,6 +496,136 @@ export function useDashboardMetrics(refreshToken: number) {
     });
   }, [depositList, tradesList, withdrawalList]);
 
+  const portfolioTokens = useMemo<PortfolioToken[]>(() => {
+    const map = new Map<string, {
+      symbol: string;
+      currentQuantity: number;
+      buyQuantity: number;
+      sellQuantity: number;
+      depositQuantity: number;
+      withdrawalQuantity: number;
+      investedUsd: number;
+      realizedUsd: number;
+      buyValueUsd: number;
+      sellValueUsd: number;
+      lastActivityAt: number;
+      events: TokenTimelineEvent[];
+    }>();
+
+    const ensureEntry = (symbol: string) => {
+      const upper = symbol.toUpperCase();
+      if (!map.has(upper)) {
+        map.set(upper, {
+          symbol: upper,
+          currentQuantity: 0,
+          buyQuantity: 0,
+          sellQuantity: 0,
+          depositQuantity: 0,
+          withdrawalQuantity: 0,
+          investedUsd: 0,
+          realizedUsd: 0,
+          buyValueUsd: 0,
+          sellValueUsd: 0,
+          lastActivityAt: 0,
+          events: [],
+        });
+      }
+      return map.get(upper)!;
+    };
+
+    tradesList.forEach((trade) => {
+      const baseAsset = extractBaseAsset(trade.symbol);
+      const entry = ensureEntry(baseAsset);
+      const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+
+      entry.events.push({
+        id: trade._id,
+        type: trade.side,
+        timestamp: trade.executedAt,
+        quantity: trade.quantity,
+        price: trade.price,
+        valueUsd,
+        fee: trade.fee,
+        feeAsset: trade.feeAsset,
+        provider: trade.provider,
+        providerDisplayName: trade.providerDisplayName,
+        integrationId: trade.integrationId,
+      });
+
+      entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
+
+      if (trade.side === "BUY") {
+        entry.buyQuantity += trade.quantity;
+        entry.buyValueUsd += valueUsd;
+        entry.investedUsd += valueUsd;
+        entry.currentQuantity += trade.quantity;
+      } else {
+        entry.sellQuantity += trade.quantity;
+        entry.sellValueUsd += valueUsd;
+        entry.realizedUsd += valueUsd;
+        entry.currentQuantity -= trade.quantity;
+      }
+    });
+
+    depositList.forEach((deposit) => {
+      const entry = ensureEntry(deposit.coin);
+      entry.events.push({
+        id: deposit._id,
+        type: "DEPOSIT",
+        timestamp: deposit.insertTime,
+        quantity: deposit.amount,
+        provider: deposit.provider,
+        providerDisplayName: deposit.providerDisplayName,
+        integrationId: deposit.integrationId,
+      });
+      entry.depositQuantity += deposit.amount;
+      entry.currentQuantity += deposit.amount;
+      entry.lastActivityAt = Math.max(entry.lastActivityAt, deposit.insertTime);
+    });
+
+    withdrawalList.forEach((withdrawal) => {
+      const entry = ensureEntry(withdrawal.coin);
+      entry.events.push({
+        id: withdrawal._id,
+        type: "WITHDRAWAL",
+        timestamp: withdrawal.applyTime,
+        quantity: withdrawal.amount,
+        provider: withdrawal.provider,
+        providerDisplayName: withdrawal.providerDisplayName,
+        integrationId: withdrawal.integrationId,
+      });
+      entry.withdrawalQuantity += withdrawal.amount;
+      entry.currentQuantity -= withdrawal.amount;
+      entry.lastActivityAt = Math.max(entry.lastActivityAt, withdrawal.applyTime);
+    });
+
+    return Array.from(map.values())
+      .map((entry) => {
+        const averageBuyPrice =
+          entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
+        const averageSellPrice =
+          entry.sellQuantity > 0 ? entry.sellValueUsd / entry.sellQuantity : undefined;
+
+        const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
+
+        return {
+          symbol: entry.symbol,
+          currentQuantity: entry.currentQuantity,
+          buyQuantity: entry.buyQuantity,
+          sellQuantity: entry.sellQuantity,
+          depositQuantity: entry.depositQuantity,
+          withdrawalQuantity: entry.withdrawalQuantity,
+          investedUsd: entry.investedUsd,
+          realizedUsd: entry.realizedUsd,
+          averageBuyPrice,
+          averageSellPrice,
+          lastActivityAt: entry.lastActivityAt,
+          events: sortedEvents,
+        };
+      })
+      .sort((a, b) => b.investedUsd - a.investedUsd);
+  }, [depositList, tradesList, withdrawalList]);
+
   const isLoading =
     isConvexConfigured &&
     isLoaded &&
@@ -490,5 +649,6 @@ export function useDashboardMetrics(refreshToken: number) {
     lastTradeAt,
     isLoading,
     trackedScopes,
+    portfolioTokens,
   };
 }

@@ -65,6 +65,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSyncedAt: v.optional(v.number()),
+    accountCreatedAt: v.optional(v.number()),
   })
     .index("by_user", ["clerkUserId"])
     .index("by_user_provider", ["clerkUserId", "provider"]),

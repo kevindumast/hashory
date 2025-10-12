@@ -31,6 +31,7 @@ export const list = query({
       createdAt: integration.createdAt,
       updatedAt: integration.updatedAt,
       lastSyncedAt: integration.lastSyncedAt ?? null,
+      accountCreatedAt: integration.accountCreatedAt ?? null,
     }));
   },
 });
@@ -124,6 +125,7 @@ export const upsert = mutation({
       scopes: args.readOnly ? ["read"] : [],
       createdAt: now,
       updatedAt: now,
+      accountCreatedAt: undefined,
     });
 
     return { status: "created", provider: args.provider };
@@ -209,5 +211,27 @@ export const updateSyncState = mutation({
     });
 
     return { status: "ok", updatedAt: now };
+  },
+});
+
+export const updateMetadata = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    accountCreatedAt: v.optional(v.number()),
+    lastSyncedAt: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const payload: Record<string, unknown> = {};
+    if (args.accountCreatedAt !== undefined) {
+      payload.accountCreatedAt = args.accountCreatedAt;
+    }
+    if (args.lastSyncedAt !== undefined) {
+      payload.lastSyncedAt = args.lastSyncedAt;
+    }
+    if (Object.keys(payload).length === 0) {
+      return { status: "noop" };
+    }
+    await ctx.db.patch(args.integrationId, payload);
+    return { status: "ok" };
   },
 });

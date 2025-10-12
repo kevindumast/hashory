@@ -20,7 +20,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics";
-import type { OverviewCard } from "@/hooks/dashboard/useDashboardMetrics";
+import type { OverviewCard, PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { TokenPortfolioSection } from "./TokenPortfolioSection";
 
 type AllocationEntry = {
   symbol: string;
@@ -33,6 +34,7 @@ type OverviewTabProps = {
   navSeries: { date: string; nav: number }[];
   allocation: AllocationEntry[];
   totalVolume: number;
+  portfolioTokens: PortfolioToken[];
   onOpenIntegrations: () => void;
 };
 
@@ -41,6 +43,7 @@ export function OverviewTab({
   navSeries,
   allocation,
   totalVolume,
+  portfolioTokens,
   onOpenIntegrations,
 }: OverviewTabProps) {
   return (
@@ -130,6 +133,8 @@ export function OverviewTab({
           </CardFooter>
         </Card>
       </section>
+
+      <TokenPortfolioSection tokens={portfolioTokens} />
     </>
   );
 }

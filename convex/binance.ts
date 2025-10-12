@@ -29,6 +29,90 @@ const PREFERRED_QUOTES = new Set([
   "BRL",
 ]);
 
+const DEFAULT_SYMBOLS = [
+  // Top spot market pairs
+  "BTCUSDT",
+  "BTCUSDC",
+  "BTCBUSD",
+  "BTCEUR",
+  "BTCGBP",
+  "BTCAUD",
+  "BTCBRL",
+  "BTCTRY",
+  "ETHUSDT",
+  "ETHUSDC",
+  "ETHBUSD",
+  "ETHBTC",
+  "ETHEUR",
+  "ETHGBP",
+  "ETHAUD",
+  "ETHTRY",
+  "BNBUSDT",
+  "BNBUSDC",
+  "BNBBUSD",
+  "BNBBTC",
+  "BNBETH",
+  "BNBEUR",
+  "BNBGBP",
+  "BNBTRY",
+  "BNBAUD",
+  "BNBBRL",
+  "XRPUSDT",
+  "XRPUSDC",
+  "XRPBTC",
+  "XRPBUSD",
+  "ADAUSDT",
+  "ADAUSDC",
+  "ADABTC",
+  "ADABUSD",
+  "DOGEUSDT",
+  "DOGEUSDC",
+  "DOGEBTC",
+  "DOGEBUSD",
+  "MATICUSDT",
+  "MATICUSDC",
+  "MATICBTC",
+  "MATICBUSD",
+  "AVAXUSDT",
+  "AVAXUSDC",
+  "AVAXBTC",
+  "AVAXBUSD",
+  "DOTUSDT",
+  "DOTUSDC",
+  "DOTBTC",
+  "DOTBUSD",
+  "LINKUSDT",
+  "LINKUSDC",
+  "LINKBTC",
+  "LINKBUSD",
+  "LTCUSDT",
+  "LTCUSDC",
+  "LTCBTC",
+  "LTCBUSD",
+  "SOLUSDT",
+  "SOLUSDC",
+  "SOLBTC",
+  "SOLBUSD",
+  "SOLTRY",
+  "SOLBNB",
+  "ARBUSDT",
+  "ARBUSDC",
+  "OPUSDT",
+  "OPUSDC",
+  "INJUSDT",
+  "INJUSDC",
+  "RENDERUSDT",
+  "RENDERUSDC",
+  "TAOUSDT",
+  "TAOUSDC",
+  "FETUSDT",
+  "FETUSDC",
+];
+
+const HISTORY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
+const MAX_HISTORY_ITERATIONS = 200;
+const MAX_EMPTY_WINDOWS = 5;
+
 type IntegrationRecord = {
   clerkUserId: string;
   encryptedCredentials: {
@@ -116,27 +200,37 @@ type SyncCursor = {
 };
 
 type DepositCursor = {
+  initialized: boolean;
   lastInsertTime: number | null;
+  earliestInsertTime: number | null;
 };
 
 type WithdrawalCursor = {
+  initialized: boolean;
   lastApplyTime: number | null;
+  earliestApplyTime: number | null;
 };
 
 type SyncResult = {
   symbol: string;
   fetched: number;
   inserted: number;
+  earliest?: number | null;
+  latest?: number | null;
 };
 
 type DepositSyncResult = {
   fetched: number;
   inserted: number;
+  earliest?: number | null;
+  latest?: number | null;
 };
 
 type WithdrawalSyncResult = {
   fetched: number;
   inserted: number;
+  earliest?: number | null;
+  latest?: number | null;
 };
 
 export const syncAccount = action({
@@ -193,11 +287,28 @@ export const syncAccount = action({
       apiSecret: decryptedSecret,
     });
 
+    const accountCreationFromApi = await fetchAccountCreationTime(decryptedKey, decryptedSecret);
+    const earliestActivityCandidates = [
+      trades.earliest ?? null,
+      deposits.earliest ?? null,
+      withdrawals.earliest ?? null,
+    ].filter((value): value is number => value !== null && Number.isFinite(value));
+    const inferredCreation =
+      earliestActivityCandidates.length > 0 ? Math.min(...earliestActivityCandidates) : null;
+    const accountCreatedAt = accountCreationFromApi ?? inferredCreation ?? null;
+
+    await ctx.runMutation(api.integrations.updateMetadata, {
+      integrationId: args.integrationId,
+      accountCreatedAt: accountCreatedAt ?? undefined,
+      lastSyncedAt: Date.now(),
+    });
+
     return {
       symbols: detection.symbols,
       trades,
       deposits,
       withdrawals,
+      accountCreatedAt,
     };
   },
 });
@@ -255,8 +366,19 @@ async function detectSymbols(
     predefinedSymbols: predefined,
   });
 
+  const symbolSet = new Set(symbols.map((symbol) => symbol.toUpperCase()));
+
+  DEFAULT_SYMBOLS.forEach((symbol) => {
+    const upper = symbol.toUpperCase();
+    if (symbolCatalog.has(upper)) {
+      symbolSet.add(upper);
+    }
+  });
+
+  const mergedSymbols = Array.from(symbolSet);
+
   return {
-    symbols,
+    symbols: mergedSymbols,
   };
 }
 
@@ -273,6 +395,8 @@ async function syncSpotTrades(
   let totalFetched = 0;
   let totalInserted = 0;
   const details: SyncResult[] = [];
+  let overallEarliest: number | null = null;
+  let overallLatest: number | null = null;
 
   for (const symbol of params.symbols) {
     const result = await syncSymbolTrades(ctx, {
@@ -287,6 +411,12 @@ async function syncSpotTrades(
     }
     totalFetched += result.fetched;
     totalInserted += result.inserted;
+    if (result.earliest !== undefined && result.earliest !== null) {
+      overallEarliest = overallEarliest === null ? result.earliest : Math.min(overallEarliest, result.earliest);
+    }
+    if (result.latest !== undefined && result.latest !== null) {
+      overallLatest = overallLatest === null ? result.latest : Math.max(overallLatest, result.latest);
+    }
     details.push(result);
   }
 
@@ -294,6 +424,8 @@ async function syncSpotTrades(
     fetched: totalFetched,
     inserted: totalInserted,
     details,
+    earliest: overallEarliest,
+    latest: overallLatest,
   };
 }
 
@@ -306,52 +438,268 @@ async function syncDeposits(
   }
 ): Promise<DepositSyncResult> {
   const cursor = await loadDepositCursor(ctx, params.integrationId);
-  const deposits = await fetchDeposits(params.apiKey, params.apiSecret, cursor?.lastInsertTime ?? null);
+  let totalFetched = 0;
+  let totalInserted = 0;
+  let earliest = cursor.earliestInsertTime ?? null;
+  let latest = cursor.lastInsertTime ?? null;
 
-  if (deposits.length === 0) {
-    return { fetched: 0, inserted: 0 };
-  }
-
-  deposits.sort((a, b) => a.insertTime - b.insertTime);
-
-  const now = Date.now();
-  let inserted = 0;
-  for (const deposit of deposits) {
-    const existing = await ctx.runQuery(api.deposits.getByDepositId, {
-      integrationId: params.integrationId,
-      depositId: deposit.id,
-    });
-    if (existing) {
-      continue;
+  if (!cursor.initialized) {
+    const backfill = await backfillDeposits(ctx, params, Date.now());
+    totalFetched += backfill.fetched;
+    totalInserted += backfill.inserted;
+    const backfillEarliest = backfill.earliest ?? null;
+    if (backfillEarliest !== null) {
+      const candidate = backfillEarliest;
+      if (earliest === null) {
+        earliest = candidate;
+      } else {
+        earliest = Math.min(earliest, candidate);
+      }
     }
-    await ctx.runMutation(api.deposits.insert, {
-      integrationId: params.integrationId,
-      deposit: {
-        depositId: deposit.id,
-        txId: deposit.txId ?? undefined,
-        coin: deposit.coin.toUpperCase(),
-        amount: Number(deposit.amount),
-        network: deposit.network ?? undefined,
-        status: String(deposit.status),
-        address: deposit.address ?? undefined,
-        addressTag: deposit.addressTag ?? undefined,
-        insertTime: deposit.insertTime,
-        confirmedTime: undefined,
-        raw: deposit,
-        createdAt: now,
-      },
-    });
-    inserted += 1;
+    const backfillLatest = backfill.latest ?? null;
+    if (backfillLatest !== null) {
+      const candidate = backfillLatest;
+      if (latest === null) {
+        latest = candidate;
+      } else {
+        latest = Math.max(latest, candidate);
+      }
+    }
   }
 
-  const lastDeposit = deposits[deposits.length - 1];
+  const incremental = await syncDepositsForward(ctx, params, latest);
+  totalFetched += incremental.fetched;
+  totalInserted += incremental.inserted;
+  const incrementalEarliest = incremental.earliest ?? null;
+  if (incrementalEarliest !== null) {
+    const candidate = incrementalEarliest;
+    if (earliest === null) {
+      earliest = candidate;
+    } else {
+      earliest = Math.min(earliest, candidate);
+    }
+  }
+  const incrementalLatest = incremental.latest ?? null;
+  if (incrementalLatest !== null) {
+    const candidate = incrementalLatest;
+    if (latest === null) {
+      latest = candidate;
+    } else {
+      latest = Math.max(latest, candidate);
+    }
+  }
+
+  const finalLatest = latest ?? cursor.lastInsertTime ?? null;
+  const finalEarliest = earliest ?? cursor.earliestInsertTime ?? null;
+
   await saveDepositCursor(ctx, params.integrationId, {
-    lastInsertTime: lastDeposit.insertTime,
+    initialized: true,
+    lastInsertTime: finalLatest,
+    earliestInsertTime: finalEarliest,
   });
 
   return {
-    fetched: deposits.length,
+    fetched: totalFetched,
+    inserted: totalInserted,
+    earliest: finalEarliest,
+    latest: finalLatest,
+  };
+}
+
+async function backfillDeposits(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  startingEndTime: number
+): Promise<DepositSyncResult> {
+  let endTime = startingEndTime;
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = null;
+  let iterations = 0;
+  let emptyWindows = 0;
+  const now = Date.now();
+
+  while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
+    const windowStart = Math.max(0, endTime - HISTORY_WINDOW_MS);
+    const batch = await fetchDeposits(params.apiKey, params.apiSecret, windowStart, endTime);
+    iterations += 1;
+
+    if (!Array.isArray(batch) || batch.length === 0) {
+      emptyWindows += 1;
+      if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
+        break;
+      }
+      if (windowStart === 0) {
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    emptyWindows = 0;
+
+    const normalized = batch
+      .map((deposit) => ({
+        ...deposit,
+        insertTime: Number(deposit.insertTime ?? 0),
+      }))
+      .filter((deposit) => deposit.insertTime > 0 && deposit.insertTime <= endTime)
+      .sort((a, b) => a.insertTime - b.insertTime);
+
+    if (normalized.length === 0) {
+      if (windowStart === 0) {
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    fetched += normalized.length;
+
+    for (const deposit of normalized) {
+      const existing = await ctx.runQuery(api.deposits.getByDepositId, {
+        integrationId: params.integrationId,
+        depositId: deposit.id,
+      });
+      if (!existing) {
+        await ctx.runMutation(api.deposits.insert, {
+          integrationId: params.integrationId,
+          deposit: {
+            depositId: deposit.id,
+            txId: deposit.txId ?? undefined,
+            coin: deposit.coin.toUpperCase(),
+            amount: Number(deposit.amount),
+            network: deposit.network ?? undefined,
+            status: String(deposit.status),
+            address: deposit.address ?? undefined,
+            addressTag: deposit.addressTag ?? undefined,
+            insertTime: deposit.insertTime,
+            confirmedTime: undefined,
+            raw: deposit,
+            createdAt: now,
+          },
+        });
+        inserted += 1;
+      }
+      if (earliest === null) {
+        earliest = deposit.insertTime;
+      } else {
+        earliest = Math.min(earliest, deposit.insertTime);
+      }
+      if (latest === null) {
+        latest = deposit.insertTime;
+      } else {
+        latest = Math.max(latest, deposit.insertTime);
+      }
+    }
+
+    const nextEnd = normalized[0].insertTime > 0 ? normalized[0].insertTime - 1 : windowStart - 1;
+    if (nextEnd === endTime) {
+      break;
+    }
+    endTime = nextEnd;
+  }
+
+  return {
+    fetched,
     inserted,
+    earliest,
+    latest,
+  };
+}
+
+async function syncDepositsForward(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  lastInsertTime: number | null
+): Promise<DepositSyncResult> {
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = lastInsertTime;
+  let iterations = 0;
+  const now = Date.now();
+  let pointer = lastInsertTime !== null ? lastInsertTime + 1 : null;
+
+  while (iterations < MAX_HISTORY_ITERATIONS) {
+    const batch = await fetchDeposits(params.apiKey, params.apiSecret, pointer, null);
+    if (!Array.isArray(batch) || batch.length === 0) {
+      break;
+    }
+    iterations += 1;
+
+    const normalized = batch
+      .map((deposit) => ({
+        ...deposit,
+        insertTime: Number(deposit.insertTime ?? 0),
+      }))
+      .filter((deposit) => deposit.insertTime > (lastInsertTime ?? 0))
+      .sort((a, b) => a.insertTime - b.insertTime);
+
+    if (normalized.length === 0) {
+      break;
+    }
+
+    fetched += normalized.length;
+
+    for (const deposit of normalized) {
+      const existing = await ctx.runQuery(api.deposits.getByDepositId, {
+        integrationId: params.integrationId,
+        depositId: deposit.id,
+      });
+      if (!existing) {
+        await ctx.runMutation(api.deposits.insert, {
+          integrationId: params.integrationId,
+          deposit: {
+            depositId: deposit.id,
+            txId: deposit.txId ?? undefined,
+            coin: deposit.coin.toUpperCase(),
+            amount: Number(deposit.amount),
+            network: deposit.network ?? undefined,
+            status: String(deposit.status),
+            address: deposit.address ?? undefined,
+            addressTag: deposit.addressTag ?? undefined,
+            insertTime: deposit.insertTime,
+            confirmedTime: undefined,
+            raw: deposit,
+            createdAt: now,
+          },
+        });
+        inserted += 1;
+      }
+      if (earliest === null) {
+        earliest = deposit.insertTime;
+      } else {
+        earliest = Math.min(earliest, deposit.insertTime);
+      }
+      if (latest === null) {
+        latest = deposit.insertTime;
+      } else {
+        latest = Math.max(latest, deposit.insertTime);
+      }
+      lastInsertTime = Math.max(lastInsertTime ?? 0, deposit.insertTime);
+    }
+
+    if (normalized.length < MAX_LIMIT) {
+      break;
+    }
+    pointer = (lastInsertTime ?? 0) + 1;
+  }
+
+  return {
+    fetched,
+    inserted,
+    earliest,
+    latest,
   };
 }
 
@@ -364,54 +712,287 @@ async function syncWithdrawals(
   }
 ): Promise<WithdrawalSyncResult> {
   const cursor = await loadWithdrawalCursor(ctx, params.integrationId);
-  const withdrawals = await fetchWithdrawals(params.apiKey, params.apiSecret, cursor?.lastApplyTime ?? null);
+  let totalFetched = 0;
+  let totalInserted = 0;
+  let earliest = cursor.earliestApplyTime ?? null;
+  let latest = cursor.lastApplyTime ?? null;
 
-  if (withdrawals.length === 0) {
-    return { fetched: 0, inserted: 0 };
-  }
-
-  withdrawals.sort((a, b) => resolveNumber(a.applyTime) - resolveNumber(b.applyTime));
-
-  const now = Date.now();
-  let inserted = 0;
-  for (const withdrawal of withdrawals) {
-    const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
-      integrationId: params.integrationId,
-      withdrawId: withdrawal.id,
-    });
-    if (existing) {
-      continue;
+  if (!cursor.initialized) {
+    const backfill = await backfillWithdrawals(ctx, params, Date.now());
+    totalFetched += backfill.fetched;
+    totalInserted += backfill.inserted;
+    const backfillEarliest = backfill.earliest ?? null;
+    if (backfillEarliest !== null) {
+      const candidate = backfillEarliest;
+      if (earliest === null) {
+        earliest = candidate;
+      } else {
+        earliest = Math.min(earliest, candidate);
+      }
     }
-    await ctx.runMutation(api.withdrawals.insert, {
-      integrationId: params.integrationId,
-      withdrawal: {
-        withdrawId: withdrawal.id,
-        txId: withdrawal.txId ?? undefined,
-        coin: withdrawal.coin.toUpperCase(),
-        amount: Number(withdrawal.amount),
-        network: withdrawal.network ?? undefined,
-        address: withdrawal.address ?? undefined,
-        addressTag: withdrawal.addressTag ?? undefined,
-        fee: Number(withdrawal.fee),
-        status: String(withdrawal.status),
-        applyTime: resolveNumber(withdrawal.applyTime),
-        updateTime: withdrawal.updateTime ? resolveNumber(withdrawal.updateTime) : undefined,
-        raw: withdrawal,
-        createdAt: now,
-      },
-    });
-    inserted += 1;
+    const backfillLatest = backfill.latest ?? null;
+    if (backfillLatest !== null) {
+      const candidate = backfillLatest;
+      if (latest === null) {
+        latest = candidate;
+      } else {
+        latest = Math.max(latest, candidate);
+      }
+    }
   }
 
-  const lastWithdrawal = withdrawals[withdrawals.length - 1];
+  const incremental = await syncWithdrawalsForward(ctx, params, latest);
+  totalFetched += incremental.fetched;
+  totalInserted += incremental.inserted;
+  const incrementalEarliest = incremental.earliest ?? null;
+  if (incrementalEarliest !== null) {
+    const candidate = incrementalEarliest;
+    if (earliest === null) {
+      earliest = candidate;
+    } else {
+      earliest = Math.min(earliest, candidate);
+    }
+  }
+  const incrementalLatest = incremental.latest ?? null;
+  if (incrementalLatest !== null) {
+    const candidate = incrementalLatest;
+    if (latest === null) {
+      latest = candidate;
+    } else {
+      latest = Math.max(latest, candidate);
+    }
+  }
+
+  const finalLatest = latest ?? cursor.lastApplyTime ?? null;
+  const finalEarliest = earliest ?? cursor.earliestApplyTime ?? null;
+
   await saveWithdrawalCursor(ctx, params.integrationId, {
-    lastApplyTime: resolveNumber(lastWithdrawal.applyTime),
+    initialized: true,
+    lastApplyTime: finalLatest,
+    earliestApplyTime: finalEarliest,
   });
 
   return {
-    fetched: withdrawals.length,
-    inserted,
+    fetched: totalFetched,
+    inserted: totalInserted,
+    earliest: finalEarliest,
+    latest: finalLatest,
   };
+}
+
+async function backfillWithdrawals(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  startingEndTime: number
+): Promise<WithdrawalSyncResult> {
+  let endTime = startingEndTime;
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = null;
+  let iterations = 0;
+  let emptyWindows = 0;
+  const now = Date.now();
+
+  while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
+    const windowStart = Math.max(0, endTime - HISTORY_WINDOW_MS);
+    const batch = await fetchWithdrawals(params.apiKey, params.apiSecret, windowStart, endTime);
+    iterations += 1;
+
+    if (!Array.isArray(batch) || batch.length === 0) {
+      emptyWindows += 1;
+      if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
+        break;
+      }
+      if (windowStart === 0) {
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    emptyWindows = 0;
+
+    const normalized = batch
+      .map((withdrawal) => ({
+        ...withdrawal,
+        applyTime: resolveNumber(withdrawal.applyTime),
+      }))
+      .filter((withdrawal) => withdrawal.applyTime > 0 && withdrawal.applyTime <= endTime)
+      .sort((a, b) => a.applyTime - b.applyTime);
+
+    if (normalized.length === 0) {
+      if (windowStart === 0) {
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    fetched += normalized.length;
+
+    for (const withdrawal of normalized) {
+      const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
+        integrationId: params.integrationId,
+        withdrawId: withdrawal.id,
+      });
+      if (!existing) {
+        await ctx.runMutation(api.withdrawals.insert, {
+          integrationId: params.integrationId,
+          withdrawal: {
+            withdrawId: withdrawal.id,
+            txId: withdrawal.txId ?? undefined,
+            coin: withdrawal.coin.toUpperCase(),
+            amount: Number(withdrawal.amount),
+            network: withdrawal.network ?? undefined,
+            address: withdrawal.address ?? undefined,
+            addressTag: withdrawal.addressTag ?? undefined,
+            fee: Number(withdrawal.fee),
+            status: String(withdrawal.status),
+            applyTime: withdrawal.applyTime,
+            updateTime: withdrawal.updateTime ? resolveNumber(withdrawal.updateTime) : undefined,
+            raw: withdrawal,
+            createdAt: now,
+          },
+        });
+        inserted += 1;
+      }
+      if (earliest === null) {
+        earliest = withdrawal.applyTime;
+      } else {
+        earliest = Math.min(earliest, withdrawal.applyTime);
+      }
+      if (latest === null) {
+        latest = withdrawal.applyTime;
+      } else {
+        latest = Math.max(latest, withdrawal.applyTime);
+      }
+    }
+
+    const nextEnd = normalized[0].applyTime > 0 ? normalized[0].applyTime - 1 : windowStart - 1;
+    if (nextEnd === endTime) {
+      break;
+    }
+    endTime = nextEnd;
+  }
+
+  return {
+    fetched,
+    inserted,
+    earliest,
+    latest,
+  };
+}
+
+async function syncWithdrawalsForward(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  lastApplyTime: number | null
+): Promise<WithdrawalSyncResult> {
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = lastApplyTime;
+  let iterations = 0;
+  const now = Date.now();
+  let pointer = lastApplyTime !== null ? lastApplyTime + 1 : null;
+
+  while (iterations < MAX_HISTORY_ITERATIONS) {
+    const batch = await fetchWithdrawals(params.apiKey, params.apiSecret, pointer, null);
+    if (!Array.isArray(batch) || batch.length === 0) {
+      break;
+    }
+    iterations += 1;
+
+    const normalized = batch
+      .map((withdrawal) => ({
+        ...withdrawal,
+        applyTime: resolveNumber(withdrawal.applyTime),
+      }))
+      .filter((withdrawal) => withdrawal.applyTime > (lastApplyTime ?? 0))
+      .sort((a, b) => a.applyTime - b.applyTime);
+
+    if (normalized.length === 0) {
+      break;
+    }
+
+    fetched += normalized.length;
+
+    for (const withdrawal of normalized) {
+      const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
+        integrationId: params.integrationId,
+        withdrawId: withdrawal.id,
+      });
+      if (!existing) {
+        await ctx.runMutation(api.withdrawals.insert, {
+          integrationId: params.integrationId,
+          withdrawal: {
+            withdrawId: withdrawal.id,
+            txId: withdrawal.txId ?? undefined,
+            coin: withdrawal.coin.toUpperCase(),
+            amount: Number(withdrawal.amount),
+            network: withdrawal.network ?? undefined,
+            address: withdrawal.address ?? undefined,
+            addressTag: withdrawal.addressTag ?? undefined,
+            fee: Number(withdrawal.fee),
+            status: String(withdrawal.status),
+            applyTime: withdrawal.applyTime,
+            updateTime: withdrawal.updateTime ? resolveNumber(withdrawal.updateTime) : undefined,
+            raw: withdrawal,
+            createdAt: now,
+          },
+        });
+        inserted += 1;
+      }
+      if (earliest === null) {
+        earliest = withdrawal.applyTime;
+      } else {
+        earliest = Math.min(earliest, withdrawal.applyTime);
+      }
+      if (latest === null) {
+        latest = withdrawal.applyTime;
+      } else {
+        latest = Math.max(latest, withdrawal.applyTime);
+      }
+      lastApplyTime = Math.max(lastApplyTime ?? 0, withdrawal.applyTime);
+    }
+
+    if (normalized.length < MAX_LIMIT) {
+      break;
+    }
+    pointer = (lastApplyTime ?? 0) + 1;
+  }
+
+  return {
+    fetched,
+    inserted,
+    earliest,
+    latest,
+  };
+}
+
+async function fetchAccountCreationTime(apiKey: string, apiSecret: string): Promise<number | null> {
+  try {
+    const response = await signedGet(apiKey, apiSecret, "/sapi/v1/account/apiRestrictions", {}, SAPI_BASE_URL);
+    if (response && typeof response === "object" && response !== null && "createTime" in response) {
+      const value = (response as Record<string, unknown>).createTime;
+      const parsed = parseOptionalNumber(value);
+      if (parsed !== null && parsed > 0) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    // ignore - we'll fall back to earliest activity
+  }
+  return null;
 }
 
 async function fetchExchangeInfo(): Promise<SymbolMeta[]> {
@@ -547,6 +1128,8 @@ async function syncSymbolTrades(
 
   let fetched = 0;
   let inserted = 0;
+  let earliestTrade: number | null = null;
+  let latestTrade: number | null = cursor.lastTradeTime ?? null;
   let lastTradeId = cursor.lastTradeId;
   let lastTradeTime = cursor.lastTradeTime;
   let iterations = 0;
@@ -591,6 +1174,11 @@ async function syncSymbolTrades(
       };
     });
 
+    formattedTrades.forEach((trade) => {
+      earliestTrade = earliestTrade === null ? trade.executedAt : Math.min(earliestTrade, trade.executedAt);
+      latestTrade = latestTrade === null ? trade.executedAt : Math.max(latestTrade, trade.executedAt);
+    });
+
     const result = await ctx.runMutation(api.trades.ingestBatch, {
       integrationId: params.integrationId,
       trades: formattedTrades,
@@ -601,6 +1189,7 @@ async function syncSymbolTrades(
     const lastTrade = trades[trades.length - 1];
     lastTradeId = lastTrade.id;
     lastTradeTime = lastTrade.time;
+    latestTrade = latestTrade === null ? Number(lastTrade.time) : Math.max(latestTrade, Number(lastTrade.time));
 
     iterations += 1;
     if (trades.length < MAX_LIMIT || iterations > 1_000) {
@@ -622,61 +1211,104 @@ async function syncSymbolTrades(
     },
   });
 
+  if (latestTrade === null) {
+    latestTrade = lastTradeTime ?? null;
+  }
+
   return {
     symbol: scope,
     fetched,
     inserted,
+    earliest: earliestTrade,
+    latest: latestTrade,
   };
 }
 
-async function fetchDeposits(apiKey: string, apiSecret: string, startTime: number | null) {
+async function fetchDeposits(
+  apiKey: string,
+  apiSecret: string,
+  startTime: number | null,
+  endTime: number | null = null
+) {
   const params: Record<string, string> = {
     recvWindow: RECEIPT_WINDOW_MS.toString(),
     limit: MAX_LIMIT.toString(),
   };
-  if (startTime !== null) {
-    params.startTime = (startTime + 1).toString();
+  if (startTime !== null && startTime !== undefined) {
+    params.startTime = Math.max(0, startTime).toString();
+  }
+  if (endTime !== null && endTime !== undefined) {
+    params.endTime = Math.max(0, endTime).toString();
   }
   const response = await signedGet(apiKey, apiSecret, "/sapi/v1/capital/deposit/hisrec", params, SAPI_BASE_URL);
   if (!Array.isArray(response)) {
+    console.log("Binance deposits window", {
+      startTime,
+      endTime,
+      count: "non-array",
+    });
     return [];
   }
+  console.log("Binance deposits window", {
+    startTime,
+    endTime,
+    count: response.length,
+  });
   return response as DepositRecord[];
 }
 
-async function fetchWithdrawals(apiKey: string, apiSecret: string, startTime: number | null) {
+async function fetchWithdrawals(
+  apiKey: string,
+  apiSecret: string,
+  startTime: number | null,
+  endTime: number | null = null
+) {
   const params: Record<string, string> = {
     recvWindow: RECEIPT_WINDOW_MS.toString(),
     limit: MAX_LIMIT.toString(),
   };
-  if (startTime !== null) {
-    params.startTime = (startTime + 1).toString();
+  if (startTime !== null && startTime !== undefined) {
+    params.startTime = Math.max(0, startTime).toString();
+  }
+  if (endTime !== null && endTime !== undefined) {
+    params.endTime = Math.max(0, endTime).toString();
   }
   const response = await signedGet(apiKey, apiSecret, "/sapi/v1/capital/withdraw/history", params, SAPI_BASE_URL);
   if (!Array.isArray(response)) {
+    console.log("Binance withdrawals window", {
+      startTime,
+      endTime,
+      count: "non-array",
+    });
     return [];
   }
+  console.log("Binance withdrawals window", {
+    startTime,
+    endTime,
+    count: response.length,
+  });
   return response as WithdrawalRecord[];
 }
 
-async function loadDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations">) {
+async function loadDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<DepositCursor> {
   const state = await ctx.runQuery(api.integrations.getSyncState, {
     integrationId,
     dataset: DATASET_DEPOSITS,
     scope: "default",
   });
   if (!state?.cursor) {
-    return null;
+    return {
+      initialized: false,
+      lastInsertTime: null,
+      earliestInsertTime: null,
+    };
   }
   const cursor = state.cursor as Record<string, unknown>;
   return {
-    lastInsertTime:
-      typeof cursor.lastInsertTime === "number"
-        ? cursor.lastInsertTime
-        : typeof cursor.lastInsertTime === "string"
-        ? Number(cursor.lastInsertTime)
-        : null,
-  } satisfies DepositCursor;
+    initialized: Boolean(cursor.initialized),
+    lastInsertTime: parseOptionalNumber(cursor.lastInsertTime),
+    earliestInsertTime: parseOptionalNumber(cursor.earliestInsertTime),
+  };
 }
 
 async function saveDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: DepositCursor) {
@@ -684,28 +1316,33 @@ async function saveDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations
     integrationId,
     dataset: DATASET_DEPOSITS,
     scope: "default",
-    cursor,
+    cursor: {
+      initialized: cursor.initialized,
+      lastInsertTime: cursor.lastInsertTime,
+      earliestInsertTime: cursor.earliestInsertTime,
+    },
   });
 }
 
-async function loadWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrations">) {
+async function loadWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<WithdrawalCursor> {
   const state = await ctx.runQuery(api.integrations.getSyncState, {
     integrationId,
     dataset: DATASET_WITHDRAWALS,
     scope: "default",
   });
   if (!state?.cursor) {
-    return null;
+    return {
+      initialized: false,
+      lastApplyTime: null,
+      earliestApplyTime: null,
+    };
   }
   const cursor = state.cursor as Record<string, unknown>;
   return {
-    lastApplyTime:
-      typeof cursor.lastApplyTime === "number"
-        ? cursor.lastApplyTime
-        : typeof cursor.lastApplyTime === "string"
-        ? Number(cursor.lastApplyTime)
-        : null,
-  } satisfies WithdrawalCursor;
+    initialized: Boolean(cursor.initialized),
+    lastApplyTime: parseOptionalNumber(cursor.lastApplyTime),
+    earliestApplyTime: parseOptionalNumber(cursor.earliestApplyTime),
+  };
 }
 
 async function saveWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: WithdrawalCursor) {
@@ -713,8 +1350,25 @@ async function saveWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrati
     integrationId,
     dataset: DATASET_WITHDRAWALS,
     scope: "default",
-    cursor,
+    cursor: {
+      initialized: cursor.initialized,
+      lastApplyTime: cursor.lastApplyTime,
+      earliestApplyTime: cursor.earliestApplyTime,
+    },
   });
+}
+
+function parseOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function resolveNumber(value: number | string | null | undefined) {

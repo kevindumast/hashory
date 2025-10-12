@@ -55,8 +55,12 @@ export function DashboardContent({ userName }: DashboardContentProps) {
     setRefreshError(null);
 
     try {
-      let totalInserted = 0;
-      let totalFetched = 0;
+      let totalTradeInserted = 0;
+      let totalTradeFetched = 0;
+      let totalDepositInserted = 0;
+      let totalDepositFetched = 0;
+      let totalWithdrawalInserted = 0;
+      let totalWithdrawalFetched = 0;
       let processedSymbols = 0;
 
       for (const integration of integrations) {
@@ -66,19 +70,27 @@ export function DashboardContent({ userName }: DashboardContentProps) {
         const result = await syncAccount({
           integrationId: integration._id,
         });
-        totalInserted += result.trades?.inserted ?? 0;
-        totalFetched += result.trades?.fetched ?? 0;
+        totalTradeInserted += result.trades?.inserted ?? 0;
+        totalTradeFetched += result.trades?.fetched ?? 0;
+        totalDepositInserted += result.deposits?.inserted ?? 0;
+        totalDepositFetched += result.deposits?.fetched ?? 0;
+        totalWithdrawalInserted += result.withdrawals?.inserted ?? 0;
+        totalWithdrawalFetched += result.withdrawals?.fetched ?? 0;
         processedSymbols += result.symbols?.length ?? 0;
-        if (result.deposits) {
-          totalFetched += result.deposits.fetched ?? 0;
-        }
-        if (result.withdrawals) {
-          totalFetched += result.withdrawals.fetched ?? 0;
-        }
       }
 
+      const totalFetched =
+        totalTradeFetched + totalDepositFetched + totalWithdrawalFetched;
+
       setRefreshMessage(
-        `Synchronisation terminée : ${totalInserted} nouveau${totalInserted === 1 ? "" : "x"} trade${totalInserted === 1 ? "" : "s"} (${totalFetched} enregistrements récupérés) sur ${processedSymbols} paire${processedSymbols === 1 ? "" : "s"}.`
+        [
+          "Synchronisation terminée",
+          `${totalTradeInserted} trade${totalTradeInserted === 1 ? "" : "s"}`,
+          `${totalDepositInserted} dépôt${totalDepositInserted === 1 ? "" : "s"}`,
+          `${totalWithdrawalInserted} retrait${totalWithdrawalInserted === 1 ? "" : "s"}`,
+          `(${totalFetched} enregistrements)`,
+          `sur ${processedSymbols} paire${processedSymbols === 1 ? "" : "s"}`,
+        ].join(" · ")
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Échec de la synchronisation.";
@@ -148,6 +160,7 @@ export function DashboardContent({ userName }: DashboardContentProps) {
             navSeries={metrics.navSeries}
             allocation={metrics.allocation}
             totalVolume={metrics.totalVolume}
+            portfolioTokens={metrics.portfolioTokens}
             onOpenIntegrations={openDialog}
           />
         </TabsContent>

@@ -52,13 +52,14 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
                 <TableHead>Type</TableHead>
                 <TableHead>Read only</TableHead>
                 <TableHead>Scopes</TableHead>
-                <TableHead>Created at</TableHead>
+                <TableHead>Linked on</TableHead>
+                <TableHead>Account created</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {integrations.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                     No provider connected yet.
                   </TableCell>
                 </TableRow>
@@ -87,6 +88,11 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {dateFormatter.format(new Date(integration.createdAt))}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {integration.accountCreatedAt
+                        ? dateFormatter.format(new Date(integration.accountCreatedAt))
+                        : "—"}
                     </TableCell>
                   </TableRow>
                 ))
@@ -154,11 +160,17 @@ function BinanceSyncCard({ integration, onSuccess }: BinanceSyncCardProps) {
       const processed = Array.isArray(result.symbols) ? result.symbols.length : 0;
       const tradesInserted = result.trades?.inserted ?? 0;
       const tradesFetched = result.trades?.fetched ?? 0;
+      const depositInserted = result.deposits?.inserted ?? 0;
       const depositFetched = result.deposits?.fetched ?? 0;
+      const withdrawalInserted = result.withdrawals?.inserted ?? 0;
       const withdrawalFetched = result.withdrawals?.fetched ?? 0;
-      setMessage(
-        `Synchronisation complète : ${tradesInserted} nouveau${tradesInserted === 1 ? "" : "x"} trade${tradesInserted === 1 ? "" : "s"} (${tradesFetched} trades, ${depositFetched} dépôts, ${withdrawalFetched} retraits) sur ${processed} paire${processed === 1 ? "" : "s"}.`
-      );
+      const summary = [
+        `Trades ${tradesInserted} (+${tradesFetched})`,
+        `Dépôts ${depositInserted} (+${depositFetched})`,
+        `Retraits ${withdrawalInserted} (+${withdrawalFetched})`,
+        `${processed} paire${processed === 1 ? "" : "s"}`,
+      ].join(" · ");
+      setMessage(`Synchronisation complète · ${summary}`);
       onSuccess();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Impossible de synchroniser.";
@@ -177,6 +189,9 @@ function BinanceSyncCard({ integration, onSuccess }: BinanceSyncCardProps) {
           </p>
           <p className="text-xs text-muted-foreground">
             Last sync: {integration.lastSyncedAt ? dateFormatter.format(new Date(integration.lastSyncedAt)) : "never"}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Account created: {integration.accountCreatedAt ? dateFormatter.format(new Date(integration.accountCreatedAt)) : "unknown"}
           </p>
         </div>
         <Button type="button" disabled={loading} onClick={handleSync}>

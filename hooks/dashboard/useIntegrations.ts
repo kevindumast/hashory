@@ -15,6 +15,7 @@ export type IntegrationRecord = {
   createdAt: number;
   updatedAt: number;
   lastSyncedAt?: number | null;
+  accountCreatedAt?: number | null;
 };
 
 export function useIntegrations() {
