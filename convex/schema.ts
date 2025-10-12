@@ -75,4 +75,39 @@ export default defineSchema({
     cursor: v.string(),
     updatedAt: v.number(),
   }).index("by_integration_dataset_scope", ["integrationId", "dataset", "scope"]),
+  deposits: defineTable({
+    integrationId: v.id("integrations"),
+    depositId: v.string(),
+    txId: v.optional(v.string()),
+    coin: v.string(),
+    amount: v.number(),
+    network: v.optional(v.string()),
+    status: v.string(),
+    address: v.optional(v.string()),
+    addressTag: v.optional(v.string()),
+    insertTime: v.number(),
+    confirmedTime: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_deposit", ["integrationId", "depositId"]),
+  withdrawals: defineTable({
+    integrationId: v.id("integrations"),
+    withdrawId: v.string(),
+    txId: v.optional(v.string()),
+    coin: v.string(),
+    amount: v.number(),
+    network: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressTag: v.optional(v.string()),
+    fee: v.number(),
+    status: v.string(),
+    applyTime: v.number(),
+    updateTime: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_withdraw", ["integrationId", "withdrawId"]),
 });

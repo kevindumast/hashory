@@ -6,8 +6,11 @@ import { optionalUserId, requireUserId } from "./auth";
 const SUPPORTED_PROVIDERS = ["binance"];
 
 export const list = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    refreshToken: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    void args.refreshToken;
     const userId = await optionalUserId(ctx);
     if (!userId) {
       return [];
@@ -29,6 +32,49 @@ export const list = query({
       updatedAt: integration.updatedAt,
       lastSyncedAt: integration.lastSyncedAt ?? null,
     }));
+  },
+});
+
+export const listSyncScopes = query({
+  args: {
+    clerkId: v.string(),
+    dataset: v.optional(v.string()),
+    refreshToken: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    void args.refreshToken;
+
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .collect();
+
+    if (integrations.length === 0) {
+      return [];
+    }
+
+    const scopes = [];
+
+    for (const integration of integrations) {
+      const states = await ctx.db
+        .query("integrationSyncStates")
+        .withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", integration._id))
+        .collect();
+
+      for (const state of states) {
+        if (args.dataset && state.dataset !== args.dataset) {
+          continue;
+        }
+        scopes.push({
+          integrationId: integration._id,
+          dataset: state.dataset,
+          scope: state.scope,
+          updatedAt: state.updatedAt,
+        });
+      }
+    }
+
+    return scopes;
   },
 });
 
