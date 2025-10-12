@@ -27,7 +27,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${body.variable} min-h-screen bg-background font-sans`}>
+      <body
+        suppressHydrationWarning
+        className={`${display.variable} ${body.variable} min-h-screen bg-background font-sans`}
+      >
         <Providers>
           <SiteHeader />
           {children}

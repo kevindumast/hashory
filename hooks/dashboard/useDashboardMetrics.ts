@@ -180,6 +180,8 @@ export type PortfolioToken = {
   averageBuyPrice?: number;
   averageSellPrice?: number;
   lastActivityAt: number;
+  tradeSymbols: string[];
+  primarySymbol?: string;
   events: TokenTimelineEvent[];
 };
 
@@ -510,6 +512,7 @@ export function useDashboardMetrics(refreshToken: number) {
       sellValueUsd: number;
       lastActivityAt: number;
       events: TokenTimelineEvent[];
+      tradeSymbols: Set<string>;
     }>();
 
     const ensureEntry = (symbol: string) => {
@@ -528,6 +531,7 @@ export function useDashboardMetrics(refreshToken: number) {
           sellValueUsd: 0,
           lastActivityAt: 0,
           events: [],
+          tradeSymbols: new Set<string>(),
         });
       }
       return map.get(upper)!;
@@ -552,6 +556,7 @@ export function useDashboardMetrics(refreshToken: number) {
         integrationId: trade.integrationId,
       });
 
+      entry.tradeSymbols.add(trade.symbol.toUpperCase());
       entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
 
       if (trade.side === "BUY") {
@@ -606,6 +611,36 @@ export function useDashboardMetrics(refreshToken: number) {
         const averageSellPrice =
           entry.sellQuantity > 0 ? entry.sellValueUsd / entry.sellQuantity : undefined;
 
+        const tradeSymbols = Array.from(entry.tradeSymbols);
+
+        const preferredPrimary = (() => {
+          if (tradeSymbols.length === 0) {
+            return undefined;
+          }
+          const preferredQuotes = [
+            "USDT",
+            "USDC",
+            "BUSD",
+            "FDUSD",
+            "TUSD",
+            "USD",
+            "EUR",
+            "BTC",
+            "ETH",
+          ];
+
+          const scored = tradeSymbols.map((symbol) => {
+            const upper = symbol.toUpperCase();
+            const quote =
+              preferredQuotes.find((item) => upper.endsWith(item)) ?? upper.slice(-4);
+            const score = preferredQuotes.indexOf(quote);
+            return { symbol: upper, score: score === -1 ? Number.MAX_SAFE_INTEGER : score };
+          });
+
+          scored.sort((a, b) => a.score - b.score || a.symbol.localeCompare(b.symbol));
+          return scored[0]?.symbol;
+        })();
+
         const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
 
         return {
@@ -620,6 +655,8 @@ export function useDashboardMetrics(refreshToken: number) {
           averageBuyPrice,
           averageSellPrice,
           lastActivityAt: entry.lastActivityAt,
+          tradeSymbols,
+          primarySymbol: preferredPrimary,
           events: sortedEvents,
         };
       })
