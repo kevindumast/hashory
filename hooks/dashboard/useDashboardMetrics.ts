@@ -177,12 +177,43 @@ export type PortfolioToken = {
   withdrawalQuantity: number;
   investedUsd: number;
   realizedUsd: number;
+  buyValueUsd: number;
+  sellValueUsd: number;
+  netProfitUsd: number;
   averageBuyPrice?: number;
   averageSellPrice?: number;
   lastActivityAt: number;
   tradeSymbols: string[];
   primarySymbol?: string;
   events: TokenTimelineEvent[];
+};
+
+export type PerformerSummary = {
+  symbol: string;
+  profitUsd: number;
+  profitPercentage?: number;
+};
+
+export type ProfitSummary = {
+  totalProfitUsd: number;
+  costBasisUsd: number;
+  profitPercentage: number;
+  bestPerformer?: PerformerSummary | null;
+  worstPerformer?: PerformerSummary | null;
+};
+
+export type HistoryPoint = {
+  timestamp: number;
+  label: string;
+  profitUsd: number;
+  netInvestedUsd: number;
+};
+
+export type PerformancePoint = {
+  timestamp: number;
+  label: string;
+  profitPercent: number;
+  benchmarkPercent: number;
 };
 
 const QUOTE_ASSETS = [
@@ -328,7 +359,8 @@ export function useDashboardMetrics(refreshToken: number) {
     const byDay = new Map<string, number>();
     const sortedAsc = [...tradesList].sort((a, b) => a.executedAt - b.executedAt);
     sortedAsc.forEach((trade) => {
-      const key = new Date(trade.executedAt).toISOString().slice(0, 10);
+      const date = new Date(trade.executedAt);
+      const key = date.toISOString().slice(0, 10);
       const value = trade.quoteQuantity ?? trade.price * trade.quantity;
       byDay.set(key, (byDay.get(key) ?? 0) + value);
     });
@@ -337,8 +369,11 @@ export function useDashboardMetrics(refreshToken: number) {
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([key, value]) => {
         cumulative += value;
+        const [year, month, day] = key.split("-").map((part) => Number(part));
+        const timestamp = Date.UTC(year, month - 1, day);
         return {
-          date: dayLabelFormatter.format(new Date(key)),
+          timestamp,
+          label: dayLabelFormatter.format(new Date(timestamp)),
           nav: cumulative,
         };
       });
@@ -652,6 +687,9 @@ export function useDashboardMetrics(refreshToken: number) {
           withdrawalQuantity: entry.withdrawalQuantity,
           investedUsd: entry.investedUsd,
           realizedUsd: entry.realizedUsd,
+          buyValueUsd: entry.buyValueUsd,
+          sellValueUsd: entry.sellValueUsd,
+          netProfitUsd: entry.sellValueUsd - entry.buyValueUsd,
           averageBuyPrice,
           averageSellPrice,
           lastActivityAt: entry.lastActivityAt,
@@ -662,6 +700,131 @@ export function useDashboardMetrics(refreshToken: number) {
       })
       .sort((a, b) => b.investedUsd - a.investedUsd);
   }, [depositList, tradesList, withdrawalList]);
+
+  const profitSummary = useMemo<ProfitSummary>(() => {
+    if (portfolioTokens.length === 0) {
+      return {
+        totalProfitUsd: 0,
+        costBasisUsd: 0,
+        profitPercentage: 0,
+        bestPerformer: null,
+        worstPerformer: null,
+      };
+    }
+
+    let totalBuyValueUsd = 0;
+    let totalSellValueUsd = 0;
+
+    portfolioTokens.forEach((token) => {
+      totalBuyValueUsd += token.buyValueUsd;
+      totalSellValueUsd += token.sellValueUsd;
+    });
+
+    const totalProfitUsd = totalSellValueUsd - totalBuyValueUsd;
+    const costBasisUsd = Math.max(totalBuyValueUsd - totalSellValueUsd, 0);
+    const profitPercentage =
+      costBasisUsd > 0 ? (totalProfitUsd / costBasisUsd) * 100 : 0;
+
+    const tokensWithActivity = [...portfolioTokens].filter(
+      (token) => token.buyValueUsd > 0 || token.sellValueUsd > 0
+    );
+
+    tokensWithActivity.sort((a, b) => b.netProfitUsd - a.netProfitUsd);
+
+    const bestToken = tokensWithActivity[0] ?? null;
+    const worstToken =
+      tokensWithActivity.length > 1
+        ? tokensWithActivity[tokensWithActivity.length - 1]
+        : bestToken;
+
+    const mapTokenToPerformer = (token: PortfolioToken | null): PerformerSummary | null => {
+      if (!token) {
+        return null;
+      }
+      return {
+        symbol: token.symbol,
+        profitUsd: token.netProfitUsd,
+        profitPercentage:
+          token.buyValueUsd > 0 ? (token.netProfitUsd / token.buyValueUsd) * 100 : undefined,
+      };
+    };
+
+    return {
+      totalProfitUsd,
+      costBasisUsd,
+      profitPercentage,
+      bestPerformer: mapTokenToPerformer(bestToken),
+      worstPerformer: mapTokenToPerformer(worstToken),
+    };
+  }, [portfolioTokens]);
+
+  const historySeries = useMemo<HistoryPoint[]>(() => {
+    if (tradesList.length === 0) {
+      return [];
+    }
+
+    const sortedAsc = [...tradesList].sort((a, b) => a.executedAt - b.executedAt);
+    const byDay = new Map<string, { timestamp: number; profitUsd: number; netInvestedUsd: number }>();
+
+    let cumulativeProfit = 0;
+    let netInvestedUsd = 0;
+
+    sortedAsc.forEach((trade) => {
+      const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+      if (trade.side === "BUY") {
+        cumulativeProfit -= valueUsd;
+        netInvestedUsd += valueUsd;
+      } else {
+        cumulativeProfit += valueUsd;
+        netInvestedUsd = Math.max(netInvestedUsd - valueUsd, 0);
+      }
+
+      const executedDate = new Date(trade.executedAt);
+      const key = executedDate.toISOString().slice(0, 10);
+      const timestamp = Date.UTC(
+        executedDate.getUTCFullYear(),
+        executedDate.getUTCMonth(),
+        executedDate.getUTCDate()
+      );
+
+      byDay.set(key, {
+        timestamp,
+        profitUsd: cumulativeProfit,
+        netInvestedUsd,
+      });
+    });
+
+    return Array.from(byDay.values())
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map((point) => ({
+        timestamp: point.timestamp,
+        label: dayLabelFormatter.format(new Date(point.timestamp)),
+        profitUsd: point.profitUsd,
+        netInvestedUsd: point.netInvestedUsd,
+      }));
+  }, [tradesList]);
+
+  const performanceSeries = useMemo<PerformancePoint[]>(() => {
+    if (historySeries.length === 0) {
+      return [];
+    }
+
+    const initialInvestment = historySeries[0].netInvestedUsd;
+    const denominator = Math.abs(initialInvestment) > 0 ? Math.abs(initialInvestment) : null;
+
+    return historySeries.map((point) => {
+      const profitPercent =
+        denominator ? (point.profitUsd / denominator) * 100 : 0;
+      const benchmarkPercent =
+        denominator ? ((point.netInvestedUsd - initialInvestment) / denominator) * 100 : 0;
+      return {
+        timestamp: point.timestamp,
+        label: point.label,
+        profitPercent,
+        benchmarkPercent,
+      };
+    });
+  }, [historySeries]);
 
   const isLoading =
     isConvexConfigured &&
@@ -687,5 +850,8 @@ export function useDashboardMetrics(refreshToken: number) {
     isLoading,
     trackedScopes,
     portfolioTokens,
+    profitSummary,
+    historySeries,
+    performanceSeries,
   };
 }

@@ -755,7 +755,8 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   );
 }
 
-function PriceTooltip({ active, payload }: TooltipProps<number, string>) {
+function PriceTooltip(props: TooltipProps<number, string>) {
+  const { active, payload } = props;
   if (!active || !payload || payload.length === 0) {
     return null;
   }

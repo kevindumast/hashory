@@ -156,8 +156,9 @@ export function DashboardContent({ userName }: DashboardContentProps) {
 
         <TabsContent value="overview" className="space-y-6">
           <OverviewTab
-            cards={metrics.overviewCards}
-            navSeries={metrics.navSeries}
+            profitSummary={metrics.profitSummary}
+            historySeries={metrics.historySeries}
+            performanceSeries={metrics.performanceSeries}
             allocation={metrics.allocation}
             totalVolume={metrics.totalVolume}
             portfolioTokens={metrics.portfolioTokens}
