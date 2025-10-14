@@ -90,6 +90,14 @@ type ChartSlices = {
   hasPriceHistory: boolean;
 };
 
+type ExtendedTooltipProps = TooltipProps<number, string> & {
+  payload?: Array<
+    {
+      payload?: PricePoint | ChartPoint;
+    } & Record<string, unknown>
+  >;
+};
+
 const RANGE_CONFIG: Record<
   RangeKey,
   { label: string; interval: string; durationMs?: number; limit: number }
@@ -755,13 +763,16 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   );
 }
 
-function PriceTooltip(props: TooltipProps<number, string>) {
-  const { active, payload } = props;
+function PriceTooltip({ active, payload }: ExtendedTooltipProps) {
   if (!active || !payload || payload.length === 0) {
     return null;
   }
 
-  const raw = payload[0].payload as PricePoint | ChartPoint;
+  const rawEntry = payload[0];
+  const raw = rawEntry?.payload as PricePoint | ChartPoint | undefined;
+  if (!raw) {
+    return null;
+  }
   const timestamp = "timestamp" in raw ? raw.timestamp : Date.now();
   const priceValue =
     "price" in raw ? Number((raw as { price: number }).price) : 0;
