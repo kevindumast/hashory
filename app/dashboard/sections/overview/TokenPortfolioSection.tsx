@@ -444,90 +444,92 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
             Includes trades, deposits, and withdrawals imported from Binance.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="overflow-x-auto">
           {orderedTokens.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Connect Binance and run a sync to populate your portfolio.
             </p>
           ) : (
-            <ScrollArea className="max-h-[420px]">
-              <Table>
-                <TableHeader>
-                  <TableRow className="sticky top-0 bg-card/95 backdrop-blur hover:bg-card/95">
-                    <TableHead className="w-24 text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Token
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 sm:table-cell">
-                      Holdings
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 md:table-cell">
-                      Bought
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 lg:table-cell">
-                      Sold
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 lg:table-cell">
-                      Deposits
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 lg:table-cell">
-                      Withdrawals
-                    </TableHead>
-                    <TableHead className="hidden text-right text-xs uppercase tracking-wide text-muted-foreground/80 lg:table-cell">
-                      Avg buy
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Net USD
-                    </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Actions
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {orderedTokens.map((token) => {
-                    const netUsd = token.investedUsd - token.realizedUsd;
-                    return (
-                      <TableRow key={token.symbol} className="hover:bg-muted/40">
-                        <TableCell className="font-semibold uppercase tracking-wide text-foreground">
-                          {token.symbol}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm sm:table-cell">
-                          {numberFormatter.format(token.currentQuantity)}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm text-emerald-500 md:table-cell">
-                          +{numberFormatter.format(token.buyQuantity)}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm text-red-500 lg:table-cell">
-                          -{numberFormatter.format(token.sellQuantity)}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm lg:table-cell">
-                          {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm lg:table-cell">
-                          {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
-                        </TableCell>
-                        <TableCell className="hidden text-right text-sm lg:table-cell">
-                          {token.averageBuyPrice !== undefined ? numberFormatter.format(token.averageBuyPrice) : "-"}
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium">
-                          {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-xs font-semibold uppercase tracking-wide"
-                            onClick={() => setSelectedSymbol(token.symbol)}
-                          >
-                            View
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
+            <div className="min-w-full overflow-x-auto">
+              <ScrollArea className="max-h-[420px] w-full">
+                <Table className="w-full min-w-max">
+                  <TableHeader>
+                    <TableRow className="sticky top-0 z-10 bg-card/95 backdrop-blur hover:bg-card/95">
+                      <TableHead className="min-w-20 text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Token
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Holdings
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Bought
+                      </TableHead>
+                      <TableHead className="min-w-20 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Sold
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Deposits
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Withdrawals
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Avg buy
+                      </TableHead>
+                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Net USD
+                      </TableHead>
+                      <TableHead className="min-w-20 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                        Actions
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orderedTokens.map((token) => {
+                      const netUsd = token.investedUsd - token.realizedUsd;
+                      return (
+                        <TableRow key={token.symbol} className="hover:bg-muted/40">
+                          <TableCell className="font-semibold uppercase tracking-wide text-foreground">
+                            {token.symbol}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {numberFormatter.format(token.currentQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-emerald-500">
+                            +{numberFormatter.format(token.buyQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm text-red-500">
+                            -{numberFormatter.format(token.sellQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {token.averageBuyPrice !== undefined ? numberFormatter.format(token.averageBuyPrice) : "-"}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-xs font-semibold uppercase tracking-wide"
+                              onClick={() => setSelectedSymbol(token.symbol)}
+                            >
+                              View
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>
