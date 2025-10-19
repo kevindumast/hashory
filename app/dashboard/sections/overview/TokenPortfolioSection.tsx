@@ -46,7 +46,7 @@ import {
   type TokenTimelineEvent,
 } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
-import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
@@ -147,6 +147,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [range, setRange] = useState<RangeKey>("1M");
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -523,6 +524,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="sticky top-0 z-10 border-b border-border/50 bg-card/95 backdrop-blur">
+                      <th className="w-12 px-4 py-3 text-center" />
                       <th className="px-4 py-3 text-left">
                         <button
                           onClick={() => handleSort("symbol")}
@@ -547,74 +549,6 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                         >
                           Holdings
                           {sortColumn === "holdings" && sortDirection ? (
-                            sortDirection === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
-                            ) : (
-                              <ArrowDown className="h-3 w-3" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleSort("bought")}
-                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
-                        >
-                          Bought
-                          {sortColumn === "bought" && sortDirection ? (
-                            sortDirection === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
-                            ) : (
-                              <ArrowDown className="h-3 w-3" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleSort("sold")}
-                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
-                        >
-                          Sold
-                          {sortColumn === "sold" && sortDirection ? (
-                            sortDirection === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
-                            ) : (
-                              <ArrowDown className="h-3 w-3" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleSort("deposits")}
-                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
-                        >
-                          Deposits
-                          {sortColumn === "deposits" && sortDirection ? (
-                            sortDirection === "asc" ? (
-                              <ArrowUp className="h-3 w-3" />
-                            ) : (
-                              <ArrowDown className="h-3 w-3" />
-                            )
-                          ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
-                          )}
-                        </button>
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => handleSort("withdrawals")}
-                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
-                        >
-                          Withdrawals
-                          {sortColumn === "withdrawals" && sortDirection ? (
                             sortDirection === "asc" ? (
                               <ArrowUp className="h-3 w-3" />
                             ) : (
@@ -669,71 +603,98 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                   <tbody>
                     {orderedTokens.map((token) => {
                       const netUsd = token.investedUsd - token.realizedUsd;
+                      const isExpanded = expandedRow === token.symbol;
                       return (
-                        <tr
-                          key={token.symbol}
-                          className="border-b border-border/30 transition-colors hover:bg-muted/40"
-                        >
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-foreground">
-                                {token.symbol.charAt(0)}
-                              </span>
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-semibold uppercase tracking-wide text-foreground">
-                                  {token.symbol}
+                        <>
+                          <tr
+                            key={token.symbol}
+                            className="border-b border-border/30 transition-colors hover:bg-muted/40"
+                          >
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => setExpandedRow(isExpanded ? null : token.symbol)}
+                                className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-muted/60 transition-colors"
+                              >
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-foreground">
+                                  {token.symbol.charAt(0)}
                                 </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-semibold uppercase tracking-wide text-foreground">
+                                    {token.symbol}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm text-foreground">
-                              {numberFormatter.format(token.currentQuantity)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm font-medium text-emerald-500">
-                              +{numberFormatter.format(token.buyQuantity)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm font-medium text-red-500">
-                              -{numberFormatter.format(token.sellQuantity)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm text-foreground">
-                              {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm text-foreground">
-                              {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="text-sm text-foreground">
-                              {token.averageBuyPrice !== undefined
-                                ? numberFormatter.format(token.averageBuyPrice)
-                                : "-"}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <span className="font-medium text-foreground">
-                              {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs font-semibold uppercase tracking-wide"
-                              onClick={() => setSelectedSymbol(token.symbol)}
-                            >
-                              View
-                            </Button>
-                          </td>
-                        </tr>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="text-sm text-foreground">
+                                {numberFormatter.format(token.currentQuantity)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="text-sm text-foreground">
+                                {token.averageBuyPrice !== undefined
+                                  ? numberFormatter.format(token.averageBuyPrice)
+                                  : "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-medium text-foreground">
+                                {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs font-semibold uppercase tracking-wide"
+                                onClick={() => setSelectedSymbol(token.symbol)}
+                              >
+                                View
+                              </Button>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="border-b border-border/30 bg-muted/20">
+                              <td colSpan={6} className="px-4 py-4">
+                                <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground font-semibold uppercase">Bought</span>
+                                    <span className="text-sm font-medium text-emerald-500">
+                                      +{numberFormatter.format(token.buyQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground font-semibold uppercase">Sold</span>
+                                    <span className="text-sm font-medium text-red-500">
+                                      -{numberFormatter.format(token.sellQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground font-semibold uppercase">Deposits</span>
+                                    <span className="text-sm text-foreground">
+                                      {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground font-semibold uppercase">Withdrawals</span>
+                                    <span className="text-sm text-foreground">
+                                      {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
                       );
                     })}
                   </tbody>
