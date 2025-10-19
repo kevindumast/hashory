@@ -21,7 +21,11 @@
       "Bash(timeout 10 npm run dev)",
       "Bash(powershell -Command \"Remove-Item ''C:\\Users\\kevin.dumast\\Documents\\oracly\\.next'' -Recurse -Force -ErrorAction SilentlyContinue; Write-Host ''Done''\")",
       "Bash(curl -s \"https://api.github.com/repos/sadmann7/tablecn/contents/registry/default\")",
-      "Bash(npm install cryptocurrency-icons)"
+      "Bash(npm install cryptocurrency-icons)",
+      "Bash(npm uninstall cryptocurrency-icons)",
+      "Bash(npm install cryptoicons)",
+      "Bash(npm install github:Cryptofonts/cryptoicons)",
+      "Bash(curl -s \"https://api.github.com/repos/Cryptofonts/cryptoicons/contents/SVG\")"
     ],
     "deny": [],
     "ask": []

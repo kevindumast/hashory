@@ -52,7 +52,11 @@ const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
 
 function getCryptoIconUrl(symbol: string): string {
-  const iconPath = `/crypto-icons/${symbol.toLowerCase()}.svg`;
+  const lowerSymbol = symbol.toLowerCase();
+  // Try Cryptofonts CDN first, fallback to local
+  // You can use: https://cryptoicons.co/
+  // For now using local icons from cryptocurrency-icons package
+  const iconPath = `/crypto-icons/${lowerSymbol}.svg`;
   return iconPath;
 }
 
