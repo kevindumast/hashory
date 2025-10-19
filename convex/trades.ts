@@ -7,6 +7,7 @@ export const ingestBatch = mutation({
     trades: v.array(
       v.object({
         providerTradeId: v.string(),
+        tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT")),
         symbol: v.string(),
         side: v.union(v.literal("BUY"), v.literal("SELL")),
         quantity: v.number(),
@@ -16,6 +17,10 @@ export const ingestBatch = mutation({
         feeAsset: v.optional(v.string()),
         isMaker: v.boolean(),
         executedAt: v.number(),
+        fromAsset: v.optional(v.string()),
+        fromAmount: v.optional(v.number()),
+        toAsset: v.optional(v.string()),
+        toAmount: v.optional(v.number()),
         raw: v.optional(v.any()),
       })
     ),
@@ -40,6 +45,7 @@ export const ingestBatch = mutation({
         integrationId: args.integrationId,
         providerTradeId: trade.providerTradeId,
         portfolioId: undefined,
+        tradeType: trade.tradeType,
         symbol: trade.symbol,
         side: trade.side,
         quantity: trade.quantity,
@@ -49,6 +55,10 @@ export const ingestBatch = mutation({
         feeAsset: trade.feeAsset,
         isMaker: trade.isMaker,
         executedAt: trade.executedAt,
+        fromAsset: trade.fromAsset,
+        fromAmount: trade.fromAmount,
+        toAsset: trade.toAsset,
+        toAmount: trade.toAmount,
         raw: trade.raw,
         createdAt: now,
       });
@@ -94,6 +104,7 @@ export const listByUser = query({
         integrationId: trade.integrationId,
         provider: integration.provider,
         providerDisplayName: integration.displayName ?? integration.provider,
+        tradeType: trade.tradeType,
         symbol: trade.symbol,
         side: trade.side,
         quantity: trade.quantity,
@@ -103,6 +114,10 @@ export const listByUser = query({
         feeAsset: trade.feeAsset,
         isMaker: trade.isMaker,
         executedAt: trade.executedAt,
+        fromAsset: trade.fromAsset,
+        fromAmount: trade.fromAmount,
+        toAsset: trade.toAsset,
+        toAmount: trade.toAmount,
         createdAt: trade.createdAt,
       };
     });

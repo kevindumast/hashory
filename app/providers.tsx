@@ -4,7 +4,7 @@ import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { dark } from "@clerk/themes";
 import { ConvexProvider } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { convexClient, isConvexConfigured } from "@/convex/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClerkUserSync } from "@/components/auth/clerk-user-sync";
@@ -15,6 +15,32 @@ type ProvidersProps = {
 
 export function Providers({ children }: ProvidersProps) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || process.env.NODE_ENV !== "production") {
+      return;
+    }
+
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+
+    const registerServiceWorker = () => {
+      navigator.serviceWorker.register("/sw.js").catch((error) => {
+        console.warn("[oracly] Service worker registration failed", error);
+      });
+    };
+
+    if (document.readyState === "complete") {
+      registerServiceWorker();
+      return;
+    }
+
+    window.addEventListener("load", registerServiceWorker, { once: true });
+    return () => {
+      window.removeEventListener("load", registerServiceWorker);
+    };
+  }, []);
 
   const tooltipWrapped = <TooltipProvider delayDuration={150}>{children}</TooltipProvider>;
 
@@ -37,7 +63,7 @@ export function Providers({ children }: ProvidersProps) {
         appearance={{
           baseTheme: dark,
           variables: {
-            colorPrimary: "#C9A646",
+            colorPrimary: "#2563eb",
           },
         }}
       >
@@ -55,7 +81,7 @@ export function Providers({ children }: ProvidersProps) {
       appearance={{
         baseTheme: dark,
         variables: {
-          colorPrimary: "#C9A646",
+          colorPrimary: "#2563eb",
         },
       }}
     >

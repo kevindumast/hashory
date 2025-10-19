@@ -70,8 +70,8 @@ export function DashboardContent({ userName }: DashboardContentProps) {
         const result = await syncAccount({
           integrationId: integration._id,
         });
-        totalTradeInserted += result.trades?.inserted ?? 0;
-        totalTradeFetched += result.trades?.fetched ?? 0;
+        // Note: Spot trades are now processed in background via scheduler
+        // Only count immediate sync results here
         totalDepositInserted += result.deposits?.inserted ?? 0;
         totalDepositFetched += result.deposits?.fetched ?? 0;
         totalWithdrawalInserted += result.withdrawals?.inserted ?? 0;

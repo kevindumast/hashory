@@ -20,6 +20,7 @@ export default defineSchema({
     integrationId: v.id("integrations"),
     providerTradeId: v.string(),
     portfolioId: v.optional(v.id("portfolios")),
+    tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"))),
     symbol: v.string(),
     side: v.union(v.literal("BUY"), v.literal("SELL")),
     quantity: v.number(),
@@ -29,6 +30,11 @@ export default defineSchema({
     feeAsset: v.optional(v.string()),
     isMaker: v.boolean(),
     executedAt: v.number(),
+    // FROM -> TO fields for clear exchange display
+    fromAsset: v.optional(v.string()),
+    fromAmount: v.optional(v.number()),
+    toAsset: v.optional(v.string()),
+    toAmount: v.optional(v.number()),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })
@@ -111,4 +117,22 @@ export default defineSchema({
   })
     .index("by_integration", ["integrationId"])
     .index("by_integration_withdraw", ["integrationId", "withdrawId"]),
+  spotTradesSyncQueue: defineTable({
+    integrationId: v.id("integrations"),
+    symbols: v.array(v.string()),
+    startTime: v.optional(v.number()),
+    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("completed"), v.literal("failed")),
+    error: v.optional(v.string()),
+    result: v.optional(v.object({
+      fetched: v.number(),
+      inserted: v.number(),
+      earliest: v.optional(v.number()),
+      latest: v.optional(v.number()),
+    })),
+    createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_integration_status", ["integrationId", "status"])
+    .index("by_status", ["status"]),
 });

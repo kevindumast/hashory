@@ -11,7 +11,16 @@
       "Bash(vercel:*)",
       "Bash(curl -s \"https://upward-kid-24.clerk.accounts.dev/.well-known/jwks.json\")",
       "Bash(node:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx tsc:*)",
+      "Bash(dir:*)",
+      "Bash(findstr:*)",
+      "Bash(timeout 10 npx convex dev --once)",
+      "Bash(npm install tablecn)",
+      "Bash(timeout 10 npm run dev)",
+      "Bash(powershell -Command \"Remove-Item ''C:\\Users\\kevin.dumast\\Documents\\oracly\\.next'' -Recurse -Force -ErrorAction SilentlyContinue; Write-Host ''Done''\")",
+      "Bash(curl -s \"https://api.github.com/repos/sadmann7/tablecn/contents/registry/default\")"
     ],
     "deny": [],
     "ask": []

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import {
   Activity,
   ArrowRight,
@@ -87,28 +89,34 @@ const testimonials = [
   },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const { userId } = await auth();
+
+  if (userId) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-x-0 top-[-12rem] z-[-1] h-[28rem] bg-gradient-to-b from-primary/20 via-primary/5 to-background blur-3xl" />
+      <div className="pointer-events-none absolute inset-x-0 top-[-12rem] z-[-1] h-[28rem] bg-gradient-to-b from-primary/25 via-primary/10 to-transparent blur-3xl" />
 
-      <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-12 px-6 pb-24 pt-28 text-center md:pt-36">
+      <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-10 px-4 pb-20 pt-24 text-center sm:gap-12 sm:px-6 md:pt-32">
         <Badge
           variant="outline"
-          className="border-primary/30 bg-primary/10 text-xs font-medium uppercase tracking-[0.35em] text-primary"
+          className="border-primary/30 bg-primary/10 px-4 py-2 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-primary sm:text-xs"
         >
           Predict • Optimize • Master
         </Badge>
         <div className="max-w-4xl space-y-6">
-          <h1 className="text-balance text-4xl font-bold leading-tight text-foreground sm:text-5xl md:text-6xl">
+          <h1 className="text-balance text-3xl font-bold leading-tight text-foreground sm:text-5xl md:text-6xl">
             La plateforme IA qui anticipe vos performances crypto avant qu&apos;elles ne se produisent.
           </h1>
-          <p className="text-pretty text-lg text-muted-foreground sm:text-xl">
+          <p className="text-pretty text-base text-muted-foreground sm:text-xl">
             Oracly ingère vos données Binance, calcule vos métriques quantitatives en temps réel et déploie
             des recommandations IA pour protéger et optimiser votre portefeuille.
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-4">
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
           <Button asChild size="lg" className="bg-primary px-8 text-primary-foreground hover:bg-primary/90">
             <Link href="/sign-up">
               Commencer gratuitement
@@ -124,8 +132,8 @@ export default function Home() {
             <Link href="/dashboard">Voir le dashboard</Link>
           </Button>
         </div>
-        <div className="w-full max-w-4xl rounded-3xl border border-border/60 bg-card/70 p-6 shadow-lg shadow-primary/5 backdrop-blur">
-          <div className="grid gap-6 md:grid-cols-3">
+        <div className="w-full max-w-4xl rounded-3xl border border-border/60 bg-card/70 p-6 shadow-lg shadow-primary/5 backdrop-blur sm:p-8">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <div className="flex flex-col items-start gap-3 text-left">
               <CircleGauge className="h-8 w-8 text-primary" />
               <p className="text-lg font-semibold text-foreground">Pilotage temps réel</p>
@@ -151,8 +159,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-5xl px-6 pb-16">
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 text-sm uppercase tracking-[0.3em] text-muted-foreground">
+      <section className="mx-auto w-full max-w-5xl px-4 pb-14 sm:px-6 sm:pb-16">
+        <div className="flex items-center gap-x-8 gap-y-3 overflow-x-auto whitespace-nowrap rounded-2xl border border-border/60 bg-card/60 px-4 py-3 text-[0.7rem] uppercase tracking-[0.3em] text-muted-foreground/80 sm:px-6 sm:py-4">
           {companies.map((company) => (
             <span key={company} className="text-muted-foreground/70">
               {company}
@@ -161,12 +169,12 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-24">
-        <div className="grid gap-8 md:grid-cols-3">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
+        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {featureHighlights.map((feature) => (
             <div
               key={feature.title}
-              className="group relative flex h-full flex-col gap-6 rounded-3xl border border-border/60 bg-card/70 p-8 transition hover:-translate-y-1 hover:border-primary/40 hover:bg-card/90"
+              className="group relative flex h-full flex-col gap-5 rounded-3xl border border-border/60 bg-card/70 p-6 transition hover:-translate-y-1 hover:border-primary/40 hover:bg-card/90 sm:p-8"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
                 {feature.icon}
@@ -181,8 +189,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-16 px-6 pb-24 md:flex-row md:items-center">
-        <div className="relative flex-1 overflow-hidden rounded-3xl border border-border/60 bg-card/60 p-8 backdrop-blur">
+      <section className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-4 pb-20 sm:px-6 md:flex-row md:items-center lg:gap-16 lg:pb-24">
+        <div className="relative flex-1 overflow-hidden rounded-3xl border border-border/60 bg-card/60 p-6 shadow-lg backdrop-blur sm:p-8">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-background opacity-70" />
           <div className="relative flex flex-col gap-6">
             <Badge variant="secondary" className="w-fit bg-primary/20 text-primary">
@@ -195,22 +203,22 @@ export default function Home() {
               Les composants Shadcn/UI et Convex alimentent une interface responsive, avec sections dédiées aux
               performances, allocations et transactions.
             </p>
-            <div className="grid gap-4 text-sm text-muted-foreground">
-              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/30 p-4">
+            <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
+              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/40 p-4">
                 <LineChart className="mt-1 h-5 w-5 text-primary" />
                 <div>
                   <h3 className="text-base font-medium text-foreground">Analyse temporelle</h3>
                   <p>Courbes P&amp;L, drawdown, performance vs benchmark générées à la volée.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/30 p-4">
+              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/40 p-4">
                 <CircleGauge className="mt-1 h-5 w-5 text-primary" />
                 <div>
                   <h3 className="text-base font-medium text-foreground">Allocation instantanée</h3>
                   <p>Vue allocation par actif, expositions fiat/crypto et répartition des risques.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/30 p-4">
+              <div className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/40 p-4">
                 <BrainCircuit className="mt-1 h-5 w-5 text-primary" />
                 <div>
                   <h3 className="text-base font-medium text-foreground">Copilote IA</h3>
@@ -247,8 +255,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-6 pb-24">
-        <div className="grid gap-8 rounded-3xl border border-border/60 bg-card/60 p-10 backdrop-blur md:grid-cols-3">
+      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
+        <div className="grid gap-6 rounded-3xl border border-border/60 bg-card/60 p-6 backdrop-blur sm:grid-cols-2 sm:p-8 xl:grid-cols-3 xl:p-10">
           {metrics.map((metric) => (
             <div key={metric.label} className="flex flex-col gap-3">
               <span className="text-sm font-medium uppercase tracking-wide text-primary">{metric.label}</span>
@@ -259,8 +267,8 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-5xl px-6 pb-24">
-        <div className="grid gap-6 md:grid-cols-2">
+      <section className="mx-auto w-full max-w-5xl px-4 pb-20 sm:px-6 sm:pb-24">
+        <div className="grid gap-6 sm:grid-cols-2">
           {testimonials.map((testimonial) => (
             <div
               key={testimonial.author}
@@ -273,9 +281,9 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="mx-auto w-full max-w-4xl px-6 pb-28">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/40 bg-gradient-to-br from-primary/15 via-primary/10 to-primary/5 p-10 text-center backdrop-blur">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(201,166,70,0.25),_transparent_60%)]" />
+      <section className="mx-auto w-full max-w-4xl px-4 pb-24 sm:px-6 sm:pb-28">
+        <div className="relative overflow-hidden rounded-3xl border border-primary/40 bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 p-6 text-center backdrop-blur sm:p-10">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.25),_transparent_60%)]" />
           <div className="relative space-y-6">
             <h2 className="text-3xl font-semibold text-foreground">
               Déployez Oracly, maîtrisez votre portefeuille.
@@ -283,7 +291,7 @@ export default function Home() {
             <p className="text-lg text-muted-foreground">
               Créez votre compte, synchronisez Binance et activez votre copilote IA en moins d&apos;une heure.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
               <Button asChild size="lg" className="bg-primary px-8 text-primary-foreground hover:bg-primary/90">
                 <Link href="/sign-up">Créer mon espace</Link>
               </Button>

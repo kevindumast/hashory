@@ -420,21 +420,8 @@ export const syncAccount = action({
     });
     console.log(`Convert trades: ${convertTrades.fetched} fetched, ${convertTrades.inserted} inserted`);
 
-    await sleep(DELAY_BETWEEN_SYNC_TYPES);
-
-    console.log("📊 Starting spot trades sync...");
-    const trades = await syncSpotTrades(ctx, {
-      integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
-      symbols: detection.symbols,
-      startTime: args.options?.startTime ?? null,
-    });
-    console.log(`Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
-
     const accountCreationFromApi = await fetchAccountCreationTime(decryptedKey, decryptedSecret);
     const earliestActivityCandidates = [
-      trades.earliest ?? null,
       convertTrades.earliest ?? null,
       fiatOrders.earliest ?? null,
       deposits.earliest ?? null,
@@ -444,6 +431,14 @@ export const syncAccount = action({
       earliestActivityCandidates.length > 0 ? Math.min(...earliestActivityCandidates) : null;
     const accountCreatedAt = accountCreationFromApi ?? inferredCreation ?? null;
 
+    // Queue spot trades sync in background (don't await)
+    console.log("📊 Launching spot trades sync in background...");
+    ctx.scheduler.runAfter(0, api.binance.syncSpotTradesOnly, {
+      integrationId: args.integrationId,
+      symbols: detection.symbols,
+      startTime: args.options?.startTime,
+    });
+
     await ctx.runMutation(api.integrations.updateMetadata, {
       integrationId: args.integrationId,
       accountCreatedAt: accountCreatedAt ?? undefined,
@@ -452,13 +447,47 @@ export const syncAccount = action({
 
     return {
       symbols: detection.symbols,
-      trades,
       convertTrades,
       fiatOrders,
       deposits,
       withdrawals,
       accountCreatedAt,
+      spotTradesQueued: true,
     };
+  },
+});
+
+// Separate action for spot trades sync - can run for longer without blocking
+export const syncSpotTradesOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+    symbols: v.array(v.string()),
+    startTime: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const integration = (await ctx.runQuery(api.integrations.getById, {
+      integrationId: args.integrationId,
+    })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
+
+    if (!integration) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    const { apiKey, apiSecret } = integration.encryptedCredentials;
+    const decryptedKey = decryptSecret(apiKey);
+    const decryptedSecret = decryptSecret(apiSecret);
+
+    console.log("📊 Starting spot trades sync (background action)...");
+    const trades = await syncSpotTrades(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+      symbols: args.symbols,
+      startTime: args.startTime ?? null,
+    });
+    console.log(`📊 Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
+
+    return trades;
   },
 });
 
@@ -531,7 +560,7 @@ async function detectSymbols(
   };
 }
 
-async function syncSpotTrades(
+export async function syncSpotTrades(
   ctx: ActionCtx,
   params: {
     integrationId: Id<"integrations">;

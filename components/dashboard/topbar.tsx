@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { TrendingUp, Bell, Menu, Sparkles, HelpCircle, Plug } from "lucide-react";
-import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { ClerkLoaded, ClerkLoading, SignedOut, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -39,11 +39,12 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
             </Badge>
           </div>
         </div>
-        <div className="flex flex-1 items-center gap-2">
+        <div className="flex flex-1 min-w-0 items-center gap-2">
           <Input
             placeholder="Search assets, clients, or mandates..."
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            className="w-full min-w-0"
           />
           <Button variant="outline" size="icon" className="hidden sm:inline-flex">
             <Sparkles className="size-4" />
@@ -61,7 +62,7 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
             <Plug className="size-4" />
           </Button>
           <Button
-            className="hidden sm:inline-flex items-center gap-2"
+            className="hidden items-center gap-2 sm:inline-flex"
             onClick={onConnectProvider}
             disabled={!isIntegrationEnabled}
           >
@@ -88,24 +89,28 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
             <TooltipContent side="bottom">Support</TooltipContent>
           </Tooltip>
 
-          <SignedIn>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: "size-9 border border-border",
-                },
-              }}
-              afterSignOutUrl="/"
-            />
-          </SignedIn>
-          <SignedOut>
-            <Button asChild size="sm">
-              <Link href="/sign-in">Se connecter</Link>
-            </Button>
-            <Button asChild size="sm" variant="secondary">
-              <Link href="/sign-up">Creer un compte</Link>
-            </Button>
-          </SignedOut>
+          <div className="relative flex min-w-[96px] items-center justify-end">
+            <ClerkLoading>
+              <span className="h-9 w-9 animate-pulse rounded-full bg-muted/40" />
+            </ClerkLoading>
+            <ClerkLoaded>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: "size-9 border border-border",
+                  },
+                }}
+                afterSignOutUrl="/"
+              />
+            </ClerkLoaded>
+            <SignedOut>
+              <Link
+                href="/sign-in"
+                className="hidden"
+                aria-label="Vous devez être connecté pour accéder au tableau de bord"
+              />
+            </SignedOut>
+          </div>
         </div>
       </div>
     </header>

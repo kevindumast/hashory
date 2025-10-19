@@ -96,16 +96,74 @@ vercel
 
 → Vérifier que Clerk et Convex communiquent correctement.
 
-### Phase 2 — Données Binance (v0.2)
-- Créer `/convex/binance.ts`
-- Ajouter les fonctions pour récupérer :
-  - `/api/v3/account`
-  - `/api/v3/myTrades`
-- Sauvegarder les données dans `portfolios` et `trades`
-- Créer un dashboard `/dashboard` :
-  - Valeur totale du wallet
-  - P&L
-  - Liste des positions
+### Phase 2 — Données Binance (v0.2) ✅ COMPLÉTÉE
+- ✅ Créer `/convex/binance.ts` avec gestion complète de synchronisation
+- ✅ Ajouter les fonctions pour récupérer :
+  - `/api/v3/account` - Balances et détection de symboles
+  - `/api/v3/myTrades` - Trades spot avec pagination
+  - `/sapi/v1/convert/tradeFlow` - Conversions crypto-to-crypto
+  - `/sapi/v1/fiat/orders` - Achats fiat (CB → crypto)
+  - `/sapi/v1/capital/deposit/hisrec` - Dépôts
+  - `/sapi/v1/capital/withdraw/history` - Retraits
+- ✅ Sauvegarder les données dans `portfolios`, `trades`, `deposits`, `withdrawals`
+- ✅ Créer un dashboard `/dashboard` avec :
+  - Valeur totale du wallet et évolution
+  - P&L (gains/pertes)
+  - Performance par asset
+  - Graphiques interactifs (prix, volume, distribution)
+  - Onglet transactions avec filtres avancés
+
+**🔧 Optimisations techniques implémentées :**
+- Gestion rate limiting Binance (429) avec exponential backoff (5 retries, 5s base)
+- Délais entre requêtes (1200ms) et entre types de sync (3s)
+- Cursor-based pagination pour historique complet
+- Champs FROM/TO stockés en base pour performances UI optimales
+- Encryption des credentials API (AES-256-GCM)
+- Normalisation des données entre sources (spot/convert/fiat)
+
+**📊 Structure des données Binance :**
+
+**Convert Trade** (API: `/sapi/v1/convert/tradeFlow`):
+```typescript
+{
+  orderId: string;
+  orderStatus: "SUCCESS" | "PROCESSING" | "FAILED";
+  side?: "BUY" | "SELL";             // ⚠️ Parfois fourni, parfois calculé
+  fromAsset: string;                 // Ex: "USDT"
+  fromAmount: string;                // Ex: "10"
+  toAsset: string;                   // Ex: "PYTH"
+  toAmount: string;                  // Ex: "15.43629586"
+  ratio: string;                     // Prix d'échange
+  inverseRatio: string;              // Prix inverse
+  fee?: string;
+  feeAsset?: string;
+  createTime: number;
+  updateTime: number;
+}
+// Note: Le side est calculé via resolveConvertSymbol() si absent
+```
+
+**Spot Trade** (API: `/api/v3/myTrades`):
+```typescript
+{
+  id: number;
+  symbol: string;                    // Ex: "BTCUSDT"
+  price: string;
+  qty: string;                       // Quantité base asset
+  quoteQty: string;                  // Quantité quote asset
+  commission: string;
+  commissionAsset: string;
+  time: number;
+  isBuyer: boolean;                  // ⚠️ Utilisé pour déduire side
+  isMaker: boolean;
+}
+```
+
+**Normalisation en base :**
+- Tous les trades (spot, convert, fiat) sont stockés dans la table `trades`
+- Champs communs: `providerTradeId`, `symbol`, `side`, `quantity`, `price`, `executedAt`
+- **Nouveaux champs optimisés**: `fromAsset`, `fromAmount`, `toAsset`, `toAmount`
+- Permet affichage FROM → TO sans calcul frontend
 
 ### Phase 3 — Calculs quantitatifs (v0.3)
 - Créer `/lib/metrics.ts` avec :
@@ -144,39 +202,94 @@ vercel
 
 ---
 
+## 🐛 Problèmes résolus (Session récente)
+
+### 1. Rate Limiting Binance (429 errors)
+**Problème :** Trop de requêtes simultanées causaient des bannissements de 10 minutes
+**Solution :**
+- Exponential backoff: 5s, 10s, 20s, 40s, 80s (max 5 retries)
+- Délais inter-requêtes: 1200ms
+- Délais inter-types: 3000ms
+- `MAX_HISTORY_ITERATIONS` réduit de 200 à 20
+
+### 2. Curseurs corrompus avec timestamps futurs
+**Problème :** Curseurs contenaient des timestamps de mai 2025 alors qu'on était en octobre
+**Solution :**
+- Création de `convex/resetCursors.ts`
+- Action pour reset manuel des curseurs corrompus
+- Meilleure validation des timestamps
+
+### 3. Overflow des logs
+**Problème :** Plus de 256 lignes de logs causaient une troncature
+**Solution :** Suppression des logs excessifs, conservation uniquement des logs essentiels
+
+### 4. Affichage transactions pas clair
+**Problème :** Difficile de voir "FROM → TO" dans les transactions
+**Solution :**
+- Ajout de `fromAsset`, `fromAmount`, `toAsset`, `toAmount` dans le schéma
+- Calcul et stockage en base plutôt qu'en frontend
+- Nouvelle UI avec colonnes FROM et TO claires
+
 ## 🚀 Prochaines étapes
-- Créer le repo GitHub `oracly`
-- Lier à Vercel + Convex + Clerk
-- Créer premières fonctions Convex (`users`, `portfolios`, `trades`)
-- Valider la boucle auth → stockage → affichage
+
+### Immédiat (à faire)
+- [ ] Tester la synchronisation complète après les fixes
+- [ ] Vérifier que les champs FROM/TO s'affichent correctement
+- [ ] Valider les performances avec un grand volume de données
+
+### Court terme (Phase 3)
+- [ ] Créer `/lib/metrics.ts` avec calculs quantitatifs
+- [ ] Implémenter Sharpe Ratio, Alpha/Beta, Drawdown
+- [ ] Ajouter graphiques de performance avancés
+
+### Moyen terme (Phase 4)
+- [ ] Intégrer IA pour recommandations
+- [ ] Générer résumés automatiques de performance
+- [ ] Suggestions de réallocation de portfolio
 
 ---
 
-## 📦 Structure cible
+## 📦 Structure actuelle
 
 ```text
 app/
  ├─ dashboard/
- │   ├─ page.tsx
+ │   ├─ page.tsx                           ✅ Dashboard principal
+ │   ├─ sections/
+ │   │   ├─ overview/                      ✅ Vue d'ensemble (P&L, assets)
+ │   │   ├─ performance/                   ✅ Graphiques de performance
+ │   │   └─ transactions/                  ✅ Historique filtrable
  │   └─ components/
- │       ├─ PortfolioCard.tsx
- │       └─ MetricChart.tsx
- ├─ api/
+ │       ├─ topbar.tsx                     ✅ Barre de navigation
+ │       └─ ...
+ ├─ integrations/
  │   └─ binance/
- │       └─ route.ts (proxy si besoin)
+ │       └─ connect/page.tsx               ✅ Connexion API Binance
+ ├─ settings/
+ │   └─ page.tsx                           ✅ Gestion des intégrations
+ └─ page.tsx                               ✅ Landing page
 convex/
- ├─ users.ts
- ├─ portfolios.ts
- ├─ trades.ts
- ├─ analytics.ts
- ├─ ai.ts
- └─ schema.ts
+ ├─ users.ts                               ✅ Gestion utilisateurs
+ ├─ integrations.ts                        ✅ API keys & sync states
+ ├─ portfolios.ts                          ✅ Agrégation des wallets
+ ├─ trades.ts                              ✅ Historique de trades
+ ├─ deposits.ts                            ✅ Dépôts crypto
+ ├─ withdrawals.ts                         ✅ Retraits crypto
+ ├─ binance.ts                             ✅ Synchronisation Binance
+ ├─ resetCursors.ts                        ✅ Utilitaire reset curseurs
+ ├─ schema.ts                              ✅ Schéma base de données
+ └─ utils/
+     └─ encryption.ts                      ✅ Chiffrement credentials
+hooks/
+ └─ dashboard/
+     └─ useDashboardMetrics.ts             ✅ Calculs métriques temps réel
 lib/
- ├─ binance.ts
- ├─ metrics.ts
- └─ aiEngine.ts
+ └─ utils.ts                               ✅ Utilitaires généraux
+components/
+ └─ ui/                                    ✅ Composants Shadcn
 public/
- └─ logo_oracly.svg
+ ├─ icons/                                 ✅ Icônes PWA
+ └─ sw.js                                  ✅ Service Worker
 ```
 
 ---

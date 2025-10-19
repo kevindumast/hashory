@@ -27,6 +27,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ArrowRight } from "lucide-react";
+
+const QUOTE_ASSETS = [
+  "USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI",
+  "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "AUD", "CAD", "BRL"
+];
+
+function extractQuoteAsset(symbol: string): string {
+  const upper = symbol.toUpperCase();
+  for (const quote of QUOTE_ASSETS) {
+    if (upper.endsWith(quote)) {
+      return quote;
+    }
+  }
+  return "UNKNOWN";
+}
 
 interface TransactionsTabProps {
   transactions: TransactionEntry[];
@@ -211,11 +227,11 @@ export function TransactionsTab({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Asset</TableHead>
+                    <TableHead>Exchange</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Price</TableHead>
-                    <TableHead>Value (USD)</TableHead>
+                    <TableHead>From</TableHead>
+                    <TableHead>To</TableHead>
+                    <TableHead>Rate</TableHead>
                     <TableHead>Details</TableHead>
                     <TableHead className="text-right">Date</TableHead>
                   </TableRow>
@@ -224,20 +240,19 @@ export function TransactionsTab({
                   {filteredTransactions.map((entry) => (
                     <TableRow key={`${entry.type}-${entry.id}`} className="text-sm">
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <AssetAvatar symbol={entry.baseAsset} />
-                          <div className="space-y-1">
-                            <p className="font-medium text-foreground">{entry.baseAsset}</p>
-                            <p className="text-xs text-muted-foreground">{entry.providerDisplayName}</p>
-                          </div>
+                        <div className="space-y-1">
+                          <p className="font-medium text-foreground">{entry.providerDisplayName}</p>
+                          {entry.type === "trade" && (
+                            <p className="text-[11px] text-muted-foreground">{entry.symbol}</p>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
                         <TransactionBadge entry={entry} />
                       </TableCell>
-                      <TableCell>{renderQuantity(entry)}</TableCell>
-                      <TableCell>{renderPrice(entry)}</TableCell>
-                      <TableCell>{renderValue(entry)}</TableCell>
+                      <TableCell>{renderFromAsset(entry)}</TableCell>
+                      <TableCell>{renderToAsset(entry)}</TableCell>
+                      <TableCell>{renderRate(entry)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{renderDetails(entry)}</TableCell>
                       <TableCell className="text-right">{renderDate(entry)}</TableCell>
                     </TableRow>
@@ -342,26 +357,107 @@ function TransactionBadge({ entry }: { entry: TransactionEntry }) {
   );
 }
 
-function renderQuantity(entry: TransactionEntry) {
+function renderFromAsset(entry: TransactionEntry) {
   if (entry.type === "trade") {
-    return numberFormatter.format(entry.quantity);
+    const quoteAsset = extractQuoteAsset(entry.symbol);
+    const quoteQty = entry.quoteQuantity ?? entry.price * entry.quantity;
+
+    if (entry.side === "BUY") {
+      // BUY: dépense la quote currency
+      return (
+        <div className="flex items-center gap-2">
+          <AssetAvatar symbol={quoteAsset} />
+          <div className="space-y-0.5">
+            <p className="font-medium text-foreground">{numberFormatter.format(quoteQty)}</p>
+            <p className="text-[11px] text-muted-foreground">{quoteAsset}</p>
+          </div>
+        </div>
+      );
+    } else {
+      // SELL: vend la base currency
+      return (
+        <div className="flex items-center gap-2">
+          <AssetAvatar symbol={entry.baseAsset} />
+          <div className="space-y-0.5">
+            <p className="font-medium text-foreground">{numberFormatter.format(entry.quantity)}</p>
+            <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
+          </div>
+        </div>
+      );
+    }
   }
-  return numberFormatter.format(entry.amount);
+
+  if (entry.type === "withdrawal") {
+    return (
+      <div className="flex items-center gap-2">
+        <AssetAvatar symbol={entry.baseAsset} />
+        <div className="space-y-0.5">
+          <p className="font-medium text-foreground">{numberFormatter.format(entry.amount)}</p>
+          <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <span className="text-muted-foreground">--</span>;
 }
 
-function renderPrice(entry: TransactionEntry) {
+function renderToAsset(entry: TransactionEntry) {
   if (entry.type === "trade") {
-    return priceFormatter.format(entry.price);
+    const quoteAsset = extractQuoteAsset(entry.symbol);
+    const quoteQty = entry.quoteQuantity ?? entry.price * entry.quantity;
+
+    if (entry.side === "BUY") {
+      // BUY: reçoit la base currency
+      return (
+        <div className="flex items-center gap-2">
+          <AssetAvatar symbol={entry.baseAsset} />
+          <div className="space-y-0.5">
+            <p className="font-medium text-foreground">{numberFormatter.format(entry.quantity)}</p>
+            <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
+          </div>
+        </div>
+      );
+    } else {
+      // SELL: reçoit la quote currency
+      return (
+        <div className="flex items-center gap-2">
+          <AssetAvatar symbol={quoteAsset} />
+          <div className="space-y-0.5">
+            <p className="font-medium text-foreground">{numberFormatter.format(quoteQty)}</p>
+            <p className="text-[11px] text-muted-foreground">{quoteAsset}</p>
+          </div>
+        </div>
+      );
+    }
   }
-  return "--";
+
+  if (entry.type === "deposit") {
+    return (
+      <div className="flex items-center gap-2">
+        <AssetAvatar symbol={entry.baseAsset} />
+        <div className="space-y-0.5">
+          <p className="font-medium text-foreground">{numberFormatter.format(entry.amount)}</p>
+          <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <span className="text-muted-foreground">--</span>;
 }
 
-function renderValue(entry: TransactionEntry) {
+function renderRate(entry: TransactionEntry) {
   if (entry.type === "trade") {
-    const value = entry.quoteQuantity ?? entry.price * entry.quantity;
-    return currencyFormatter.format(value || 0);
+    const quoteAsset = extractQuoteAsset(entry.symbol);
+    return (
+      <div className="space-y-0.5">
+        <p className="font-medium text-foreground">{priceFormatter.format(entry.price)}</p>
+        <p className="text-[11px] text-muted-foreground">{quoteAsset}/{entry.baseAsset}</p>
+      </div>
+    );
   }
-  return "--";
+  return <span className="text-muted-foreground">--</span>;
 }
 
 function renderDetails(entry: TransactionEntry) {
