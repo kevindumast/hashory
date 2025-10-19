@@ -46,7 +46,7 @@ import {
   type TokenTimelineEvent,
 } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, ChevronDown, ChevronUp } from "lucide-react";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
@@ -142,6 +142,7 @@ const RANGE_CONFIG: Record<
 export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("1M");
+  const [expandedToken, setExpandedToken] = useState<string | null>(null);
 
   const orderedTokens = useMemo(
     () =>
@@ -453,76 +454,110 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
             <ScrollArea className="max-h-[420px]">
               <Table>
                 <TableHeader>
-                  <TableRow className="sticky top-0 bg-card/95 backdrop-blur">
-                    <TableHead className="w-[120px] text-xs uppercase tracking-wide text-muted-foreground/80">
+                  <TableRow className="sticky top-0 bg-card/95 backdrop-blur hover:bg-card/95">
+                    <TableHead className="w-16 text-xs uppercase tracking-wide text-muted-foreground/80">
                       Token
                     </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
+                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground/80">
                       Holdings
                     </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Bought
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Sold
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Deposits
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Withdrawals
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Avg buy
-                    </TableHead>
-                    <TableHead className="text-xs uppercase tracking-wide text-muted-foreground/80">
+                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground/80">
                       Net USD
                     </TableHead>
-                    <TableHead className="text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Actions
+                    <TableHead className="w-12 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
+                      More
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {orderedTokens.map((token) => {
                     const netUsd = token.investedUsd - token.realizedUsd;
+                    const isExpanded = expandedToken === token.symbol;
                     return (
-                      <TableRow key={token.symbol} className="hover:bg-muted/40">
-                        <TableCell className="font-semibold uppercase tracking-wide text-foreground">
-                          {token.symbol}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {numberFormatter.format(token.currentQuantity)}
-                        </TableCell>
-                        <TableCell className="text-sm text-emerald-500">
-                          +{numberFormatter.format(token.buyQuantity)}
-                        </TableCell>
-                        <TableCell className="text-sm text-red-500">
-                          -{numberFormatter.format(token.sellQuantity)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {token.averageBuyPrice !== undefined ? numberFormatter.format(token.averageBuyPrice) : "-"}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="text-xs font-semibold uppercase tracking-wide"
-                            onClick={() => setSelectedSymbol(token.symbol)}
-                          >
-                            View
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                      <tbody key={token.symbol}>
+                        <TableRow className="hover:bg-muted/40 cursor-pointer">
+                          <TableCell className="font-semibold uppercase tracking-wide text-foreground">
+                            {token.symbol}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {numberFormatter.format(token.currentQuantity)}
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">
+                            {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                              onClick={() => setExpandedToken(isExpanded ? null : token.symbol)}
+                            >
+                              {isExpanded ? (
+                                <ChevronUp className="h-4 w-4" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                        {isExpanded && (
+                          <TableRow className="bg-muted/20 hover:bg-muted/30">
+                            <TableCell colSpan={4} className="p-0">
+                              <div className="space-y-3 p-4">
+                                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Bought</span>
+                                    <span className="text-sm font-medium text-emerald-500">
+                                      +{numberFormatter.format(token.buyQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Sold</span>
+                                    <span className="text-sm font-medium text-red-500">
+                                      -{numberFormatter.format(token.sellQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Deposits</span>
+                                    <span className="text-sm font-medium">
+                                      {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Withdrawals</span>
+                                    <span className="text-sm font-medium">
+                                      {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Avg Buy</span>
+                                    <span className="text-sm font-medium">
+                                      {token.averageBuyPrice !== undefined ? numberFormatter.format(token.averageBuyPrice) : "-"}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-xs text-muted-foreground">Invested</span>
+                                    <span className="text-sm font-medium">
+                                      {currencyFormatter.format(token.investedUsd)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="w-full text-xs font-semibold uppercase tracking-wide"
+                                  onClick={() => {
+                                    setSelectedSymbol(token.symbol);
+                                    setExpandedToken(null);
+                                  }}
+                                >
+                                  View Details
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </tbody>
                     );
                   })}
                 </TableBody>
