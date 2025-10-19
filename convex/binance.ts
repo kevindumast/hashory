@@ -8,13 +8,15 @@ import type { ActionCtx } from "./_generated/server";
 
 const DATASET_SPOT_TRADES = "spot_trades";
 const DATASET_CONVERT_TRADES = "convert_trades";
+const DATASET_FIAT_ORDERS = "fiat_orders";
 const DATASET_DEPOSITS = "capital_deposits";
 const DATASET_WITHDRAWALS = "capital_withdrawals";
 
 const DEFAULT_BASE_URL = "https://api.binance.com";
-const SAPI_BASE_URL = "https://api.binance.com/sapi";
+const SAPI_BASE_URL = "https://api.binance.com";
 const MAX_LIMIT = 1000;
-const MAX_CONVERT_LIMIT = 100;
+const MAX_CONVERT_LIMIT = 1000;
+const MAX_FIAT_LIMIT = 500;
 const RECEIPT_WINDOW_MS = 60_000;
 const PREFERRED_QUOTES = new Set([
   "USDT",
@@ -112,8 +114,17 @@ const DEFAULT_SYMBOLS = [
 ];
 
 const HISTORY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
-const MAX_HISTORY_ITERATIONS = 200;
-const MAX_EMPTY_WINDOWS = 5;
+const CONVERT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const FIAT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_HISTORY_ITERATIONS = 10; // Ultra réduit pour éviter timeout Convex (600s) et rate limits
+const MAX_EMPTY_WINDOWS = 3;
+
+// Delays between requests (in milliseconds)
+// Backfill = synchronisation initiale (historique complet) - ULTRA conservateur pour éviter rate limits
+// Forward = synchronisation incrémentale (nouvelles données) - plus rapide
+const DELAY_BACKFILL_REQUEST = 8000; // 8s entre requêtes pour backfill (ultra conservateur)
+const DELAY_FORWARD_REQUEST = 3000;  // 3s entre requêtes pour forward
+const DELAY_BETWEEN_SYNC_TYPES = 15000; // 15s entre les différents types de sync
 
 type IntegrationRecord = {
   clerkUserId: string;
@@ -171,11 +182,26 @@ type BinanceConvertTrade = {
 type BinanceConvertTradeFlowResponse = {
   list?: BinanceConvertTrade[];
   total?: number;
+  moreData?: boolean;
+};
+
+type BinanceFiatOrderResponse = {
+  data?: BinanceFiatOrder[];
+  total?: number;
+  success?: boolean;
+  code?: string;
+  message?: string;
+};
+
+type ConvertFetchResult = {
+  records: BinanceConvertTrade[];
+  moreData: boolean;
 };
 
 type NormalizedConvertTrade = {
   payload: {
     providerTradeId: string;
+    tradeType: "SPOT" | "CONVERT" | "FIAT";
     symbol: string;
     side: "BUY" | "SELL";
     quantity: number;
@@ -185,9 +211,29 @@ type NormalizedConvertTrade = {
     feeAsset?: string;
     isMaker: boolean;
     executedAt: number;
+    fromAsset?: string;
+    fromAmount?: number;
+    toAsset?: string;
+    toAmount?: number;
     raw: unknown;
   };
   updateTime: number;
+};
+
+type BinanceFiatOrder = {
+  orderId: string;
+  fiatCurrency: string;
+  obtainCurrency: string;
+  amount?: string;
+  indicatedAmount?: string;
+  obtainAmount?: string;
+  price?: string;
+  totalFee?: string;
+  fee?: string;
+  status: string;
+  createTime: string | number;
+  updateTime: string | number;
+  orderType?: string;
 };
 
 type BinanceBalance = {
@@ -259,6 +305,12 @@ type ConvertCursor = {
   earliestUpdateTime: number | null;
 };
 
+type FiatCursor = {
+  initialized: boolean;
+  lastUpdateTime: number | null;
+  earliestUpdateTime: number | null;
+};
+
 type SyncResult = {
   symbol: string;
   fetched: number;
@@ -282,6 +334,13 @@ type WithdrawalSyncResult = {
 };
 
 type ConvertSyncResult = {
+  fetched: number;
+  inserted: number;
+  earliest?: number | null;
+  latest?: number | null;
+};
+
+type FiatSyncResult = {
   fetched: number;
   inserted: number;
   earliest?: number | null;
@@ -322,6 +381,48 @@ export const syncAccount = action({
       explicitSymbols: args.options?.symbols ?? [],
     });
 
+    console.log("Starting withdrawals sync...");
+    const withdrawals = await syncWithdrawals(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+    });
+    console.log(`Withdrawals: ${withdrawals.fetched} fetched, ${withdrawals.inserted} inserted`);
+
+    // Wait before next sync to avoid rate limits
+    await sleep(DELAY_BETWEEN_SYNC_TYPES);
+
+    console.log("Starting deposits sync...");
+    const deposits = await syncDeposits(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+    });
+    console.log(`Deposits: ${deposits.fetched} fetched, ${deposits.inserted} inserted`);
+
+    await sleep(DELAY_BETWEEN_SYNC_TYPES);
+
+    console.log("Starting fiat orders sync...");
+    const fiatOrders = await syncFiatOrders(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+    });
+    console.log(`Fiat orders: ${fiatOrders.fetched} fetched, ${fiatOrders.inserted} inserted`);
+
+    await sleep(DELAY_BETWEEN_SYNC_TYPES);
+
+    console.log("Starting convert trades sync...");
+    const convertTrades = await syncConvertTrades(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+    });
+    console.log(`Convert trades: ${convertTrades.fetched} fetched, ${convertTrades.inserted} inserted`);
+
+    await sleep(DELAY_BETWEEN_SYNC_TYPES);
+
+    console.log("📊 Starting spot trades sync...");
     const trades = await syncSpotTrades(ctx, {
       integrationId: args.integrationId,
       apiKey: decryptedKey,
@@ -329,29 +430,13 @@ export const syncAccount = action({
       symbols: detection.symbols,
       startTime: args.options?.startTime ?? null,
     });
-
-    const convertTrades = await syncConvertTrades(ctx, {
-      integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
-    });
-
-    const deposits = await syncDeposits(ctx, {
-      integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
-    });
-
-    const withdrawals = await syncWithdrawals(ctx, {
-      integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
-    });
+    console.log(`Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
 
     const accountCreationFromApi = await fetchAccountCreationTime(decryptedKey, decryptedSecret);
     const earliestActivityCandidates = [
       trades.earliest ?? null,
       convertTrades.earliest ?? null,
+      fiatOrders.earliest ?? null,
       deposits.earliest ?? null,
       withdrawals.earliest ?? null,
     ].filter((value): value is number => value !== null && Number.isFinite(value));
@@ -369,6 +454,7 @@ export const syncAccount = action({
       symbols: detection.symbols,
       trades,
       convertTrades,
+      fiatOrders,
       deposits,
       withdrawals,
       accountCreatedAt,
@@ -461,6 +547,8 @@ async function syncSpotTrades(
   let overallEarliest: number | null = null;
   let overallLatest: number | null = null;
 
+  console.log(`📊 Starting spot trades sync for ${params.symbols.length} symbols`);
+
   for (const symbol of params.symbols) {
     const result = await syncSymbolTrades(ctx, {
       integrationId: params.integrationId,
@@ -483,6 +571,8 @@ async function syncSpotTrades(
     details.push(result);
   }
 
+  console.log(`✅ Spot trades sync complete: ${totalFetched} fetched, ${totalInserted} inserted across ${details.length} symbols`);
+
   return {
     fetched: totalFetched,
     inserted: totalInserted,
@@ -502,6 +592,8 @@ async function syncConvertTrades(
 ): Promise<ConvertSyncResult> {
   const cursor = await loadConvertCursor(ctx, params.integrationId);
 
+  // Cursor loaded (reduced logging)
+
   const exchangeInfo = await fetchExchangeInfo();
   const symbolCatalog = new Map<string, SymbolMeta>();
   for (const entry of exchangeInfo) {
@@ -515,6 +607,7 @@ async function syncConvertTrades(
 
   if (!cursor.initialized) {
     const backfill = await backfillConvertTrades(ctx, params, Date.now(), symbolCatalog);
+    console.log(`Convert backfill: ${backfill.fetched} fetched, ${backfill.inserted} inserted`);
     totalFetched += backfill.fetched;
     totalInserted += backfill.inserted;
     const backfillEarliest = backfill.earliest ?? null;
@@ -573,18 +666,21 @@ async function backfillConvertTrades(
   let earliest: number | null = null;
   let latest: number | null = null;
   let iterations = 0;
-  let emptyWindows = 0;
+
+  console.log(`📥 Starting convert trades backfill from ${new Date(startingEndTime).toISOString()}`);
 
   while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
-    const windowStart = Math.max(0, endTime - HISTORY_WINDOW_MS);
-    const batch = await fetchConvertTrades(params.apiKey, params.apiSecret, windowStart, endTime);
+    const windowStart = Math.max(0, endTime - CONVERT_WINDOW_MS);
+
+    const { records, moreData } = await fetchConvertTrades(
+      params.apiKey,
+      params.apiSecret,
+      windowStart,
+      endTime
+    );
     iterations += 1;
 
-    if (!Array.isArray(batch) || batch.length === 0) {
-      emptyWindows += 1;
-      if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
-        break;
-      }
+    if (!Array.isArray(records) || records.length === 0) {
       if (windowStart === 0) {
         break;
       }
@@ -592,9 +688,7 @@ async function backfillConvertTrades(
       continue;
     }
 
-    emptyWindows = 0;
-
-    const normalized = batch
+    const normalized = records
       .map((trade) => normalizeConvertTrade(trade, symbolCatalog))
       .filter((trade): trade is NormalizedConvertTrade => trade !== null)
       .sort((a, b) => a.updateTime - b.updateTime);
@@ -621,12 +715,19 @@ async function backfillConvertTrades(
     earliest = earliest === null ? windowEarliest : Math.min(earliest, windowEarliest);
     latest = latest === null ? windowLatest : Math.max(latest, windowLatest);
 
-    if (windowStart === 0) {
+    const nextEndTime = windowEarliest > 0 ? windowEarliest - 1 : windowStart - 1;
+    if (nextEndTime <= 0) {
+      console.log(`  ✓ Reached beginning of timeline`);
       break;
     }
-    endTime = windowStart - 1;
+    endTime = nextEndTime;
+
+    // Delay between requests to respect rate limits (backfill = conservative)
+    console.log(`  ⏳ Waiting ${DELAY_BACKFILL_REQUEST}ms before next request...`);
+    await sleep(DELAY_BACKFILL_REQUEST);
   }
 
+  console.log(`✅ Convert trades backfill complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -646,19 +747,27 @@ async function syncConvertTradesForward(
   symbolCatalog: Map<string, SymbolMeta>
 ): Promise<ConvertSyncResult> {
   const now = Date.now();
-  let windowStart = since !== null ? Math.max(0, since - 1) : Math.max(0, now - HISTORY_WINDOW_MS);
+  let windowStart = since !== null ? Math.max(0, since - 1) : Math.max(0, now - CONVERT_WINDOW_MS);
   let fetched = 0;
   let inserted = 0;
   let earliest: number | null = null;
   let latest: number | null = since ?? null;
   let iterations = 0;
 
+  console.log(`📤 Starting convert trades forward sync from ${since ? new Date(since).toISOString() : 'beginning'}`);
+
   while (windowStart <= now && iterations < MAX_HISTORY_ITERATIONS) {
-    const windowEnd = Math.min(windowStart + HISTORY_WINDOW_MS, now);
-    const batch = await fetchConvertTrades(params.apiKey, params.apiSecret, windowStart, windowEnd);
+    const windowEnd = Math.min(windowStart + CONVERT_WINDOW_MS, now);
+    const { records, moreData } = await fetchConvertTrades(
+      params.apiKey,
+      params.apiSecret,
+      windowStart,
+      windowEnd
+    );
     iterations += 1;
 
-    if (!Array.isArray(batch) || batch.length === 0) {
+    if (!Array.isArray(records) || records.length === 0) {
+      console.log(`  ✓ No new convert trades found`);
       if (windowEnd >= now) {
         break;
       }
@@ -666,18 +775,23 @@ async function syncConvertTradesForward(
       continue;
     }
 
-    const normalized = batch
+    console.log(`  📦 Received ${records.length} convert trades from API`);
+
+    const normalized = records
       .map((trade) => normalizeConvertTrade(trade, symbolCatalog))
       .filter((trade): trade is NormalizedConvertTrade => trade !== null)
       .sort((a, b) => a.updateTime - b.updateTime);
 
     if (normalized.length === 0) {
+      console.log(`  ⚠️ No valid convert trades after normalization`);
       if (windowEnd >= now) {
         break;
       }
       windowStart = windowEnd + 1;
       continue;
     }
+
+    console.log(`  ✓ Normalized ${normalized.length} convert trades`);
 
     const payload = normalized.map((trade) => trade.payload);
     const result = await ctx.runMutation(api.trades.ingestBatch, {
@@ -687,6 +801,11 @@ async function syncConvertTradesForward(
 
     fetched += normalized.length;
     inserted += result.inserted;
+    console.log(`  ✓ Inserted ${result.inserted} new convert trades (${normalized.length - result.inserted} duplicates)`);
+
+    if (moreData) {
+      console.log(`  ℹ️ More data available flag detected`);
+    }
 
     const windowEarliest = normalized[0].updateTime;
     const windowLatest = normalized[normalized.length - 1].updateTime;
@@ -694,12 +813,262 @@ async function syncConvertTradesForward(
     latest = latest === null ? windowLatest : Math.max(latest, windowLatest);
 
     if (windowEnd >= now && windowLatest >= now) {
+      console.log(`  ✓ Reached current time`);
+      break;
+    }
+
+    windowStart = windowLatest + 1;
+
+    // Delay between requests to respect rate limits (forward = faster)
+    await sleep(DELAY_FORWARD_REQUEST);
+  }
+
+  console.log(`✅ Convert trades forward sync complete: ${fetched} fetched, ${inserted} inserted`);
+  return {
+    fetched,
+    inserted,
+    earliest,
+    latest,
+  };
+}
+
+async function syncFiatOrders(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  }
+): Promise<FiatSyncResult> {
+  const cursor = await loadFiatCursor(ctx, params.integrationId);
+
+  const exchangeInfo = await fetchExchangeInfo();
+  const symbolCatalog = new Map<string, SymbolMeta>();
+  for (const entry of exchangeInfo) {
+    symbolCatalog.set(entry.symbol.toUpperCase(), entry);
+  }
+
+  let totalFetched = 0;
+  let totalInserted = 0;
+  let earliest = cursor.earliestUpdateTime ?? null;
+  let latest = cursor.lastUpdateTime ?? null;
+
+  if (!cursor.initialized) {
+    const backfill = await backfillFiatOrders(ctx, params, Date.now(), symbolCatalog);
+    totalFetched += backfill.fetched;
+    totalInserted += backfill.inserted;
+    const backfillEarliest = backfill.earliest ?? null;
+    if (backfillEarliest !== null) {
+      earliest = earliest === null ? backfillEarliest : Math.min(earliest, backfillEarliest);
+    }
+    const backfillLatest = backfill.latest ?? null;
+    if (backfillLatest !== null) {
+      latest = latest === null ? backfillLatest : Math.max(latest, backfillLatest);
+    }
+  }
+
+  const incremental = await syncFiatOrdersForward(ctx, params, latest, symbolCatalog);
+  totalFetched += incremental.fetched;
+  totalInserted += incremental.inserted;
+
+  const incrementalEarliest = incremental.earliest ?? null;
+  if (incrementalEarliest !== null) {
+    earliest = earliest === null ? incrementalEarliest : Math.min(earliest, incrementalEarliest);
+  }
+  const incrementalLatest = incremental.latest ?? null;
+  if (incrementalLatest !== null) {
+    latest = latest === null ? incrementalLatest : Math.max(latest, incrementalLatest);
+  }
+
+  const finalLatest = latest ?? cursor.lastUpdateTime ?? null;
+  const finalEarliest = earliest ?? cursor.earliestUpdateTime ?? null;
+
+  await saveFiatCursor(ctx, params.integrationId, {
+    initialized: true,
+    lastUpdateTime: finalLatest,
+    earliestUpdateTime: finalEarliest,
+  });
+
+  return {
+    fetched: totalFetched,
+    inserted: totalInserted,
+    earliest: finalEarliest,
+    latest: finalLatest,
+  };
+}
+
+async function backfillFiatOrders(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  startingEndTime: number,
+  symbolCatalog: Map<string, SymbolMeta>
+): Promise<FiatSyncResult> {
+  let endTime = startingEndTime;
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = null;
+  let iterations = 0;
+  let emptyWindows = 0;
+
+  console.log(`📥 Starting fiat orders backfill from ${new Date(startingEndTime).toISOString()}`);
+
+  while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
+    const windowStart = Math.max(0, endTime - FIAT_WINDOW_MS);
+    console.log(`  Fetching fiat orders window: ${new Date(windowStart).toISOString()} to ${new Date(endTime).toISOString()}`);
+
+    const batch = await fetchFiatOrders(params.apiKey, params.apiSecret, windowStart, endTime);
+    iterations += 1;
+
+    if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ⚠️ Empty window (${emptyWindows + 1}/${MAX_EMPTY_WINDOWS})`);
+      emptyWindows += 1;
+      if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
+        console.log(`  ✓ Reached beginning of history (empty windows threshold)`);
+        break;
+      }
+      if (windowStart === 0) {
+        console.log(`  ✓ Reached beginning of history`);
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    emptyWindows = 0;
+    console.log(`  📦 Received ${batch.length} fiat orders from API`);
+
+    const normalized = batch
+      .map((order) => normalizeFiatOrder(order, symbolCatalog))
+      .filter((order): order is NormalizedConvertTrade => order !== null)
+      .sort((a, b) => a.updateTime - b.updateTime);
+
+    if (normalized.length === 0) {
+      console.log(`  ⚠️ No valid fiat orders after normalization`);
+      if (windowStart === 0) {
+        break;
+      }
+      endTime = windowStart - 1;
+      continue;
+    }
+
+    console.log(`  ✓ Normalized ${normalized.length} fiat orders`);
+    fetched += normalized.length;
+
+    const payload = normalized.map((order) => order.payload);
+    const result = await ctx.runMutation(api.trades.ingestBatch, {
+      integrationId: params.integrationId,
+      trades: payload,
+    });
+    inserted += result.inserted;
+    console.log(`  ✓ Inserted ${result.inserted} new fiat orders (${normalized.length - result.inserted} duplicates)`);
+
+    const windowEarliest = normalized[0].updateTime;
+    const windowLatest = normalized[normalized.length - 1].updateTime;
+    earliest = earliest === null ? windowEarliest : Math.min(earliest, windowEarliest);
+    latest = latest === null ? windowLatest : Math.max(latest, windowLatest);
+
+    const nextEndTime = windowEarliest > 0 ? windowEarliest - 1 : windowStart - 1;
+    if (nextEndTime <= 0) {
+      console.log(`  ✓ Reached beginning of timeline`);
+      break;
+    }
+    endTime = nextEndTime;
+
+    // Delay between requests to respect rate limits (backfill = conservative)
+    console.log(`  ⏳ Waiting ${DELAY_BACKFILL_REQUEST}ms before next request...`);
+    await sleep(DELAY_BACKFILL_REQUEST);
+  }
+
+  console.log(`✅ Fiat orders backfill complete: ${fetched} fetched, ${inserted} inserted`);
+  return {
+    fetched,
+    inserted,
+    earliest,
+    latest,
+  };
+}
+
+async function syncFiatOrdersForward(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  },
+  since: number | null,
+  symbolCatalog: Map<string, SymbolMeta>
+): Promise<FiatSyncResult> {
+  const now = Date.now();
+  let windowStart = since !== null ? Math.max(0, since - 1) : Math.max(0, now - FIAT_WINDOW_MS);
+  let fetched = 0;
+  let inserted = 0;
+  let earliest: number | null = null;
+  let latest: number | null = since ?? null;
+  let iterations = 0;
+
+  console.log(`📤 Starting fiat orders forward sync from ${since ? new Date(since).toISOString() : 'beginning'}`);
+
+  while (windowStart <= now && iterations < MAX_HISTORY_ITERATIONS) {
+    const windowEnd = Math.min(windowStart + FIAT_WINDOW_MS, now);
+    const batch = await fetchFiatOrders(params.apiKey, params.apiSecret, windowStart, windowEnd);
+    iterations += 1;
+
+    if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ✓ No new fiat orders found`);
+      if (windowEnd >= now) {
+        break;
+      }
+      windowStart = windowEnd + 1;
+      continue;
+    }
+
+    console.log(`  📦 Received ${batch.length} fiat orders from API`);
+
+    const normalized = batch
+      .map((order) => normalizeFiatOrder(order, symbolCatalog))
+      .filter((order): order is NormalizedConvertTrade => order !== null)
+      .sort((a, b) => a.updateTime - b.updateTime);
+
+    if (normalized.length === 0) {
+      console.log(`  ⚠️ No valid fiat orders after normalization`);
+      if (windowEnd >= now) {
+        break;
+      }
+      windowStart = windowEnd + 1;
+      continue;
+    }
+
+    console.log(`  ✓ Normalized ${normalized.length} fiat orders`);
+
+    const payload = normalized.map((order) => order.payload);
+    const result = await ctx.runMutation(api.trades.ingestBatch, {
+      integrationId: params.integrationId,
+      trades: payload,
+    });
+
+    fetched += normalized.length;
+    inserted += result.inserted;
+    console.log(`  ✓ Inserted ${result.inserted} new fiat orders (${normalized.length - result.inserted} duplicates)`);
+
+    const windowEarliest = normalized[0].updateTime;
+    const windowLatest = normalized[normalized.length - 1].updateTime;
+    earliest = earliest === null ? windowEarliest : Math.min(earliest, windowEarliest);
+    latest = latest === null ? windowLatest : Math.max(latest, windowLatest);
+
+    if (windowEnd >= now && windowLatest >= now) {
+      console.log(`  ✓ Reached current time`);
       break;
     }
 
     windowStart = windowLatest + 1;
   }
 
+  console.log(`✅ Fiat orders forward sync complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -713,16 +1082,15 @@ async function fetchConvertTrades(
   apiSecret: string,
   startTime: number | null,
   endTime: number | null = null
-) {
+): Promise<ConvertFetchResult> {
   const params: Record<string, string> = {
-    recvWindow: RECEIPT_WINDOW_MS.toString(),
     limit: MAX_CONVERT_LIMIT.toString(),
   };
   if (startTime !== null && startTime !== undefined) {
-    params.startTime = Math.max(0, startTime).toString();
+    params.startTime = Math.floor(Math.max(0, startTime)).toString();
   }
   if (endTime !== null && endTime !== undefined) {
-    params.endTime = Math.max(0, endTime).toString();
+    params.endTime = Math.floor(Math.max(0, endTime)).toString();
   }
 
   const response = await signedGet(
@@ -733,15 +1101,20 @@ async function fetchConvertTrades(
     SAPI_BASE_URL
   );
 
+  let records: BinanceConvertTrade[] = [];
+  let moreData = false;
+
   if (Array.isArray(response)) {
-    return response as BinanceConvertTrade[];
+    records = response as BinanceConvertTrade[];
+  } else if (response && typeof response === "object") {
+    const typed = response as BinanceConvertTradeFlowResponse;
+    if (Array.isArray(typed.list)) {
+      records = typed.list;
+    }
+    moreData = Boolean(typed.moreData);
   }
 
-  if (response && typeof response === "object" && Array.isArray((response as BinanceConvertTradeFlowResponse).list)) {
-    return (response as BinanceConvertTradeFlowResponse).list ?? [];
-  }
-
-  return [];
+  return { records, moreData };
 }
 
 async function syncDeposits(
@@ -839,17 +1212,24 @@ async function backfillDeposits(
   let emptyWindows = 0;
   const now = Date.now();
 
+  console.log(`📥 Starting deposits backfill from ${new Date(startingEndTime).toISOString()}`);
+
   while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
     const windowStart = Math.max(0, endTime - HISTORY_WINDOW_MS);
+    console.log(`  Fetching deposits window: ${new Date(windowStart).toISOString()} to ${new Date(endTime).toISOString()}`);
+
     const batch = await fetchDeposits(params.apiKey, params.apiSecret, windowStart, endTime);
     iterations += 1;
 
     if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ⚠️ Empty window (${emptyWindows + 1}/${MAX_EMPTY_WINDOWS})`);
       emptyWindows += 1;
       if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
+        console.log(`  ✓ Reached beginning of history (empty windows threshold)`);
         break;
       }
       if (windowStart === 0) {
+        console.log(`  ✓ Reached beginning of history`);
         break;
       }
       endTime = windowStart - 1;
@@ -857,6 +1237,7 @@ async function backfillDeposits(
     }
 
     emptyWindows = 0;
+    console.log(`  📦 Received ${batch.length} deposits from API`);
 
     const normalized = batch
       .map((deposit) => ({
@@ -867,6 +1248,7 @@ async function backfillDeposits(
       .sort((a, b) => a.insertTime - b.insertTime);
 
     if (normalized.length === 0) {
+      console.log(`  ⚠️ No valid deposits after normalization`);
       if (windowStart === 0) {
         break;
       }
@@ -874,8 +1256,10 @@ async function backfillDeposits(
       continue;
     }
 
+    console.log(`  ✓ Normalized ${normalized.length} deposits`);
     fetched += normalized.length;
 
+    let newInserts = 0;
     for (const deposit of normalized) {
       const existing = await ctx.runQuery(api.deposits.getByDepositId, {
         integrationId: params.integrationId,
@@ -900,6 +1284,7 @@ async function backfillDeposits(
           },
         });
         inserted += 1;
+        newInserts += 1;
       }
       if (earliest === null) {
         earliest = deposit.insertTime;
@@ -913,13 +1298,21 @@ async function backfillDeposits(
       }
     }
 
+    console.log(`  ✓ Inserted ${newInserts} new deposits (${normalized.length - newInserts} duplicates)`);
+
     const nextEnd = normalized[0].insertTime > 0 ? normalized[0].insertTime - 1 : windowStart - 1;
     if (nextEnd === endTime) {
+      console.log(`  ✓ Reached end of time window`);
       break;
     }
     endTime = nextEnd;
+
+    // Delay between requests to respect rate limits (backfill = conservative)
+    console.log(`  ⏳ Waiting ${DELAY_BACKFILL_REQUEST}ms before next request...`);
+    await sleep(DELAY_BACKFILL_REQUEST);
   }
 
+  console.log(`✅ Deposits backfill complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -945,12 +1338,24 @@ async function syncDepositsForward(
   const now = Date.now();
   let pointer = lastInsertTime !== null ? lastInsertTime + 1 : null;
 
+  console.log(`📤 Starting deposits forward sync from ${lastInsertTime ? new Date(lastInsertTime).toISOString() : 'beginning'}`);
+
   while (iterations < MAX_HISTORY_ITERATIONS) {
-    const batch = await fetchDeposits(params.apiKey, params.apiSecret, pointer, null);
+    // Binance API requires time interval within 90 days, so clamp startTime to at most 90 days ago
+    let effectiveStartTime = pointer;
+    if (effectiveStartTime !== null) {
+      const minAllowedTime = now - HISTORY_WINDOW_MS;
+      if (effectiveStartTime < minAllowedTime) {
+        effectiveStartTime = minAllowedTime;
+      }
+    }
+    const batch = await fetchDeposits(params.apiKey, params.apiSecret, effectiveStartTime, null);
     if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ✓ No new deposits found`);
       break;
     }
     iterations += 1;
+    console.log(`  📦 Received ${batch.length} deposits from API`);
 
     const normalized = batch
       .map((deposit) => ({
@@ -965,7 +1370,9 @@ async function syncDepositsForward(
     }
 
     fetched += normalized.length;
+    console.log(`  ✓ Normalized ${normalized.length} deposits`);
 
+    let newInserts = 0;
     for (const deposit of normalized) {
       const existing = await ctx.runQuery(api.deposits.getByDepositId, {
         integrationId: params.integrationId,
@@ -990,6 +1397,7 @@ async function syncDepositsForward(
           },
         });
         inserted += 1;
+        newInserts += 1;
       }
       if (earliest === null) {
         earliest = deposit.insertTime;
@@ -1004,12 +1412,16 @@ async function syncDepositsForward(
       lastInsertTime = Math.max(lastInsertTime ?? 0, deposit.insertTime);
     }
 
+    console.log(`  ✓ Inserted ${newInserts} new deposits (${normalized.length - newInserts} duplicates)`);
+
     if (normalized.length < MAX_LIMIT) {
+      console.log(`  ✓ Reached end of available data`);
       break;
     }
     pointer = (lastInsertTime ?? 0) + 1;
   }
 
+  console.log(`✅ Deposits forward sync complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -1113,17 +1525,24 @@ async function backfillWithdrawals(
   let emptyWindows = 0;
   const now = Date.now();
 
+  console.log(`📥 Starting withdrawals backfill from ${new Date(startingEndTime).toISOString()}`);
+
   while (endTime > 0 && iterations < MAX_HISTORY_ITERATIONS) {
     const windowStart = Math.max(0, endTime - HISTORY_WINDOW_MS);
+    console.log(`  Fetching withdrawals window: ${new Date(windowStart).toISOString()} to ${new Date(endTime).toISOString()}`);
+
     const batch = await fetchWithdrawals(params.apiKey, params.apiSecret, windowStart, endTime);
     iterations += 1;
 
     if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ⚠️ Empty window (${emptyWindows + 1}/${MAX_EMPTY_WINDOWS})`);
       emptyWindows += 1;
       if (windowStart === 0 && emptyWindows >= MAX_EMPTY_WINDOWS) {
+        console.log(`  ✓ Reached beginning of history (empty windows threshold)`);
         break;
       }
       if (windowStart === 0) {
+        console.log(`  ✓ Reached beginning of history`);
         break;
       }
       endTime = windowStart - 1;
@@ -1131,16 +1550,18 @@ async function backfillWithdrawals(
     }
 
     emptyWindows = 0;
+    console.log(`  📦 Received ${batch.length} withdrawals from API`);
 
     const normalized = batch
       .map((withdrawal) => ({
         ...withdrawal,
-        applyTime: resolveNumber(withdrawal.applyTime),
+        applyTime: parseTimestamp(withdrawal.applyTime),
       }))
       .filter((withdrawal) => withdrawal.applyTime > 0 && withdrawal.applyTime <= endTime)
       .sort((a, b) => a.applyTime - b.applyTime);
 
     if (normalized.length === 0) {
+      console.log(`  ⚠️ No valid withdrawals after normalization`);
       if (windowStart === 0) {
         break;
       }
@@ -1148,8 +1569,10 @@ async function backfillWithdrawals(
       continue;
     }
 
+    console.log(`  ✓ Normalized ${normalized.length} withdrawals`);
     fetched += normalized.length;
 
+    let newInserts = 0;
     for (const withdrawal of normalized) {
       const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
         integrationId: params.integrationId,
@@ -1169,12 +1592,13 @@ async function backfillWithdrawals(
             fee: Number(withdrawal.fee),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
-            updateTime: withdrawal.updateTime ? resolveNumber(withdrawal.updateTime) : undefined,
+            updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
             raw: withdrawal,
             createdAt: now,
           },
         });
         inserted += 1;
+        newInserts += 1;
       }
       if (earliest === null) {
         earliest = withdrawal.applyTime;
@@ -1188,13 +1612,21 @@ async function backfillWithdrawals(
       }
     }
 
+    console.log(`  ✓ Inserted ${newInserts} new withdrawals (${normalized.length - newInserts} duplicates)`);
+
     const nextEnd = normalized[0].applyTime > 0 ? normalized[0].applyTime - 1 : windowStart - 1;
     if (nextEnd === endTime) {
+      console.log(`  ✓ Reached end of time window`);
       break;
     }
     endTime = nextEnd;
+
+    // Delay between requests to respect rate limits (backfill = conservative)
+    console.log(`  ⏳ Waiting ${DELAY_BACKFILL_REQUEST}ms before next request...`);
+    await sleep(DELAY_BACKFILL_REQUEST);
   }
 
+  console.log(`✅ Withdrawals backfill complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -1220,17 +1652,29 @@ async function syncWithdrawalsForward(
   const now = Date.now();
   let pointer = lastApplyTime !== null ? lastApplyTime + 1 : null;
 
+  console.log(`📤 Starting withdrawals forward sync from ${lastApplyTime ? new Date(lastApplyTime).toISOString() : 'beginning'}`);
+
   while (iterations < MAX_HISTORY_ITERATIONS) {
-    const batch = await fetchWithdrawals(params.apiKey, params.apiSecret, pointer, null);
+    // Binance API requires time interval within 90 days, so clamp startTime to at most 90 days ago
+    let effectiveStartTime = pointer;
+    if (effectiveStartTime !== null) {
+      const minAllowedTime = now - HISTORY_WINDOW_MS;
+      if (effectiveStartTime < minAllowedTime) {
+        effectiveStartTime = minAllowedTime;
+      }
+    }
+    const batch = await fetchWithdrawals(params.apiKey, params.apiSecret, effectiveStartTime, null);
     if (!Array.isArray(batch) || batch.length === 0) {
+      console.log(`  ✓ No new withdrawals found`);
       break;
     }
     iterations += 1;
+    console.log(`  📦 Received ${batch.length} withdrawals from API`);
 
     const normalized = batch
       .map((withdrawal) => ({
         ...withdrawal,
-        applyTime: resolveNumber(withdrawal.applyTime),
+        applyTime: parseTimestamp(withdrawal.applyTime),
       }))
       .filter((withdrawal) => withdrawal.applyTime > (lastApplyTime ?? 0))
       .sort((a, b) => a.applyTime - b.applyTime);
@@ -1240,7 +1684,9 @@ async function syncWithdrawalsForward(
     }
 
     fetched += normalized.length;
+    console.log(`  ✓ Normalized ${normalized.length} withdrawals`);
 
+    let newInserts = 0;
     for (const withdrawal of normalized) {
       const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
         integrationId: params.integrationId,
@@ -1260,12 +1706,13 @@ async function syncWithdrawalsForward(
             fee: Number(withdrawal.fee),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
-            updateTime: withdrawal.updateTime ? resolveNumber(withdrawal.updateTime) : undefined,
+            updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
             raw: withdrawal,
             createdAt: now,
           },
         });
         inserted += 1;
+        newInserts += 1;
       }
       if (earliest === null) {
         earliest = withdrawal.applyTime;
@@ -1280,12 +1727,16 @@ async function syncWithdrawalsForward(
       lastApplyTime = Math.max(lastApplyTime ?? 0, withdrawal.applyTime);
     }
 
+    console.log(`  ✓ Inserted ${newInserts} new withdrawals (${normalized.length - newInserts} duplicates)`);
+
     if (normalized.length < MAX_LIMIT) {
+      console.log(`  ✓ Reached end of available data`);
       break;
     }
     pointer = (lastApplyTime ?? 0) + 1;
   }
 
+  console.log(`✅ Withdrawals forward sync complete: ${fetched} fetched, ${inserted} inserted`);
   return {
     fetched,
     inserted,
@@ -1441,6 +1892,16 @@ async function syncSymbolTrades(
     cursor.lastTradeId = null;
   }
 
+  // Fetch exchange info to get symbol metadata (baseAsset, quoteAsset)
+  const exchangeInfo = await fetchExchangeInfo();
+  const symbolCatalog = new Map<string, SymbolMeta>();
+  for (const entry of exchangeInfo) {
+    symbolCatalog.set(entry.symbol.toUpperCase(), entry);
+  }
+
+  // Get symbol metadata for calculating FROM/TO
+  const symbolMeta = symbolCatalog.get(scope);
+
   let fetched = 0;
   let inserted = 0;
   let earliestTrade: number | null = null;
@@ -1474,17 +1935,47 @@ async function syncSymbolTrades(
 
     const formattedTrades = trades.map((trade) => {
       const side: "BUY" | "SELL" = trade.isBuyer ? "BUY" : "SELL";
+      const quantity = Number(trade.qty);
+      const quoteQuantity = Number(trade.quoteQty);
+
+      // Calculate FROM/TO fields for spot trades
+      let fromAsset: string | undefined;
+      let fromAmount: number | undefined;
+      let toAsset: string | undefined;
+      let toAmount: number | undefined;
+
+      if (symbolMeta) {
+        if (side === "BUY") {
+          // BUY: spend quote currency, receive base currency
+          fromAsset = symbolMeta.quoteAsset;
+          fromAmount = quoteQuantity;
+          toAsset = symbolMeta.baseAsset;
+          toAmount = quantity;
+        } else {
+          // SELL: spend base currency, receive quote currency
+          fromAsset = symbolMeta.baseAsset;
+          fromAmount = quantity;
+          toAsset = symbolMeta.quoteAsset;
+          toAmount = quoteQuantity;
+        }
+      }
+
       return {
         providerTradeId: trade.id.toString(),
+        tradeType: "SPOT" as const,
         symbol: trade.symbol.toUpperCase(),
         side,
-        quantity: Number(trade.qty),
+        quantity,
         price: Number(trade.price),
-        quoteQuantity: Number(trade.quoteQty),
+        quoteQuantity,
         fee: Number(trade.commission),
         feeAsset: trade.commissionAsset ?? undefined,
         isMaker: Boolean(trade.isMaker),
         executedAt: Number(trade.time),
+        fromAsset,
+        fromAmount,
+        toAsset,
+        toAmount,
         raw: trade,
       };
     });
@@ -1510,6 +2001,9 @@ async function syncSymbolTrades(
     if (trades.length < MAX_LIMIT || iterations > 1_000) {
       break;
     }
+
+    // Delay between requests to respect rate limits (forward = faster)
+    await sleep(DELAY_FORWARD_REQUEST);
   }
 
   if (lastTradeTime === null) {
@@ -1546,29 +2040,19 @@ async function fetchDeposits(
   endTime: number | null = null
 ) {
   const params: Record<string, string> = {
-    recvWindow: RECEIPT_WINDOW_MS.toString(),
     limit: MAX_LIMIT.toString(),
   };
   if (startTime !== null && startTime !== undefined) {
-    params.startTime = Math.max(0, startTime).toString();
+    params.startTime = Math.floor(Math.max(0, startTime)).toString();
   }
   if (endTime !== null && endTime !== undefined) {
-    params.endTime = Math.max(0, endTime).toString();
+    params.endTime = Math.floor(Math.max(0, endTime)).toString();
   }
+
   const response = await signedGet(apiKey, apiSecret, "/sapi/v1/capital/deposit/hisrec", params, SAPI_BASE_URL);
   if (!Array.isArray(response)) {
-    console.log("Binance deposits window", {
-      startTime,
-      endTime,
-      count: "non-array",
-    });
     return [];
   }
-  console.log("Binance deposits window", {
-    startTime,
-    endTime,
-    count: response.length,
-  });
   return response as DepositRecord[];
 }
 
@@ -1579,30 +2063,54 @@ async function fetchWithdrawals(
   endTime: number | null = null
 ) {
   const params: Record<string, string> = {
-    recvWindow: RECEIPT_WINDOW_MS.toString(),
     limit: MAX_LIMIT.toString(),
   };
   if (startTime !== null && startTime !== undefined) {
-    params.startTime = Math.max(0, startTime).toString();
+    params.startTime = Math.floor(Math.max(0, startTime)).toString();
+  }
+  if (endTime !== null && endTime !== undefined) {
+    params.endTime = Math.floor(Math.max(0, endTime)).toString();
+  }
+
+  const response = await signedGet(apiKey, apiSecret, "/sapi/v1/capital/withdraw/history", params, SAPI_BASE_URL);
+  if (!Array.isArray(response)) {
+    return [];
+  }
+  return response as WithdrawalRecord[];
+}
+
+async function fetchFiatOrders(
+  apiKey: string,
+  apiSecret: string,
+  startTime: number | null,
+  endTime: number | null = null
+) {
+  const params: Record<string, string> = {
+    recvWindow: RECEIPT_WINDOW_MS.toString(),
+    transactionType: "0",
+    rows: MAX_FIAT_LIMIT.toString(),
+  };
+  if (startTime !== null && startTime !== undefined) {
+    params.beginTime = Math.max(0, startTime).toString();
   }
   if (endTime !== null && endTime !== undefined) {
     params.endTime = Math.max(0, endTime).toString();
   }
-  const response = await signedGet(apiKey, apiSecret, "/sapi/v1/capital/withdraw/history", params, SAPI_BASE_URL);
-  if (!Array.isArray(response)) {
-    console.log("Binance withdrawals window", {
-      startTime,
-      endTime,
-      count: "non-array",
-    });
-    return [];
+
+  const response = await signedGet(apiKey, apiSecret, "/sapi/v1/fiat/orders", params, SAPI_BASE_URL);
+
+  if (Array.isArray(response)) {
+    return response as BinanceFiatOrder[];
   }
-  console.log("Binance withdrawals window", {
-    startTime,
-    endTime,
-    count: response.length,
-  });
-  return response as WithdrawalRecord[];
+
+  if (response && typeof response === "object") {
+    const typed = response as BinanceFiatOrderResponse;
+    if (Array.isArray(typed.data)) {
+      return typed.data;
+    }
+  }
+
+  return [];
 }
 
 async function loadConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<ConvertCursor> {
@@ -1632,6 +2140,42 @@ async function saveConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations
   await ctx.runMutation(api.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_CONVERT_TRADES,
+    scope: "default",
+    cursor: {
+      initialized: cursor.initialized,
+      lastUpdateTime: cursor.lastUpdateTime,
+      earliestUpdateTime: cursor.earliestUpdateTime,
+    },
+  });
+}
+
+async function loadFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<FiatCursor> {
+  const state = await ctx.runQuery(api.integrations.getSyncState, {
+    integrationId,
+    dataset: DATASET_FIAT_ORDERS,
+    scope: "default",
+  });
+
+  if (!state?.cursor) {
+    return {
+      initialized: false,
+      lastUpdateTime: null,
+      earliestUpdateTime: null,
+    };
+  }
+
+  const cursor = state.cursor as Record<string, unknown>;
+  return {
+    initialized: Boolean(cursor.initialized),
+    lastUpdateTime: parseOptionalNumber(cursor.lastUpdateTime),
+    earliestUpdateTime: parseOptionalNumber(cursor.earliestUpdateTime),
+  };
+}
+
+async function saveFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: FiatCursor) {
+  await ctx.runMutation(api.integrations.updateSyncState, {
+    integrationId,
+    dataset: DATASET_FIAT_ORDERS,
     scope: "default",
     cursor: {
       initialized: cursor.initialized,
@@ -1709,6 +2253,91 @@ async function saveWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrati
   });
 }
 
+function normalizeFiatOrder(
+  order: BinanceFiatOrder,
+  symbolCatalog: Map<string, SymbolMeta>
+): NormalizedConvertTrade | null {
+  const status = String(order.status ?? "").toUpperCase();
+  if (!status.includes("SUCCESS")) {
+    return null;
+  }
+
+  const fiatCurrency = (order.fiatCurrency ?? "").toUpperCase();
+  const obtainCurrency = (order.obtainCurrency ?? "").toUpperCase();
+  if (!fiatCurrency || !obtainCurrency) {
+    return null;
+  }
+
+  const fiatAmount =
+    resolveNumber(order.amount ?? order.indicatedAmount ?? 0) ||
+    resolveNumber(order.indicatedAmount ?? 0);
+  const cryptoAmount =
+    resolveNumber(order.obtainAmount ?? 0) ||
+    resolveNumber((order as { amount?: string }).amount ?? 0);
+
+  if (fiatAmount <= 0 || cryptoAmount <= 0) {
+    return null;
+  }
+
+  const updateTimestamp = resolveNumber(order.updateTime ?? order.createTime ?? 0);
+  const executedAt = updateTimestamp > 0 ? updateTimestamp : resolveNumber(order.createTime ?? 0);
+  if (executedAt <= 0) {
+    return null;
+  }
+
+  const { symbol, side } = resolveConvertSymbol(symbolCatalog, fiatCurrency, obtainCurrency);
+
+  const quantity = side === "BUY" ? cryptoAmount : fiatAmount;
+  const quoteQuantity = side === "BUY" ? fiatAmount : cryptoAmount;
+
+  if (!Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(quoteQuantity) || quoteQuantity < 0) {
+    return null;
+  }
+
+  const explicitPrice = resolveNumber(order.price ?? 0);
+  const price = explicitPrice > 0 ? explicitPrice : quoteQuantity / quantity;
+  if (!Number.isFinite(price) || price <= 0) {
+    return null;
+  }
+
+  const feeValue =
+    resolveNumber(order.totalFee ?? 0) ||
+    resolveNumber((order as { fee?: string }).fee ?? 0);
+  const fee = feeValue > 0 ? feeValue : undefined;
+
+  const providerTradeId =
+    order.orderId && String(order.orderId).trim().length > 0 ? `fiat:${order.orderId}` : null;
+
+  if (!providerTradeId) {
+    return null;
+  }
+
+  return {
+    payload: {
+      providerTradeId,
+      tradeType: "FIAT" as const,
+      symbol,
+      side,
+      quantity,
+      price,
+      quoteQuantity,
+      fee,
+      feeAsset: fee ? fiatCurrency : undefined,
+      isMaker: false,
+      executedAt,
+      fromAsset: fiatCurrency,
+      fromAmount: fiatAmount,
+      toAsset: obtainCurrency,
+      toAmount: cryptoAmount,
+      raw: {
+        source: "binance_fiat_buy",
+        order,
+      },
+    },
+    updateTime: executedAt,
+  };
+}
+
 function normalizeConvertTrade(
   trade: BinanceConvertTrade,
   symbolCatalog: Map<string, SymbolMeta>
@@ -1771,6 +2400,7 @@ function normalizeConvertTrade(
   return {
     payload: {
       providerTradeId,
+      tradeType: "CONVERT" as const,
       symbol,
       side,
       quantity,
@@ -1780,6 +2410,10 @@ function normalizeConvertTrade(
       feeAsset,
       isMaker: false,
       executedAt,
+      fromAsset,
+      fromAmount,
+      toAsset,
+      toAmount,
       raw: {
         source: "binance_convert",
         trade,
@@ -1833,18 +2467,72 @@ function resolveNumber(value: number | string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/**
+ * Parse a timestamp that can be:
+ * - A number (Unix timestamp in milliseconds)
+ * - A string number ("1234567890")
+ * - An ISO date string ("2025-01-24 18:42:10" or "2025-01-24T18:42:10Z")
+ * Returns 0 if parsing fails.
+ */
+function parseTimestamp(value: number | string | null | undefined): number {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+
+  // If it's already a number, return it
+  if (typeof value === "number") {
+    return value;
+  }
+
+  // Try to parse as a direct number first
+  const asNumber = Number(value);
+  if (Number.isFinite(asNumber) && asNumber > 0) {
+    return asNumber;
+  }
+
+  // Try to parse as an ISO date string
+  if (typeof value === "string") {
+    try {
+      // Handle both "YYYY-MM-DD HH:mm:ss" and ISO 8601 formats
+      const dateValue = new Date(value.replace(' ', 'T') + 'Z');
+      const timestamp = dateValue.getTime();
+      if (Number.isFinite(timestamp) && timestamp > 0) {
+        return timestamp;
+      }
+    } catch (e) {
+      // Fall through to return 0
+    }
+  }
+
+  return 0;
+}
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function signedGet(
   apiKey: string,
   apiSecret: string,
   path: string,
   params: Record<string, string | number>,
-  baseUrl = DEFAULT_BASE_URL
-) {
+  baseUrl = DEFAULT_BASE_URL,
+  retryCount = 0
+): Promise<unknown> {
+  const MAX_RETRIES = 5;
+  const BASE_DELAY = 5000; // 5 secondes
+
   const searchParams = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     searchParams.set(key, String(value));
   }
+
+  // Add timestamp and recvWindow if not already present
   searchParams.set("timestamp", Date.now().toString());
+  if (!searchParams.has("recvWindow")) {
+    searchParams.set("recvWindow", RECEIPT_WINDOW_MS.toString());
+  }
+
   const signature = HmacSHA256(searchParams.toString(), apiSecret).toString();
   searchParams.set("signature", signature);
 
@@ -1857,7 +2545,25 @@ async function signedGet(
 
   const raw = await response.text();
 
+  // Handle rate limit errors (429) with exponential backoff
+  if (response.status === 429) {
+    if (retryCount < MAX_RETRIES) {
+      const delay = BASE_DELAY * Math.pow(2, retryCount);
+      console.warn(`Rate limit hit (429), retrying in ${delay}ms (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+      await sleep(delay);
+      return signedGet(apiKey, apiSecret, path, params, baseUrl, retryCount + 1);
+    } else {
+      console.error(`Rate limit exceeded after ${MAX_RETRIES} retries`);
+      throw new Error(`Binance API rate limit exceeded: ${raw}`);
+    }
+  }
+
   if (!response.ok) {
+    console.error(`Binance API error for ${path}:`, {
+      status: response.status,
+      statusText: response.statusText,
+      body: raw.slice(0, 500),
+    });
     throw new Error(`Binance API error ${response.status}: ${raw}`);
   }
 
