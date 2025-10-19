@@ -444,76 +444,122 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
             Includes trades, deposits, and withdrawals imported from Binance.
           </CardDescription>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent>
           {orderedTokens.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Connect Binance and run a sync to populate your portfolio.
             </p>
           ) : (
-            <div className="min-w-full overflow-x-auto">
+            <div className="overflow-x-auto">
               <ScrollArea className="max-h-[420px] w-full">
-                <Table className="w-full min-w-max">
-                  <TableHeader>
-                    <TableRow className="sticky top-0 z-10 bg-card/95 backdrop-blur hover:bg-card/95">
-                      <TableHead className="min-w-20 text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Token
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Holdings
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Bought
-                      </TableHead>
-                      <TableHead className="min-w-20 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Sold
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Deposits
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Withdrawals
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Avg buy
-                      </TableHead>
-                      <TableHead className="min-w-24 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Net USD
-                      </TableHead>
-                      <TableHead className="min-w-20 text-right text-xs uppercase tracking-wide text-muted-foreground/80">
-                        Actions
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="sticky top-0 z-10 border-b border-border/50 bg-card/95 backdrop-blur">
+                      <th className="px-4 py-3 text-left">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Token
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Holdings
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Bought
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Sold
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Deposits
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Withdrawals
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Avg buy
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Net USD
+                        </span>
+                      </th>
+                      <th className="px-4 py-3 text-right">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                          Actions
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
                     {orderedTokens.map((token) => {
                       const netUsd = token.investedUsd - token.realizedUsd;
                       return (
-                        <TableRow key={token.symbol} className="hover:bg-muted/40">
-                          <TableCell className="font-semibold uppercase tracking-wide text-foreground">
-                            {token.symbol}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {numberFormatter.format(token.currentQuantity)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-emerald-500">
-                            +{numberFormatter.format(token.buyQuantity)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-red-500">
-                            -{numberFormatter.format(token.sellQuantity)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
-                          </TableCell>
-                          <TableCell className="text-right text-sm">
-                            {token.averageBuyPrice !== undefined ? numberFormatter.format(token.averageBuyPrice) : "-"}
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-medium">
-                            {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
-                          </TableCell>
-                          <TableCell className="text-right">
+                        <tr
+                          key={token.symbol}
+                          className="border-b border-border/30 transition-colors hover:bg-muted/40"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-foreground">
+                                {token.symbol.charAt(0)}
+                              </span>
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-semibold uppercase tracking-wide text-foreground">
+                                  {token.symbol}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm text-foreground">
+                              {numberFormatter.format(token.currentQuantity)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm font-medium text-emerald-500">
+                              +{numberFormatter.format(token.buyQuantity)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm font-medium text-red-500">
+                              -{numberFormatter.format(token.sellQuantity)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm text-foreground">
+                              {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm text-foreground">
+                              {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="text-sm text-foreground">
+                              {token.averageBuyPrice !== undefined
+                                ? numberFormatter.format(token.averageBuyPrice)
+                                : "-"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className="font-medium text-foreground">
+                              {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right">
                             <Button
                               size="sm"
                               variant="ghost"
@@ -522,12 +568,12 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             >
                               View
                             </Button>
-                          </TableCell>
-                        </TableRow>
+                          </td>
+                        </tr>
                       );
                     })}
-                  </TableBody>
-                </Table>
+                  </tbody>
+                </table>
               </ScrollArea>
             </div>
           )}
