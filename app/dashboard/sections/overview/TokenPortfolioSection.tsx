@@ -68,7 +68,7 @@ type TokenPortfolioSectionProps = {
 
 type RangeKey = "1H" | "1D" | "1W" | "1M" | "1Y" | "MAX";
 
-type SortColumn = "symbol" | "holdings" | "bought" | "sold" | "deposits" | "withdrawals" | "avgBuy" | "netUsd";
+type SortColumn = "symbol" | "holdings" | "bought" | "sold" | "deposits" | "withdrawals" | "avgBuy" | "netUsd" | "currentValue";
 type SortDirection = "asc" | "desc" | null;
 
 type ChartPoint = {
@@ -148,6 +148,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -163,6 +164,42 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
       setSortDirection("asc");
     }
   };
+
+  useEffect(() => {
+    // Fetch current prices from Binance
+    const fetchPrices = async () => {
+      const prices: Record<string, number> = {};
+
+      for (const token of tokens) {
+        if (!token.primarySymbol && token.tradeSymbols.length === 0) continue;
+
+        const candidates = [token.primarySymbol, ...token.tradeSymbols]
+          .filter(Boolean)
+          .map(symbol => `${symbol}USDT`);
+
+        for (const pair of candidates) {
+          try {
+            const response = await fetch(
+              `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`
+            );
+            if (response.ok) {
+              const data = (await response.json()) as { symbol: string; price: string };
+              prices[token.symbol] = parseFloat(data.price);
+              break;
+            }
+          } catch (error) {
+            console.error(`Failed to fetch price for ${pair}:`, error);
+          }
+        }
+      }
+
+      setCurrentPrices(prices);
+    };
+
+    if (tokens.length > 0) {
+      fetchPrices();
+    }
+  }, [tokens]);
 
   const orderedTokens = useMemo(
     () => {
@@ -218,6 +255,10 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
               aVal = a.investedUsd - a.realizedUsd;
               bVal = b.investedUsd - b.realizedUsd;
               break;
+            case "currentValue":
+              aVal = (currentPrices[a.symbol] ?? 0) * a.currentQuantity;
+              bVal = (currentPrices[b.symbol] ?? 0) * b.currentQuantity;
+              break;
           }
 
           return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
@@ -226,7 +267,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
 
       return sorted;
     },
-    [tokens, sortColumn, sortDirection]
+    [tokens, sortColumn, sortDirection, currentPrices]
   );
 
   const selectedToken = useMemo(
@@ -594,6 +635,23 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                         </button>
                       </th>
                       <th className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => handleSort("currentValue")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
+                          Valeur actuelle
+                          {sortColumn === "currentValue" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
+                      </th>
+                      <th className="px-4 py-3 text-right">
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
                           Actions
                         </span>
@@ -652,6 +710,15 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
+                              <span className="font-medium text-foreground">
+                                {currentPrices[token.symbol]
+                                  ? currencyFormatter.format(
+                                      currentPrices[token.symbol] * token.currentQuantity
+                                    )
+                                  : "-"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -664,7 +731,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                           </tr>
                           {isExpanded && (
                             <tr className="border-b border-border/30 bg-muted/20">
-                              <td colSpan={6} className="px-4 py-4">
+                              <td colSpan={7} className="px-4 py-4">
                                 <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                                   <div className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground font-semibold uppercase">Bought</span>
