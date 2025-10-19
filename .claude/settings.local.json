@@ -20,7 +20,8 @@
       "Bash(npm install tablecn)",
       "Bash(timeout 10 npm run dev)",
       "Bash(powershell -Command \"Remove-Item ''C:\\Users\\kevin.dumast\\Documents\\oracly\\.next'' -Recurse -Force -ErrorAction SilentlyContinue; Write-Host ''Done''\")",
-      "Bash(curl -s \"https://api.github.com/repos/sadmann7/tablecn/contents/registry/default\")"
+      "Bash(curl -s \"https://api.github.com/repos/sadmann7/tablecn/contents/registry/default\")",
+      "Bash(npm install cryptocurrency-icons)"
     ],
     "deny": [],
     "ask": []

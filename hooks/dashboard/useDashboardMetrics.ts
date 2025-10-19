@@ -38,6 +38,7 @@ export type TradeRecord = {
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
+  tradeType?: "SPOT" | "CONVERT" | "FIAT";
   symbol: string;
   side: "BUY" | "SELL";
   quantity: number;
@@ -47,6 +48,10 @@ export type TradeRecord = {
   feeAsset?: string;
   isMaker: boolean;
   executedAt: number;
+  fromAsset?: string;
+  fromAmount?: number;
+  toAsset?: string;
+  toAmount?: number;
   createdAt: number;
 };
 
@@ -541,6 +546,7 @@ export function useDashboardMetrics(refreshToken: number) {
       sellQuantity: number;
       depositQuantity: number;
       withdrawalQuantity: number;
+      convertQuantity: number;
       investedUsd: number;
       realizedUsd: number;
       buyValueUsd: number;
@@ -560,6 +566,7 @@ export function useDashboardMetrics(refreshToken: number) {
           sellQuantity: 0,
           depositQuantity: 0,
           withdrawalQuantity: 0,
+          convertQuantity: 0,
           investedUsd: 0,
           realizedUsd: 0,
           buyValueUsd: 0,
@@ -573,37 +580,87 @@ export function useDashboardMetrics(refreshToken: number) {
     };
 
     tradesList.forEach((trade) => {
-      const baseAsset = extractBaseAsset(trade.symbol);
-      const entry = ensureEntry(baseAsset);
-      const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+      // Handle CONVERT trades specially
+      if (trade.tradeType === "CONVERT") {
+        // Process fromAsset (sale)
+        if (trade.fromAsset && trade.fromAmount !== undefined) {
+          const fromEntry = ensureEntry(trade.fromAsset);
+          fromEntry.convertQuantity -= trade.fromAmount;
+          fromEntry.currentQuantity -= trade.fromAmount;
+          fromEntry.sellQuantity += trade.fromAmount;
+          fromEntry.lastActivityAt = Math.max(fromEntry.lastActivityAt, trade.executedAt);
 
-      entry.events.push({
-        id: trade._id,
-        type: trade.side,
-        timestamp: trade.executedAt,
-        quantity: trade.quantity,
-        price: trade.price,
-        valueUsd,
-        fee: trade.fee,
-        feeAsset: trade.feeAsset,
-        provider: trade.provider,
-        providerDisplayName: trade.providerDisplayName,
-        integrationId: trade.integrationId,
-      });
+          fromEntry.events.push({
+            id: trade._id,
+            type: "SELL",
+            timestamp: trade.executedAt,
+            quantity: trade.fromAmount,
+            price: trade.price,
+            valueUsd: trade.quoteQuantity ?? 0,
+            fee: trade.fee,
+            feeAsset: trade.feeAsset,
+            provider: trade.provider,
+            providerDisplayName: trade.providerDisplayName,
+            integrationId: trade.integrationId,
+          });
+        }
 
-      entry.tradeSymbols.add(trade.symbol.toUpperCase());
-      entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
+        // Process toAsset (purchase)
+        if (trade.toAsset && trade.toAmount !== undefined) {
+          const toEntry = ensureEntry(trade.toAsset);
+          toEntry.convertQuantity += trade.toAmount;
+          toEntry.currentQuantity += trade.toAmount;
+          toEntry.buyQuantity += trade.toAmount;
+          toEntry.lastActivityAt = Math.max(toEntry.lastActivityAt, trade.executedAt);
 
-      if (trade.side === "BUY") {
-        entry.buyQuantity += trade.quantity;
-        entry.buyValueUsd += valueUsd;
-        entry.investedUsd += valueUsd;
-        entry.currentQuantity += trade.quantity;
+          toEntry.events.push({
+            id: trade._id,
+            type: "BUY",
+            timestamp: trade.executedAt,
+            quantity: trade.toAmount,
+            price: trade.price,
+            valueUsd: trade.quoteQuantity ?? 0,
+            fee: trade.fee,
+            feeAsset: trade.feeAsset,
+            provider: trade.provider,
+            providerDisplayName: trade.providerDisplayName,
+            integrationId: trade.integrationId,
+          });
+        }
       } else {
-        entry.sellQuantity += trade.quantity;
-        entry.sellValueUsd += valueUsd;
-        entry.realizedUsd += valueUsd;
-        entry.currentQuantity -= trade.quantity;
+        // Regular BUY/SELL trades
+        const baseAsset = extractBaseAsset(trade.symbol);
+        const entry = ensureEntry(baseAsset);
+        const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+
+        entry.events.push({
+          id: trade._id,
+          type: trade.side,
+          timestamp: trade.executedAt,
+          quantity: trade.quantity,
+          price: trade.price,
+          valueUsd,
+          fee: trade.fee,
+          feeAsset: trade.feeAsset,
+          provider: trade.provider,
+          providerDisplayName: trade.providerDisplayName,
+          integrationId: trade.integrationId,
+        });
+
+        entry.tradeSymbols.add(trade.symbol.toUpperCase());
+        entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
+
+        if (trade.side === "BUY") {
+          entry.buyQuantity += trade.quantity;
+          entry.buyValueUsd += valueUsd;
+          entry.investedUsd += valueUsd;
+          entry.currentQuantity += trade.quantity;
+        } else {
+          entry.sellQuantity += trade.quantity;
+          entry.sellValueUsd += valueUsd;
+          entry.realizedUsd += valueUsd;
+          entry.currentQuantity -= trade.quantity;
+        }
       }
     });
 

@@ -51,6 +51,11 @@ import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp }
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
 
+function getCryptoIconUrl(symbol: string): string {
+  const iconPath = `/crypto-icons/${symbol.toLowerCase()}.svg`;
+  return iconPath;
+}
+
 function buildPriceSymbolCandidates(token: PortfolioToken): string[] {
   const candidates = new Set<string>();
   if (token.primarySymbol) {
@@ -171,25 +176,31 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
       const prices: Record<string, number> = {};
 
       for (const token of tokens) {
-        if (!token.primarySymbol && token.tradeSymbols.length === 0) continue;
+        // tradeSymbols are already full pairs like "ETHUSDT", so use directly
+        const pairs = token.tradeSymbols.length > 0
+          ? token.tradeSymbols
+          : [token.primarySymbol ? `${token.primarySymbol}USDT` : `${token.symbol}USDT`];
 
-        const candidates = [token.primarySymbol, ...token.tradeSymbols]
-          .filter(Boolean)
-          .map(symbol => `${symbol}USDT`);
-
-        for (const pair of candidates) {
+        let found = false;
+        for (const pair of pairs) {
           try {
             const response = await fetch(
-              `https://api.binance.com/api/v3/ticker/price?symbol=${pair}`
+              `https://api.binance.com/api/v3/ticker/price?symbol=${pair.toUpperCase()}`,
+              { signal: AbortSignal.timeout(5000) }
             );
             if (response.ok) {
               const data = (await response.json()) as { symbol: string; price: string };
               prices[token.symbol] = parseFloat(data.price);
+              found = true;
               break;
             }
           } catch (error) {
-            console.error(`Failed to fetch price for ${pair}:`, error);
+            console.debug(`Failed to fetch price for ${pair}:`, error);
           }
+        }
+
+        if (!found) {
+          console.warn(`Could not fetch price for token ${token.symbol}`);
         }
       }
 
@@ -198,6 +209,9 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
 
     if (tokens.length > 0) {
       fetchPrices();
+      // Refresh prices every 30 seconds
+      const interval = setInterval(fetchPrices, 30000);
+      return () => clearInterval(interval);
     }
   }, [tokens]);
 
@@ -681,10 +695,23 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               </button>
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-semibold uppercase text-foreground">
-                                  {token.symbol.charAt(0)}
-                                </span>
+                              <div className="flex items-center gap-3">
+                                <div className="relative h-8 w-8 flex-shrink-0">
+                                  <img
+                                    src={getCryptoIconUrl(token.symbol)}
+                                    alt={token.symbol}
+                                    className="h-8 w-8 rounded-full object-cover"
+                                    onError={(e) => {
+                                      // Fallback to letter if icon doesn't exist
+                                      e.currentTarget.style.display = "none";
+                                      e.currentTarget.parentElement?.classList.add("flex", "items-center", "justify-center", "bg-muted", "rounded-full");
+                                      const fallback = document.createElement("span");
+                                      fallback.className = "text-xs font-semibold uppercase text-foreground";
+                                      fallback.textContent = token.symbol.charAt(0);
+                                      e.currentTarget.parentElement?.appendChild(fallback);
+                                    }}
+                                  />
+                                </div>
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold uppercase tracking-wide text-foreground">
                                     {token.symbol}
