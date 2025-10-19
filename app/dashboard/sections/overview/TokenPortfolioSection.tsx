@@ -46,7 +46,7 @@ import {
   type TokenTimelineEvent,
 } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
@@ -67,6 +67,9 @@ type TokenPortfolioSectionProps = {
 };
 
 type RangeKey = "1H" | "1D" | "1W" | "1M" | "1Y" | "MAX";
+
+type SortColumn = "symbol" | "holdings" | "bought" | "sold" | "deposits" | "withdrawals" | "avgBuy" | "netUsd";
+type SortDirection = "asc" | "desc" | null;
 
 type ChartPoint = {
   timestamp: number;
@@ -142,10 +145,27 @@ const RANGE_CONFIG: Record<
 export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [range, setRange] = useState<RangeKey>("1M");
+  const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      // Cycle through: asc -> desc -> null
+      if (sortDirection === "asc") {
+        setSortDirection("desc");
+      } else if (sortDirection === "desc") {
+        setSortDirection(null);
+        setSortColumn(null);
+      }
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
 
   const orderedTokens = useMemo(
-    () =>
-      [...tokens].sort((a, b) => {
+    () => {
+      let sorted = [...tokens].sort((a, b) => {
         if (a.currentQuantity === 0 && b.currentQuantity !== 0) {
           return 1;
         }
@@ -156,8 +176,56 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
           return b.lastActivityAt - a.lastActivityAt;
         }
         return b.investedUsd - a.investedUsd;
-      }),
-    [tokens]
+      });
+
+      // Apply custom sort if active
+      if (sortColumn && sortDirection) {
+        sorted = [...sorted].sort((a, b) => {
+          let aVal: number = 0;
+          let bVal: number = 0;
+
+          switch (sortColumn) {
+            case "symbol":
+              return sortDirection === "asc"
+                ? a.symbol.localeCompare(b.symbol)
+                : b.symbol.localeCompare(a.symbol);
+            case "holdings":
+              aVal = a.currentQuantity;
+              bVal = b.currentQuantity;
+              break;
+            case "bought":
+              aVal = a.buyQuantity;
+              bVal = b.buyQuantity;
+              break;
+            case "sold":
+              aVal = a.sellQuantity;
+              bVal = b.sellQuantity;
+              break;
+            case "deposits":
+              aVal = a.depositQuantity;
+              bVal = b.depositQuantity;
+              break;
+            case "withdrawals":
+              aVal = a.withdrawalQuantity;
+              bVal = b.withdrawalQuantity;
+              break;
+            case "avgBuy":
+              aVal = a.averageBuyPrice ?? 0;
+              bVal = b.averageBuyPrice ?? 0;
+              break;
+            case "netUsd":
+              aVal = a.investedUsd - a.realizedUsd;
+              bVal = b.investedUsd - b.realizedUsd;
+              break;
+          }
+
+          return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
+        });
+      }
+
+      return sorted;
+    },
+    [tokens, sortColumn, sortDirection]
   );
 
   const selectedToken = useMemo(
@@ -456,44 +524,140 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                   <thead>
                     <tr className="sticky top-0 z-10 border-b border-border/50 bg-card/95 backdrop-blur">
                       <th className="px-4 py-3 text-left">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("symbol")}
+                          className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Token
-                        </span>
+                          {sortColumn === "symbol" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("holdings")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Holdings
-                        </span>
+                          {sortColumn === "holdings" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("bought")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Bought
-                        </span>
+                          {sortColumn === "bought" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("sold")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Sold
-                        </span>
+                          {sortColumn === "sold" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("deposits")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Deposits
-                        </span>
+                          {sortColumn === "deposits" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("withdrawals")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Withdrawals
-                        </span>
+                          {sortColumn === "withdrawals" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("avgBuy")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Avg buy
-                        </span>
+                          {sortColumn === "avgBuy" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
+                        <button
+                          onClick={() => handleSort("netUsd")}
+                          className="ml-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground/80 hover:text-muted-foreground transition-colors"
+                        >
                           Net USD
-                        </span>
+                          {sortColumn === "netUsd" && sortDirection ? (
+                            sortDirection === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                          )}
+                        </button>
                       </th>
                       <th className="px-4 py-3 text-right">
                         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground/80">
