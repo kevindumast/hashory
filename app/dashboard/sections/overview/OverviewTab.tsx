@@ -143,7 +143,7 @@ export function OverviewTab({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-3">
-        <Card className="border-border/60 bg-card/80 backdrop-blur xl:col-span-2">
+        <Card className="border-border/60 bg-card/80 backdrop-blur xl:col-span-2 flex flex-col">
           <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <CardDescription>Historique</CardDescription>
@@ -163,7 +163,7 @@ export function OverviewTab({
               ))}
             </div>
           </CardHeader>
-          <CardContent className="h-72">
+          <CardContent className="flex-1 h-72">
             {filteredHistory.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={filteredHistory}>
@@ -215,158 +215,124 @@ export function OverviewTab({
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardDescription>Répartition</CardDescription>
-            <CardTitle className="text-lg text-foreground">Allocation par symbole</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-6 lg:flex-row lg:items-center">
-            {allocationData.length > 0 ? (
-              <>
-                <div className="mx-auto h-48 w-full max-w-[240px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={allocationData}
-                        dataKey="share"
-                        nameKey="symbol"
-                        innerRadius="60%"
-                        outerRadius="90%"
-                        paddingAngle={2}
-                      >
-                        {allocationData.map((item) => (
-                          <Cell key={item.symbol} fill={item.color} stroke="transparent" />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex-1 space-y-3">
-                  {allocationData.slice(0, 6).map((item) => (
-                    <div key={item.symbol} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="inline-block size-2 rounded-full"
-                          style={{ backgroundColor: item.color }}
-                        />
-                        <span className="font-medium text-foreground">{item.symbol}</span>
+        <div className="grid gap-5 auto-rows-fr">
+          <Card className="border-border/60 bg-card/80 backdrop-blur flex flex-col">
+            <CardHeader>
+              <CardDescription>Répartition</CardDescription>
+              <CardTitle className="text-lg text-foreground">Allocation par symbole</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col gap-6 lg:flex-row lg:items-center">
+              {allocationData.length > 0 ? (
+                <>
+                  <div className="mx-auto h-48 w-full max-w-[240px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={allocationData}
+                          dataKey="share"
+                          nameKey="symbol"
+                          innerRadius="60%"
+                          outerRadius="90%"
+                          paddingAngle={2}
+                        >
+                          {allocationData.map((item) => (
+                            <Cell key={item.symbol} fill={item.color} stroke="transparent" />
+                          ))}
+                        </Pie>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    {allocationData.slice(0, 6).map((item) => (
+                      <div key={item.symbol} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="inline-block size-2 rounded-full"
+                            style={{ backgroundColor: item.color }}
+                          />
+                          <span className="font-medium text-foreground">{item.symbol}</span>
+                        </div>
+                        <span className="text-muted-foreground">{item.share.toFixed(2)}%</span>
                       </div>
-                      <span className="text-muted-foreground">{item.share.toFixed(2)}%</span>
-                    </div>
-                  ))}
-                  {allocationData.length === 0 ? null : (
-                    <p className="text-xs text-muted-foreground">
-                      {allocationData.length} symboles suivis · {currencyFormatter.format(totalVolume)} de volume.
-                    </p>
-                  )}
+                    ))}
+                    {allocationData.length === 0 ? null : (
+                      <p className="text-xs text-muted-foreground">
+                        {allocationData.length} symboles suivis · {currencyFormatter.format(totalVolume)} de volume.
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No transactions yet. Run a sync to populate the allocation chart.
+                </p>
+              )}
+            </CardContent>
+            <CardFooter>
+              <Button variant="ghost" className="text-xs" onClick={onOpenIntegrations}>
+                Ajouter une intégration
+              </Button>
+            </CardFooter>
+          </Card>
+
+          <Card className="border-border/60 bg-card/80 backdrop-blur flex flex-col">
+            <CardHeader>
+              <CardDescription>Performance (cumulative)</CardDescription>
+              <CardTitle className="text-lg text-foreground">Profit vs. benchmark</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-1 h-72">
+              {performanceSeries.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={performanceSeries}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <XAxis
+                      dataKey="label"
+                      stroke="hsl(var(--muted-foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis
+                      stroke="hsl(var(--muted-foreground))"
+                      tickLine={false}
+                      axisLine={false}
+                      width={56}
+                      tickFormatter={(value) => `${value.toFixed(1)}%`}
+                    />
+                    <RechartsTooltip
+                      contentStyle={{
+                        background: "hsl(var(--background))",
+                        border: "1px solid hsl(var(--border))",
+                        borderRadius: "12px",
+                        color: "hsl(var(--foreground))",
+                      }}
+                      formatter={(value: number) => `${value.toFixed(2)}%`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="profitPercent"
+                      stroke="#2563EB"
+                      strokeWidth={2}
+                      dot={false}
+                      name="All-time profit"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="benchmarkPercent"
+                      stroke="#F97316"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Net invested"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                  Import transactions to display performance.
                 </div>
-              </>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                No transactions yet. Run a sync to populate the allocation chart.
-              </p>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button variant="ghost" className="text-xs" onClick={onOpenIntegrations}>
-              Ajouter une intégration
-            </Button>
-          </CardFooter>
-        </Card>
-      </section>
-
-      <section className="grid gap-5 xl:grid-cols-3">
-        <Card className="border-border/60 bg-card/80 backdrop-blur xl:col-span-2">
-          <CardHeader>
-            <CardDescription>Performance (cumulative)</CardDescription>
-            <CardTitle className="text-lg text-foreground">Profit vs. benchmark</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            {performanceSeries.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={performanceSeries}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis
-                    dataKey="label"
-                    stroke="hsl(var(--muted-foreground))"
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    tickLine={false}
-                    axisLine={false}
-                    width={56}
-                    tickFormatter={(value) => `${value.toFixed(1)}%`}
-                  />
-                  <RechartsTooltip
-                    contentStyle={{
-                      background: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "12px",
-                      color: "hsl(var(--foreground))",
-                    }}
-                    formatter={(value: number) => `${value.toFixed(2)}%`}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="profitPercent"
-                    stroke="#2563EB"
-                    strokeWidth={2}
-                    dot={false}
-                    name="All-time profit"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="benchmarkPercent"
-                    stroke="#F97316"
-                    strokeWidth={2}
-                    dot={false}
-                    name="Net invested"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-                Import transactions to display performance.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/60 bg-card/80 backdrop-blur">
-          <CardHeader>
-            <CardDescription>Volume cumulé</CardDescription>
-            <CardTitle className="text-lg text-foreground">Aperçu global</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>
-              Volume agrégé sur Binance :{" "}
-              <span className="font-medium text-foreground">
-                {currencyFormatter.format(totalVolume)}
-              </span>
-              </p>
-              <p>
-                Transactions suivies :{" "}
-                <span className="font-medium text-foreground">
-                  {numberFormatter.format(
-                    portfolioTokens.reduce(
-                      (sum, token) => sum + token.buyQuantity + token.sellQuantity,
-                      0
-                    )
-                  )}
-                </span>
-              </p>
-            <p>
-              Actifs distincts :{" "}
-              <span className="font-medium text-foreground">{portfolioTokens.length}</span>
-            </p>
-            <p className="text-xs text-muted-foreground/80">
-              Les métriques sont calculées à partir des données importées (trades, dépôts, retraits) et
-              représentent un aperçu simplifié des performances réalisées.
-            </p>
-          </CardContent>
-        </Card>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </section>
 
       <TokenPortfolioSection tokens={portfolioTokens} />

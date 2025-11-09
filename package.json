@@ -28,7 +28,6 @@
     "clsx": "^2.1.1",
     "convex": "^1.27.5",
     "crypto-js": "^4.2.0",
-    "cryptocurrency-icons": "^0.18.1",
     "lucide-react": "^0.545.0",
     "next": "15.5.4",
     "react": "19.1.0",
