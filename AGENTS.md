@@ -165,12 +165,13 @@ vercel
 - **Nouveaux champs optimisés**: `fromAsset`, `fromAmount`, `toAsset`, `toAmount`
 - Permet affichage FROM → TO sans calcul frontend
 
-### Phase 3 — Calculs quantitatifs (v0.3)
-- Créer `/lib/metrics.ts` avec :
+### Phase 3 — Calculs quantitatifs (v0.3) 🚧 EN COURS
+- ✅ Créer `/lib/metrics.ts` avec :
   - `sharpeRatio()`
   - `alphaBeta()`
   - `drawdown()`
-- Intégrer dans `/convex/analytics.ts` pour stockage de métriques calculées
+- ✅ Intégrer dans `/convex/analytics.ts` pour stockage de métriques calculées
+- ✅ Créer Action `/convex/actions/computePerformance.ts` pour calculs lourds asynchrones
 - Visualiser les courbes sur `/dashboard` (Plotly / Recharts)
 
 ### Phase 4 — IA Recommandation (v0.4)
@@ -238,8 +239,8 @@ vercel
 - [ ] Valider les performances avec un grand volume de données
 
 ### Court terme (Phase 3)
-- [ ] Créer `/lib/metrics.ts` avec calculs quantitatifs
-- [ ] Implémenter Sharpe Ratio, Alpha/Beta, Drawdown
+- [x] Créer `/lib/metrics.ts` avec calculs quantitatifs
+- [x] Implémenter le stockage et le calcul asynchrone des métriques (Convex)
 - [ ] Ajouter graphiques de performance avancés
 
 ### Moyen terme (Phase 4)
@@ -300,4 +301,3 @@ public/
 - Vercel → https://vercel.com
 - Binance API → https://binance-docs.github.io/apidocs
 - Google AI Studio → https://aistudio.google.com
-
