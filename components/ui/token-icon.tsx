@@ -1,0 +1,172 @@
+"use client";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
+
+interface TokenIconProps {
+  symbol: string;
+  className?: string;
+}
+
+// Mapping manuel pour les principaux tokens sur cryptologos.cc
+// Format: SYMBOL -> slug (ex: https://cryptologos.cc/logos/bitcoin-btc-logo.png)
+const CRYPTO_LOGOS_MAP: Record<string, string> = {
+  BTC: "bitcoin-btc",
+  ETH: "ethereum-eth",
+  USDT: "tether-usdt",
+  BNB: "bnb-bnb",
+  SOL: "solana-sol",
+  XRP: "xrp-xrp",
+  USDC: "usd-coin-usdc",
+  ADA: "cardano-ada",
+  AVAX: "avalanche-avax",
+  DOGE: "dogecoin-doge",
+  DOT: "polkadot-new-dot",
+  TRX: "tron-trx",
+  LINK: "chainlink-link",
+  MATIC: "polygon-matic",
+  SHIB: "shiba-inu-shib",
+  LTC: "litecoin-ltc",
+  DAI: "multi-collateral-dai-dai",
+  BCH: "bitcoin-cash-bch",
+  UNI: "uniswap-uni",
+  ATOM: "cosmos-atom",
+  XLM: "stellar-xlm",
+  ETC: "ethereum-classic-etc",
+  FIL: "filecoin-fil",
+  LDO: "lido-dao-ldo",
+  HBAR: "hedera-hbar",
+  APT: "aptos-apt",
+  ARB: "arbitrum-arb",
+  NEAR: "near-protocol-near",
+  VET: "vechain-vet",
+  QNT: "quant-qnt",
+  MKR: "maker-mkr",
+  GRT: "the-graph-grt",
+  AAVE: "aave-aave",
+  ALGO: "algorand-algo",
+  AXS: "axie-infinity-axs",
+  SAND: "the-sandbox-sand",
+  EGLD: "multiversx-egld",
+  EOS: "eos-eos",
+  XTZ: "tezos-xtz",
+  THETA: "theta-network-theta",
+  MANA: "decentraland-mana",
+  FTM: "fantom-ftm",
+  SNX: "synthetix-snx",
+  NEO: "neo-neo",
+  FLOW: "flow-flow",
+  KAVA: "kava-kava",
+  CHZ: "chiliz-chz",
+  RUNE: "thorchain-rune",
+  ZEC: "zcash-zec",
+  XMR: "monero-xmr",
+  IOTA: "iota-miota",
+  BAT: "basic-attention-token-bat",
+  ENJ: "enjin-coin-enj",
+  DASH: "dash-dash",
+  KSM: "kusama-ksm",
+  COMP: "compound-comp",
+  WAVES: "waves-waves",
+  ZIL: "zilliqa-zil",
+  RVN: "ravencoin-rvn",
+  QTUM: "qtum-qtum",
+  OMG: "omg-network-omg",
+  ICX: "icon-icx",
+  ONT: "ontology-ont",
+  IOST: "iost-iost",
+  ZRX: "0x-zrx",
+  LRC: "loopring-lrc",
+  REP: "augur-rep",
+  KNC: "kyber-network-crystal-v2-knc",
+  BNT: "bancor-bnt",
+  REN: "ren-ren",
+  SNT: "status-snt",
+  CVC: "civic-cvc",
+  GNT: "golem-gnt",
+  STORJ: "storj-storj",
+  ANT: "aragon-ant",
+  GNO: "gnosis-gno",
+  MLN: "enzyme-mln",
+  RLC: "iexec-rlc-rlc",
+  NMR: "numeraire-nmr",
+  TRB: "tellor-trb",
+  BAND: "band-protocol-band",
+  OXT: "orchid-oxt",
+  BAL: "balancer-bal",
+  YFI: "yearn-finance-yfi",
+  UMA: "uma-uma",
+  SUSHI: "sushiswap-sushi",
+  CRV: "curve-dao-token-crv",
+  "1INCH": "1inch-1inch",
+  TAO: "bittensor-tao",
+  FET: "fetch-ai-fet",
+  RNDR: "render-token-rndr",
+  INJ: "injective-inj",
+  OP: "optimism-ethereum-op",
+  IMX: "immutable-x-imx",
+  LUNC: "terra-luna-classic-lunc",
+  LUNA: "terra-luna-v2-luna",
+  APE: "apecoin-ape-logo",
+  BTT: "bittorrent-btt",
+  XEC: "ecash-xec",
+  MINA: "mina-mina",
+  FXS: "frax-share-fxs",
+  GMX: "gmx-gmx",
+  PEPE: "pepe-pepe",
+  FLOKI: "floki-inu-floki",
+  SUI: "sui-sui",
+  SEI: "sei-sei",
+  TIA: "celestia-tia",
+  ORDI: "ordi-ordi",
+  SATS: "sats-ordi",
+  BONK: "bonk1-bonk",
+  WIF: "dogwifhat-wif",
+  PYTH: "pyth-network-pyth",
+  JUP: "jupiter-ag-jup",
+  WLD: "worldcoin-wld",
+  STRK: "starknet-strk",
+  BLUR: "blur-blur",
+  DYDX: "dydx-dydx",
+  ENS: "ethereum-name-service-ens",
+  CVX: "convex-finance-cvx",
+  LPT: "livepeer-lpt",
+  OCEAN: "ocean-protocol-ocean",
+  AUDIO: "audius-audio",
+  GLM: "golem-glm",
+  API3: "api3-api3",
+  MASK: "mask-network-mask",
+  JASMY: "jasmycoin-jasmy",
+  STX: "stacks-stx",
+  CFX: "conflux-cfx",
+  ROSE: "oasis-network-rose",
+  TWT: "trust-wallet-token-twt",
+  KDA: "kadena-kda",
+  GALA: "gala-gala",
+  ENA: "ethena-ena",
+  W: "wormhole-w",
+  ONDO: "ondo-ondo",
+  ZBU: "zeebu-zbu",
+  CORE: "core-dao-core",
+  BEAM: "beam-beam",
+  AXL: "axelar-axl",
+};
+
+export function TokenIcon({ symbol, className }: TokenIconProps) {
+  const upperSymbol = symbol.toUpperCase();
+  const slug = CRYPTO_LOGOS_MAP[upperSymbol];
+  
+  // Fallback vers CoinCap si pas dans la map, ou une image par défaut
+  const iconUrl = slug 
+    ? `https://cryptologos.cc/logos/${slug}-logo.png`
+    : `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
+
+  return (
+    <Avatar className={cn("h-8 w-8", className)}>
+      <AvatarImage src={iconUrl} alt={symbol} />
+      <AvatarFallback className="text-[9px] font-bold">
+        {symbol.slice(0, 3).toUpperCase()}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
