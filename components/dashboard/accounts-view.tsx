@@ -11,7 +11,8 @@ import {
   AlertCircle,
   X,
   ExternalLink,
-  Calendar
+  Calendar,
+  RefreshCw
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,13 @@ import {
 } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
@@ -216,9 +224,32 @@ export function AccountsView() {
                         <span className="text-[13px] text-[#808594]">{account.lastSync}</span>
                         <StatusBadge status={account.status} showText />
                       </div>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-[#808594]">
-                        <MoreVertical className="w-5 h-5" />
-                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#808594] hover:text-[#1e2029]">
+                            <MoreVertical className="w-5 h-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 bg-white">
+                          <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
+                            <span className="text-sm font-medium">Renommer</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleRefresh()}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] flex items-center justify-between"
+                          >
+                            <span className="text-sm font-medium">Synchroniser</span>
+                            <span className="text-xs text-[#808594]">(0 restante)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
+                            <span className="text-sm font-medium">Mettre à jour l'API</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator className="bg-[#d4d8e1]" />
+                          <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50">
+                            <span className="text-sm font-medium">Supprimer</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </div>
                 </AccordionContent>
