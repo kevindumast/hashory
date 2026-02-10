@@ -1,11 +1,11 @@
 "use client"
 
 import * as React from "react"
-import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle } from "lucide-react"
+import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { type TransactionEntry, numberFormatter } from "@/hooks/dashboard/useDashboardMetrics"
+import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 
 // Helper pour extraire le quote asset (réutilisé de votre logique existante)
 const QUOTE_ASSETS = [
@@ -29,6 +29,8 @@ interface TransactionsViewProps {
 }
 
 export function TransactionsView({ transactions, isLoading }: TransactionsViewProps) {
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+
   // Transformation des données pour l'affichage
   const mappedTransactions = React.useMemo(() => {
     return transactions.map(tx => {
@@ -67,6 +69,21 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
         outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName };
       }
 
+      // Calculer le montant pour tri et affichage
+      let amount = 0;
+      let amountDisplay = "";
+
+      if (tx.type === 'trade') {
+        const quoteQty = tx.quoteQuantity ?? (tx.price * tx.quantity);
+        amount = quoteQty;
+        amountDisplay = currencyFormatter.format(quoteQty);
+      } else if (tx.type === 'deposit' || tx.type === 'withdrawal') {
+        amount = tx.amount;
+        amountDisplay = currencyFormatter.format(tx.amount);
+      }
+
+      const timestamp = tx.type === 'trade' ? tx.executedAt : tx.timestamp;
+
       return {
         id: tx.id,
         type,
@@ -75,9 +92,26 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
         time,
         out: outTx,
         in: inTx,
+        amount,
+        amountDisplay,
+        timestamp,
       };
     });
   }, [transactions]);
+
+  // Appliquer le tri
+  const sortedTransactions = React.useMemo(() => {
+    const sorted = [...mappedTransactions];
+    sorted.sort((a, b) => {
+      const diff = b.timestamp - a.timestamp;
+      return sortOrder === 'asc' ? -diff : diff;
+    });
+    return sorted;
+  }, [mappedTransactions, sortOrder]);
+
+  const toggleDateSort = () => {
+    setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#f8f9fc] font-sans rounded-xl overflow-hidden border border-[#d4d8e1]">
@@ -138,7 +172,7 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
             <div className="flex h-64 items-center justify-center">
                 <LoaderCircle className="w-8 h-8 animate-spin text-[#503bff]" />
             </div>
-        ) : mappedTransactions.length === 0 ? (
+        ) : sortedTransactions.length === 0 ? (
             <div className="flex h-64 items-center justify-center text-[#808594] text-sm">
                 Aucune transaction trouvée.
             </div>
@@ -149,7 +183,15 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
               <th className="w-12 px-4 py-2 bg-white"><Checkbox className="border-[#d4d8e1] data-[state=checked]:bg-[#503bff] data-[state=checked]:border-[#503bff]" /></th>
               <th className="w-10 px-2 py-2 bg-white"></th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Type de transaction</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Date</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">
+                <button
+                  onClick={toggleDateSort}
+                  className="flex items-center gap-1.5 hover:text-[#503bff] transition-colors"
+                >
+                  Date
+                  <ArrowUpDown className="w-3.5 h-3.5 opacity-60" />
+                </button>
+              </th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Sortie</th>
               <th className="w-10 px-2 py-2 bg-white"></th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Entrée</th>
@@ -157,7 +199,7 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
             </tr>
           </thead>
           <tbody>
-            {mappedTransactions.map((tx) => (
+            {sortedTransactions.map((tx) => (
               <tr key={tx.id} className="border-b border-[#d4d8e1] hover:bg-[#eff0f3] group cursor-pointer h-[52px] transition-colors">
                 <td className="px-4 py-2"><Checkbox className="border-[#d4d8e1] data-[state=checked]:bg-[#503bff] data-[state=checked]:border-[#503bff]" /></td>
                 <td className="px-2 py-2">
@@ -215,7 +257,9 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-2"></td>
+                <td className="px-4 py-2 text-right">
+                  <span className="text-sm font-medium text-[#1e2029]">{tx.amountDisplay}</span>
+                </td>
               </tr>
             ))}
           </tbody>
