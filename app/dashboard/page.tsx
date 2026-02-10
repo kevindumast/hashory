@@ -1,6 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import { DashboardContent } from "./components/dashboard-content";
+import { DashboardContent } from "@/components/dashboard/dashboard-content";
 
 export default async function DashboardPage() {
   const { userId } = await auth();
@@ -13,5 +13,3 @@ export default async function DashboardPage() {
 
   return <DashboardContent userName={user?.firstName ?? user?.username ?? null} />;
 }
-
-
