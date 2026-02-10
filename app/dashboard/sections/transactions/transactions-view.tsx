@@ -268,7 +268,8 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Sortie</th>
               <th className="w-10 px-2 py-2 bg-white"></th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Entrée</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant USD</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant EUR</th>
             </tr>
           </thead>
           <tbody>
@@ -332,6 +333,11 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
                 </td>
                 <td className="px-4 py-2 text-right">
                   <span className="text-sm font-medium text-[#1e2029]">{tx.amountDisplay}</span>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <span className="text-sm font-medium text-[#1e2029]">
+                    {tx.amount > 0 ? `€${(tx.amount * 0.92).toFixed(2)}` : "-"}
+                  </span>
                 </td>
               </tr>
             ))}
