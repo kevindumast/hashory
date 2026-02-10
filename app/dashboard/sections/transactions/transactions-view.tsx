@@ -32,7 +32,7 @@ interface TransactionsViewProps {
 export function TransactionsView({ transactions, isLoading }: TransactionsViewProps) {
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 100;
 
   // Transformation des données pour l'affichage
   const mappedTransactions = React.useMemo(() => {
