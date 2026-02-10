@@ -212,7 +212,8 @@ export function DashboardNewLayout({
                 <thead>
                   <tr className="border-b border-border/40">
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Jeton</th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix/achat</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix d'achat moyen</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix actuel</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">24h</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">7 jours</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Valeur</th>
@@ -220,18 +221,24 @@ export function DashboardNewLayout({
                   </tr>
                 </thead>
                 <tbody>
-                  {portfolioTokens.map((token) => (
-                    <tr key={token.symbol} className="border-b border-border/20 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-4 font-medium">{token.symbol}</td>
-                      <td className="text-right py-3 px-4 text-muted-foreground">-</td>
-                      <td className="text-right py-3 px-4 text-muted-foreground">-</td>
-                      <td className="text-right py-3 px-4 text-muted-foreground">-</td>
-                      <td className="text-right py-3 px-4 font-medium">{currencyFormatter.format(token.investedUsd)}</td>
-                      <td className={`text-right py-3 px-4 font-medium ${token.netProfitUsd >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                        {currencyFormatter.format(token.netProfitUsd)}
-                      </td>
-                    </tr>
-                  ))}
+                  {portfolioTokens.map((token) => {
+                    const avgBuyPrice = token.averageBuyPrice ?? 0;
+                    return (
+                      <tr key={token.symbol} className="border-b border-border/20 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-4 font-medium">{token.symbol}</td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">
+                          {avgBuyPrice > 0 ? `$${avgBuyPrice.toFixed(2)}` : "-"}
+                        </td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">-</td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">-</td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">-</td>
+                        <td className="text-right py-3 px-4 font-medium">{currencyFormatter.format(token.investedUsd)}</td>
+                        <td className={`text-right py-3 px-4 font-medium ${token.netProfitUsd >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                          {currencyFormatter.format(token.netProfitUsd)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {portfolioTokens.length === 0 && (
