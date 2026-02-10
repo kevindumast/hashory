@@ -13,7 +13,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { currencyFormatter, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
-import { ArrowTrendingDown, ArrowTrendingUp } from "lucide-react";
+import { TrendingDown, TrendingUp } from "lucide-react";
 
 type AllocationEntry = {
   symbol: string;
@@ -60,9 +60,9 @@ export function DashboardNewLayout({
                   </div>
                   <div className={`flex items-center gap-1 pb-2 ${isPositive ? "text-emerald-500" : "text-red-500"}`}>
                     {isPositive ? (
-                      <ArrowTrendingUp className="w-5 h-5" />
+                      <TrendingUp className="w-5 h-5" />
                     ) : (
-                      <ArrowTrendingDown className="w-5 h-5" />
+                      <TrendingDown className="w-5 h-5" />
                     )}
                     <span className="text-lg font-semibold">{profitPercent.toFixed(2)}%</span>
                   </div>
