@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
-import { OverviewTab } from "@/app/dashboard/sections/overview/OverviewTab";
+import { DashboardNewLayout } from "@/app/dashboard/sections/overview/DashboardNewLayout";
 
 export function DashboardContent({ userName }: { userName: string | null }) {
   const [refreshToken, setRefreshToken] = useState(0);
@@ -33,10 +33,9 @@ export function DashboardContent({ userName }: { userName: string | null }) {
   return (
     <div className="p-6 md:p-9 space-y-6">
       <h1 className="text-2xl font-bold">Bonjour, {userName || "Investisseur"}</h1>
-      <OverviewTab
+      <DashboardNewLayout
         profitSummary={profitSummary}
         historySeries={historySeries}
-        performanceSeries={performanceSeries}
         allocation={allocation}
         totalVolume={totalVolume}
         portfolioTokens={portfolioTokens}
