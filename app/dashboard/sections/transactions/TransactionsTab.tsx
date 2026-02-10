@@ -2,19 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
-  Avatar,
-  AvatarFallback,
-} from "@/components/ui/avatar";
-import {
-  currencyFormatter,
-  numberFormatter,
-  priceFormatter,
-  dateFormatter,
   type TransactionEntry,
 } from "@/hooks/dashboard/useDashboardMetrics";
 import {
@@ -26,23 +15,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { LoaderCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { ArrowRight } from "lucide-react";
+import { TransactionsView } from "./transactions-view";
 
-const QUOTE_ASSETS = [
-  "USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI",
-  "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "AUD", "CAD", "BRL"
-];
-
-function extractQuoteAsset(symbol: string): string {
-  const upper = symbol.toUpperCase();
-  for (const quote of QUOTE_ASSETS) {
-    if (upper.endsWith(quote)) {
-      return quote;
-    }
-  }
-  return "UNKNOWN";
-}
 
 interface TransactionsTabProps {
   transactions: TransactionEntry[];
@@ -134,7 +108,9 @@ export function TransactionsTab({
   const visibleEntries = filteredTransactions.length;
 
   return (
-    <Card className="border-border/60 bg-card/80 backdrop-blur">
+    <div className="space-y-4">
+      {/* Filtres existants conservés mais stylisés pour s'intégrer */}
+      <Card className="border-border/60 bg-card/80 backdrop-blur">
       <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="space-y-1">
           <CardDescription>All exchanges</CardDescription>
@@ -212,58 +188,12 @@ export function TransactionsTab({
           <FilterDate label="From" value={startDate} onChange={setStartDate} />
           <FilterDate label="To" value={endDate} onChange={setEndDate} />
         </div>
-
-        <div className="overflow-hidden rounded-xl border border-border/60">
-          {isLoading ? (
-            <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-              Loading transactions...
-            </div>
-          ) : filteredTransactions.length === 0 ? (
-              <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                No transaction matches the current filters.
-            </div>
-          ) : (
-            <ScrollArea className="h-[520px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Exchange</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>From</TableHead>
-                    <TableHead>To</TableHead>
-                    <TableHead>Rate</TableHead>
-                    <TableHead>Details</TableHead>
-                    <TableHead className="text-right">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTransactions.map((entry) => (
-                    <TableRow key={`${entry.type}-${entry.id}`} className="text-sm">
-                      <TableCell>
-                        <div className="space-y-1">
-                          <p className="font-medium text-foreground">{entry.providerDisplayName}</p>
-                          {entry.type === "trade" && (
-                            <p className="text-[11px] text-muted-foreground">{entry.symbol}</p>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <TransactionBadge entry={entry} />
-                      </TableCell>
-                      <TableCell>{renderFromAsset(entry)}</TableCell>
-                      <TableCell>{renderToAsset(entry)}</TableCell>
-                      <TableCell>{renderRate(entry)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{renderDetails(entry)}</TableCell>
-                      <TableCell className="text-right">{renderDate(entry)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
-        </div>
       </CardContent>
     </Card>
+
+    {/* Nouvelle vue des transactions */}
+    <TransactionsView transactions={filteredTransactions} isLoading={isLoading} />
+    </div>
   );
 }
 
@@ -317,168 +247,4 @@ function FilterDate({
       />
     </div>
   );
-}
-
-function AssetAvatar({ symbol }: { symbol: string }) {
-  const initials = symbol.slice(0, 3).toUpperCase();
-  return (
-      <Avatar className="size-8 border border-border/60 bg-muted/60 text-[11px] font-semibold uppercase">
-      <AvatarFallback>{initials}</AvatarFallback>
-    </Avatar>
-  );
-}
-
-function TransactionBadge({ entry }: { entry: TransactionEntry }) {
-  if (entry.type === "trade") {
-    const isBuy = entry.side === "BUY";
-    return (
-      <Badge
-        variant="outline"
-        className={cn(
-          "rounded-full px-3 py-1 text-[11px] font-semibold",
-          isBuy ? "border-emerald-500/40 text-emerald-500" : "border-red-500/40 text-red-500"
-        )}
-      >
-        Trade - {isBuy ? "Buy" : "Sell"}
-      </Badge>
-    );
-  }
-  if (entry.type === "deposit") {
-    return (
-      <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] font-semibold text-emerald-500">
-        Deposit - Inbound
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] font-semibold text-red-500">
-      Withdrawal - Outbound
-    </Badge>
-  );
-}
-
-function renderFromAsset(entry: TransactionEntry) {
-  if (entry.type === "trade") {
-    const quoteAsset = extractQuoteAsset(entry.symbol);
-    const quoteQty = entry.quoteQuantity ?? entry.price * entry.quantity;
-
-    if (entry.side === "BUY") {
-      // BUY: dépense la quote currency
-      return (
-        <div className="flex items-center gap-2">
-          <AssetAvatar symbol={quoteAsset} />
-          <div className="space-y-0.5">
-            <p className="font-medium text-foreground">{numberFormatter.format(quoteQty)}</p>
-            <p className="text-[11px] text-muted-foreground">{quoteAsset}</p>
-          </div>
-        </div>
-      );
-    } else {
-      // SELL: vend la base currency
-      return (
-        <div className="flex items-center gap-2">
-          <AssetAvatar symbol={entry.baseAsset} />
-          <div className="space-y-0.5">
-            <p className="font-medium text-foreground">{numberFormatter.format(entry.quantity)}</p>
-            <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  if (entry.type === "withdrawal") {
-    return (
-      <div className="flex items-center gap-2">
-        <AssetAvatar symbol={entry.baseAsset} />
-        <div className="space-y-0.5">
-          <p className="font-medium text-foreground">{numberFormatter.format(entry.amount)}</p>
-          <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return <span className="text-muted-foreground">--</span>;
-}
-
-function renderToAsset(entry: TransactionEntry) {
-  if (entry.type === "trade") {
-    const quoteAsset = extractQuoteAsset(entry.symbol);
-    const quoteQty = entry.quoteQuantity ?? entry.price * entry.quantity;
-
-    if (entry.side === "BUY") {
-      // BUY: reçoit la base currency
-      return (
-        <div className="flex items-center gap-2">
-          <AssetAvatar symbol={entry.baseAsset} />
-          <div className="space-y-0.5">
-            <p className="font-medium text-foreground">{numberFormatter.format(entry.quantity)}</p>
-            <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
-          </div>
-        </div>
-      );
-    } else {
-      // SELL: reçoit la quote currency
-      return (
-        <div className="flex items-center gap-2">
-          <AssetAvatar symbol={quoteAsset} />
-          <div className="space-y-0.5">
-            <p className="font-medium text-foreground">{numberFormatter.format(quoteQty)}</p>
-            <p className="text-[11px] text-muted-foreground">{quoteAsset}</p>
-          </div>
-        </div>
-      );
-    }
-  }
-
-  if (entry.type === "deposit") {
-    return (
-      <div className="flex items-center gap-2">
-        <AssetAvatar symbol={entry.baseAsset} />
-        <div className="space-y-0.5">
-          <p className="font-medium text-foreground">{numberFormatter.format(entry.amount)}</p>
-          <p className="text-[11px] text-muted-foreground">{entry.baseAsset}</p>
-        </div>
-      </div>
-    );
-  }
-
-  return <span className="text-muted-foreground">--</span>;
-}
-
-function renderRate(entry: TransactionEntry) {
-  if (entry.type === "trade") {
-    const quoteAsset = extractQuoteAsset(entry.symbol);
-    return (
-      <div className="space-y-0.5">
-        <p className="font-medium text-foreground">{priceFormatter.format(entry.price)}</p>
-        <p className="text-[11px] text-muted-foreground">{quoteAsset}/{entry.baseAsset}</p>
-      </div>
-    );
-  }
-  return <span className="text-muted-foreground">--</span>;
-}
-
-function renderDetails(entry: TransactionEntry) {
-  if (entry.type === "trade") {
-    if (!entry.fee) {
-      return "No fee reported";
-    }
-    return `Fee ${numberFormatter.format(entry.fee)} ${entry.feeAsset ?? ""}`.trim();
-  }
-  if (entry.type === "deposit") {
-    return [entry.network ?? undefined, entry.status].filter(Boolean).join(" • ") || "Deposit";
-  }
-  return [
-    entry.network ?? undefined,
-    `Fee ${numberFormatter.format(entry.fee)}`
-  ]
-    .filter(Boolean)
-    .join(" • ");
-}
-
-function renderDate(entry: TransactionEntry) {
-  const timestamp = entry.type === "trade" ? entry.executedAt : entry.timestamp;
-  return dateFormatter.format(new Date(timestamp));
 }

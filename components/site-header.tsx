@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-const navLinks = [{ href: "/dashboard", label: "Dashboard" }];
+const navLinks = [
+  { href: "/pricing", label: "Tarifs" },
+  { href: "/dashboard", label: "Dashboard" },
+];
 
 const hiddenOnRoutes = ["/sign-in", "/sign-up", "/dashboard"];
 

@@ -13,3 +13,5 @@ export default async function DashboardPage() {
 
   return <DashboardContent userName={user?.firstName ?? user?.username ?? null} />;
 }
+
+
