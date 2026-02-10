@@ -31,6 +31,8 @@ interface TransactionsViewProps {
 
 export function TransactionsView({ transactions, isLoading }: TransactionsViewProps) {
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const itemsPerPage = 10;
 
   // Transformation des données pour l'affichage
   const mappedTransactions = React.useMemo(() => {
@@ -114,6 +116,24 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
 
+  // Calculer la pagination
+  const totalPages = Math.ceil(sortedTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedTransactions = sortedTransactions.slice(startIndex, startIndex + itemsPerPage);
+
+  const goToPreviousPage = () => {
+    setCurrentPage((prev) => Math.max(1, prev - 1));
+  };
+
+  const goToNextPage = () => {
+    setCurrentPage((prev) => Math.min(totalPages, prev + 1));
+  };
+
+  // Réinitialiser à la première page si le tri change
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [sortOrder]);
+
   const handleExport = () => {
     // Préparer les données pour l'export
     const exportData = sortedTransactions.map((tx) => ({
@@ -195,10 +215,26 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
         
         {/* Pagination simple */}
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-[#808594]">Page 1 sur 3</span>
+          <span className="text-[#808594]">Page {currentPage} sur {totalPages || 1}</span>
           <div className="flex items-center gap-1">
-             <Button variant="ghost" size="icon" className="h-8 w-8" disabled><ArrowRight className="w-4 h-4 rotate-180" /></Button>
-             <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowRight className="w-4 h-4" /></Button>
+             <Button
+               variant="ghost"
+               size="icon"
+               className="h-8 w-8"
+               disabled={currentPage === 1}
+               onClick={goToPreviousPage}
+             >
+               <ArrowRight className="w-4 h-4 rotate-180" />
+             </Button>
+             <Button
+               variant="ghost"
+               size="icon"
+               className="h-8 w-8"
+               disabled={currentPage === totalPages || totalPages === 0}
+               onClick={goToNextPage}
+             >
+               <ArrowRight className="w-4 h-4" />
+             </Button>
           </div>
         </div>
       </div>
@@ -236,7 +272,7 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
             </tr>
           </thead>
           <tbody>
-            {sortedTransactions.map((tx) => (
+            {paginatedTransactions.map((tx) => (
               <tr key={tx.id} className="border-b border-[#d4d8e1] hover:bg-[#eff0f3] group cursor-pointer h-[52px] transition-colors">
                 <td className="px-4 py-2"><Checkbox className="border-[#d4d8e1] data-[state=checked]:bg-[#503bff] data-[state=checked]:border-[#503bff]" /></td>
                 <td className="px-2 py-2">
