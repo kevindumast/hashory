@@ -25,7 +25,8 @@
       "Bash(npm uninstall cryptocurrency-icons)",
       "Bash(npm install cryptoicons)",
       "Bash(npm install github:Cryptofonts/cryptoicons)",
-      "Bash(curl -s \"https://api.github.com/repos/Cryptofonts/cryptoicons/contents/SVG\")"
+      "Bash(curl -s \"https://api.github.com/repos/Cryptofonts/cryptoicons/contents/SVG\")",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown } from "lucide-react"
+import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -113,6 +114,41 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
   };
 
+  const handleExport = () => {
+    // Préparer les données pour l'export
+    const exportData = sortedTransactions.map((tx) => ({
+      'Date': tx.date,
+      'Heure': tx.time,
+      'Type de transaction': tx.label,
+      'Sortie': tx.out ? `-${tx.out.amount} ${tx.out.currency}` : '',
+      'Plateforme Sortie': tx.out?.account || '',
+      'Entrée': tx.in ? `+${tx.in.amount} ${tx.in.currency}` : '',
+      'Plateforme Entrée': tx.in?.account || '',
+      'Montant': tx.amountDisplay,
+    }));
+
+    // Créer un workbook et une feuille
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+
+    // Ajuster la largeur des colonnes
+    ws['!cols'] = [
+      { wch: 12 }, // Date
+      { wch: 10 }, // Heure
+      { wch: 18 }, // Type
+      { wch: 20 }, // Sortie
+      { wch: 18 }, // Plateforme Sortie
+      { wch: 20 }, // Entrée
+      { wch: 18 }, // Plateforme Entrée
+      { wch: 15 }, // Montant
+    ];
+
+    // Générer le fichier
+    const filename = `transactions_${new Date().toISOString().split('T')[0]}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#f8f9fc] font-sans rounded-xl overflow-hidden border border-[#d4d8e1]">
       {/* Header Tabs & Actions */}
@@ -126,13 +162,14 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
 
         {/* Top Actions */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-[#d4d8e1] flex-1 justify-end bg-[#f8f9fc]">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             className="bg-white border-[#d4d8e1] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium shadow-sm"
+            onClick={handleExport}
           >
             <Download className="w-4 h-4 mr-2 text-[#1e2029]" />
             Exporter
-            <span className="ml-2 bg-[#f8f9fc] border border-[#d4d8e1] rounded-full px-2 py-0.5 text-xs text-[#3b414f]">{transactions.length}</span>
+            <span className="ml-2 bg-[#f8f9fc] border border-[#d4d8e1] rounded-full px-2 py-0.5 text-xs text-[#3b414f]">{sortedTransactions.length}</span>
           </Button>
           <Button className="bg-[#e0dcff] text-[#503bff] hover:bg-[#d0ccff] border-none h-9 text-sm font-medium shadow-none">
             <Plus className="w-4 h-4 mr-2" />
