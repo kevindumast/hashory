@@ -27,21 +27,11 @@ function extractQuoteAsset(symbol: string): string {
 interface TransactionsViewProps {
   transactions: TransactionEntry[];
   isLoading?: boolean;
-  symbolFilter?: string;
-  onSymbolFilterChange?: (value: string) => void;
-  availableSymbols?: string[];
 }
 
-export function TransactionsView({
-  transactions,
-  isLoading,
-  symbolFilter = "all",
-  onSymbolFilterChange,
-  availableSymbols = [],
-}: TransactionsViewProps) {
+export function TransactionsView({ transactions, isLoading }: TransactionsViewProps) {
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = React.useState(1);
-  const [showFilters, setShowFilters] = React.useState(false);
   const itemsPerPage = 100;
 
   // Transformation des données pour l'affichage
@@ -211,16 +201,10 @@ export function TransactionsView({
       {/* Filters Bar */}
       <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] sticky top-[56px] z-10">
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            onClick={() => setShowFilters(!showFilters)}
-            className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]"
-          >
+          <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
             <Filter className="w-4 h-4 mr-2" />
             Filtres
-            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
-              {symbolFilter !== "all" ? "1" : "0"}
-            </span>
+            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">1</span>
           </Button>
           <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
             <Eye className="w-4 h-4 mr-2" />
@@ -228,7 +212,7 @@ export function TransactionsView({
             <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
           </Button>
         </div>
-
+        
         {/* Pagination simple */}
         <div className="flex items-center gap-3 text-sm">
           <span className="text-[#808594]">Page {currentPage} sur {totalPages || 1}</span>
@@ -254,29 +238,6 @@ export function TransactionsView({
           </div>
         </div>
       </div>
-
-      {/* Filter Panel */}
-      {showFilters && (
-        <div className="px-5 py-4 bg-white border-b border-[#d4d8e1] sticky top-[112px] z-10">
-          <div className="flex items-center gap-4">
-            <div className="flex flex-col gap-1 flex-1">
-              <label className="text-xs font-medium text-[#808594] uppercase tracking-wider">Jeton</label>
-              <select
-                value={symbolFilter}
-                onChange={(e) => onSymbolFilterChange?.(e.target.value)}
-                className="h-9 px-3 rounded border border-[#d4d8e1] bg-white text-sm text-[#1e2029] hover:border-[#808594] focus:outline-none focus:ring-2 focus:ring-[#503bff]/20"
-              >
-                <option value="all">Tous les jetons</option>
-                {availableSymbols.map((symbol) => (
-                  <option key={symbol} value={symbol}>
-                    {symbol}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Table */}
       <div className="bg-white flex-1 overflow-auto">
