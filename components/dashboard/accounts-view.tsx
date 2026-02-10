@@ -37,7 +37,7 @@ import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 
 // Types pour les données
-type AccountStatus = "synced" | "error" | "unsupported"
+type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
 interface Account {
   id: string
@@ -75,6 +75,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
+  const [syncingAccountId, setSyncingAccountId] = React.useState<string | null>(null)
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
 
@@ -88,6 +89,13 @@ export function AccountsView() {
         ? new Date(integration.lastSyncedAt).toLocaleString("fr-FR")
         : "Jamais"
 
+      const isSyncing = syncingAccountId === integration._id
+      const status: AccountStatus = isSyncing
+        ? "syncing"
+        : integrationTransactions.length > 0
+          ? ("synced" as AccountStatus)
+          : ("synced" as AccountStatus)
+
       return {
         id: integration._id,
         name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider,
@@ -98,14 +106,23 @@ export function AccountsView() {
         addressOrId: integration.displayName || integration.provider,
         transactionCount: integrationTransactions.length,
         lastSync,
-        status: integrationTransactions.length > 0 ? ("synced" as AccountStatus) : ("synced" as AccountStatus),
+        status,
       }
     })
-  }, [integrations, transactions])
+  }, [integrations, transactions, syncingAccountId])
 
   const handleRefresh = React.useCallback(() => {
     setRefreshToken((prev) => prev + 1)
   }, [])
+
+  const handleSyncAccount = React.useCallback((accountId: string) => {
+    setSyncingAccountId(accountId)
+    // Simulate sync duration (2 seconds)
+    setTimeout(() => {
+      setSyncingAccountId(null)
+      handleRefresh()
+    }, 2000)
+  }, [handleRefresh])
 
   const isLoading = integrationsLoading || transactionsLoading
 
@@ -235,8 +252,9 @@ export function AccountsView() {
                             <span className="text-sm font-medium">Renommer</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleRefresh()}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] flex items-center justify-between"
+                            onClick={() => handleSyncAccount(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] flex items-center justify-between disabled:opacity-50"
                           >
                             <span className="text-sm font-medium">Synchroniser</span>
                             <span className="text-xs text-[#808594]">(0 restante)</span>
@@ -288,6 +306,14 @@ function StatusBadge({ status, showText }: { status: AccountStatus, showText?: b
       <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#d8fff0]">
         <Check className="w-3.5 h-3.5 text-[#00492f]" />
         {showText && <span className="text-[13px] font-medium text-[#00492f]">Synchronisé</span>}
+      </div>
+    )
+  }
+  if (status === 'syncing') {
+    return (
+      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#fff3cd]">
+        <RefreshCw className="w-3.5 h-3.5 text-[#856404] animate-spin" />
+        {showText && <span className="text-[13px] font-medium text-[#856404]">Synchronisation</span>}
       </div>
     )
   }
