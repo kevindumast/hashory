@@ -35,6 +35,9 @@ import {
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
+import { useMutation } from "convex/react"
+import { api } from "@/convex/_generated/api"
+import { isConvexConfigured } from "@/convex/client"
 
 // Types pour les données
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
@@ -78,6 +81,7 @@ export function AccountsView() {
   const [syncingAccountId, setSyncingAccountId] = React.useState<string | null>(null)
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
+  const resetAllCursors = useMutation(api.resetCursors.resetAllCursors)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -115,14 +119,25 @@ export function AccountsView() {
     setRefreshToken((prev) => prev + 1)
   }, [])
 
-  const handleSyncAccount = React.useCallback((accountId: string) => {
+  const handleSyncAccount = React.useCallback(async (accountId: string) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
     setSyncingAccountId(accountId)
-    // Simulate sync duration (2 seconds)
-    setTimeout(() => {
-      setSyncingAccountId(null)
+    try {
+      // Cast the account ID to the proper Convex ID type
+      await resetAllCursors({ integrationId: accountId as any })
+      // Wait a brief moment before refreshing to allow the sync to start
+      await new Promise((resolve) => setTimeout(resolve, 1000))
       handleRefresh()
-    }, 2000)
-  }, [handleRefresh])
+    } catch (error) {
+      console.error("Failed to sync account:", error)
+    } finally {
+      setSyncingAccountId(null)
+    }
+  }, [handleRefresh, resetAllCursors])
 
   const isLoading = integrationsLoading || transactionsLoading
 
