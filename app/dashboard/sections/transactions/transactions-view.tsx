@@ -1,11 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown } from "lucide-react"
+import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown, X } from "lucide-react"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog"
 import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 
 // Helper pour extraire le quote asset (réutilisé de votre logique existante)
@@ -27,11 +34,22 @@ function extractQuoteAsset(symbol: string): string {
 interface TransactionsViewProps {
   transactions: TransactionEntry[];
   isLoading?: boolean;
+  symbolFilter?: string;
+  onSymbolFilterChange?: (value: string) => void;
+  availableSymbols?: string[];
 }
 
-export function TransactionsView({ transactions, isLoading }: TransactionsViewProps) {
+export function TransactionsView({
+  transactions,
+  isLoading,
+  symbolFilter = "all",
+  onSymbolFilterChange,
+  availableSymbols = [],
+}: TransactionsViewProps) {
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
+  const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
   const itemsPerPage = 100;
 
   // Transformation des données pour l'affichage
@@ -201,10 +219,19 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
       {/* Filters Bar */}
       <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] sticky top-[56px] z-10">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setTempSymbolFilter(symbolFilter);
+              setIsFilterDialogOpen(true);
+            }}
+            className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]"
+          >
             <Filter className="w-4 h-4 mr-2" />
             Filtres
-            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">1</span>
+            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
+              {symbolFilter !== "all" ? "1" : "0"}
+            </span>
           </Button>
           <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
             <Eye className="w-4 h-4 mr-2" />
@@ -345,6 +372,69 @@ export function TransactionsView({ transactions, isLoading }: TransactionsViewPr
         </table>
         )}
       </div>
+
+      {/* Filters Modal Dialog */}
+      <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+        <DialogContent className="sm:max-w-[500px] bg-white">
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-xl font-bold text-[#1e2029]">Filtres</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6">
+            {/* Filter Section - Jeton */}
+            <div className="space-y-3">
+              <label className="text-xs font-medium text-[#808594] uppercase tracking-wider">Jeton</label>
+              <select
+                value={tempSymbolFilter}
+                onChange={(e) => setTempSymbolFilter(e.target.value)}
+                className="w-full h-10 px-3 rounded border border-[#d4d8e1] bg-white text-sm text-[#1e2029] hover:border-[#808594] focus:outline-none focus:ring-2 focus:ring-[#503bff]/20"
+              >
+                <option value="all">Tous les jetons</option>
+                {availableSymbols.map((symbol) => (
+                  <option key={symbol} value={symbol}>
+                    {symbol}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="my-6 h-px bg-[#d4d8e1]" />
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-2">
+            <button
+              onClick={() => {
+                setTempSymbolFilter("all");
+                onSymbolFilterChange?.("all");
+                setIsFilterDialogOpen(false);
+              }}
+              className="text-sm font-medium text-[#503bff] hover:text-[#402fd0] transition-colors"
+            >
+              Effacer les filtres
+            </button>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setIsFilterDialogOpen(false)}
+                className="bg-white border-[#d4d8e1] text-[#1e2029] hover:bg-[#f8f9fc]"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={() => {
+                  onSymbolFilterChange?.(tempSymbolFilter);
+                  setIsFilterDialogOpen(false);
+                }}
+                className="bg-[#503bff] hover:bg-[#402fd0] text-white"
+              >
+                Appliquer
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

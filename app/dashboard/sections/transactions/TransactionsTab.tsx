@@ -85,7 +85,18 @@ export function TransactionsTab({
     });
   }, [directionFilter, endDate, providerFilter, startDate, symbolFilter, transactions, typeFilter]);
 
+  // Extract unique symbols from transactions for filter dropdown
+  const availableSymbols = Array.from(
+    new Set(transactions.map(tx => tx.baseAsset).filter(Boolean))
+  ).sort();
+
   return (
-    <TransactionsView transactions={filteredTransactions} isLoading={isLoading} />
+    <TransactionsView
+      transactions={filteredTransactions}
+      isLoading={isLoading}
+      symbolFilter={symbolFilter}
+      onSymbolFilterChange={setSymbolFilter}
+      availableSymbols={availableSymbols}
+    />
   );
 }
