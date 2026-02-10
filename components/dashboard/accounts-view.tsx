@@ -35,7 +35,7 @@ import {
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
-import { useMutation } from "convex/react"
+import { useAction } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
 
@@ -81,7 +81,7 @@ export function AccountsView() {
   const [syncingAccountId, setSyncingAccountId] = React.useState<string | null>(null)
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
-  const resetAllCursors = useMutation(api.resetCursors.resetAllCursors)
+  const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
