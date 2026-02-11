@@ -33,6 +33,9 @@ const PREFERRED_QUOTES = new Set([
   "BRL",
 ]);
 
+// Force TAO to always be synchronized
+const FORCED_SYMBOLS = ["TAOUSDT", "TAOUSDC"];
+
 const DEFAULT_SYMBOLS = [
   // Top spot market pairs
   "BTCUSDT",
@@ -116,7 +119,7 @@ const DEFAULT_SYMBOLS = [
 const HISTORY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 const CONVERT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 const FIAT_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
-const MAX_HISTORY_ITERATIONS = 10; // Ultra réduit pour éviter timeout Convex (600s) et rate limits
+const MAX_HISTORY_ITERATIONS = 50; // Increased to cover ~4.5 years of history per symbol (50 * 90 days)
 const MAX_EMPTY_WINDOWS = 3;
 
 // Delays between requests (in milliseconds)
@@ -547,6 +550,14 @@ async function detectSymbols(
   const symbolSet = new Set(symbols.map((symbol) => symbol.toUpperCase()));
 
   DEFAULT_SYMBOLS.forEach((symbol) => {
+    const upper = symbol.toUpperCase();
+    if (symbolCatalog.has(upper)) {
+      symbolSet.add(upper);
+    }
+  });
+
+  // Ensure forced symbols are always included (TAO, etc.)
+  FORCED_SYMBOLS.forEach((symbol) => {
     const upper = symbol.toUpperCase();
     if (symbolCatalog.has(upper)) {
       symbolSet.add(upper);

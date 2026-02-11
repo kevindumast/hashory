@@ -82,6 +82,7 @@ export function AccountsView() {
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
+  const syncAccount = useAction(api.binance.syncAccount)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -128,8 +129,17 @@ export function AccountsView() {
     setSyncingAccountId(accountId)
     try {
       // Cast the account ID to the proper Convex ID type
-      await resetAllCursors({ integrationId: accountId as any })
-      // Wait a brief moment before refreshing to allow the sync to start
+      const id = accountId as any
+
+      // First reset all cursors to force re-sync from the beginning
+      await resetAllCursors({ integrationId: id })
+      console.log("✓ Cursors reset, now starting data sync...")
+
+      // Then call syncAccount to fetch the actual data
+      await syncAccount({ integrationId: id })
+      console.log("✓ Sync completed")
+
+      // Wait a brief moment before refreshing
       await new Promise((resolve) => setTimeout(resolve, 1000))
       handleRefresh()
     } catch (error) {
@@ -137,7 +147,7 @@ export function AccountsView() {
     } finally {
       setSyncingAccountId(null)
     }
-  }, [handleRefresh, resetAllCursors])
+  }, [handleRefresh, resetAllCursors, syncAccount])
 
   const isLoading = integrationsLoading || transactionsLoading
 
