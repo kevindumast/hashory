@@ -47,56 +47,12 @@ import {
 } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
 import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
+import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
 
-// Mapping of common symbols to CoinMarketCap IDs
-// Add more as needed - format: symbol -> CMC ID
-const CMC_ID_MAP: Record<string, number> = {
-  "BTC": 1,
-  "ETH": 1027,
-  "USDT": 825,
-  "BNB": 1839,
-  "XRP": 52,
-  "SOL": 5426,
-  "ADA": 2010,
-  "DOGE": 74,
-  "MATIC": 3890,
-  "DOT": 6636,
-  "LINK": 1975,
-  "AVAX": 5805,
-  "ATOM": 3794,
-  "THETA": 2416,
-  "FIL": 2280,
-  "INJ": 7226,
-  "ANKR": 3897,
-  "TAO": 2620,
-  "ONDO": 21564,
-  "AEVO": 28145,
-  "FET": 14855,
-  "GRT": 4943,
-  "STRK": 21575,
-  "RENDER": 7848,
-  "KAS": 12727,
-  "MORPHO": 34104,
-};
-
-function getCryptoIconUrl(symbol: string): string {
-  const upperSymbol = symbol.toUpperCase();
-  const cmcId = CMC_ID_MAP[upperSymbol];
-
-  // Priority order:
-  // 1. CoinMarketCap CDN (highest quality, 64x64)
-  if (cmcId) {
-    return `https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`;
-  }
-
-  // 2. Cryptoicons.co CDN as fallback
-  return `https://cryptoicons.co/${upperSymbol.toLowerCase()}.svg`;
-
-  // Note: Local icons at /crypto-icons/{symbol}.svg available as last resort if needed
-}
+// getCryptoIconUrl is now provided by useCmcTokenMap hook
 
 function buildPriceSymbolCandidates(token: PortfolioToken): string[] {
   const candidates = new Set<string>();
@@ -196,6 +152,13 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const { getCmcIconUrl } = useCmcTokenMap();
+
+  const getCryptoIconUrl = (symbol: string): string => {
+    const cmcUrl = getCmcIconUrl(symbol);
+    if (cmcUrl) return cmcUrl;
+    return `https://cryptoicons.co/${symbol.toLowerCase()}.svg`;
+  };
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {

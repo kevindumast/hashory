@@ -117,6 +117,40 @@ export default defineSchema({
   })
     .index("by_integration", ["integrationId"])
     .index("by_integration_withdraw", ["integrationId", "withdrawId"]),
+  fiatTransactions: defineTable({
+    integrationId: v.id("integrations"),
+    orderId: v.string(),
+    source: v.union(v.literal("fiat_orders"), v.literal("fiat_payments")),
+    txType: v.union(v.literal("0"), v.literal("1")),
+    fiatCurrency: v.string(),
+    fiatAmount: v.number(),
+    cryptoCurrency: v.optional(v.string()),
+    cryptoAmount: v.optional(v.number()),
+    price: v.optional(v.number()),
+    fee: v.optional(v.number()),
+    method: v.optional(v.string()),
+    status: v.string(),
+    createTime: v.number(),
+    updateTime: v.number(),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_order", ["integrationId", "orderId"]),
+  cmcTokenMap: defineTable({
+    symbol: v.string(),
+    cmcId: v.optional(v.number()),
+    iconUrl: v.optional(v.string()),
+    name: v.string(),
+    slug: v.string(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_symbol", ["symbol"]),
+  binanceDepositAddresses: defineTable({
+    coin: v.string(),
+    address: v.string(),
+    network: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_coin", ["coin"]),
   spotTradesSyncQueue: defineTable({
     integrationId: v.id("integrations"),
     symbols: v.array(v.string()),

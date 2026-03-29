@@ -274,6 +274,13 @@ export function useDashboardMetrics(refreshToken: number) {
       : "skip"
   );
 
+  const fiatTransactions = useQuery(
+    api.fiatTransactions.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id }
+      : "skip"
+  );
+
   const syncScopes = useQuery(
     api.integrations.listSyncScopes,
     isConvexConfigured && isLoaded && user
@@ -301,6 +308,11 @@ export function useDashboardMetrics(refreshToken: number) {
     }
     return [...withdrawals].sort((a, b) => b.applyTime - a.applyTime);
   }, [withdrawals]);
+
+  const fiatList = useMemo(() => {
+    if (!Array.isArray(fiatTransactions)) return [];
+    return fiatTransactions;
+  }, [fiatTransactions]);
 
   const syncScopeList = useMemo<SyncScopeRecord[]>(() => {
     if (!Array.isArray(syncScopes)) {
@@ -527,6 +539,67 @@ export function useDashboardMetrics(refreshToken: number) {
       });
     });
 
+    fiatList.forEach((fiat) => {
+      const hasCrypto = fiat.cryptoCurrency && fiat.cryptoAmount && fiat.cryptoAmount > 0;
+
+      if (hasCrypto) {
+        // Échange fiat → crypto (ex: Apple Pay EUR → USDC)
+        const isBuy = fiat.txType === "0";
+        const cryptoCurrency = fiat.cryptoCurrency!;
+        const symbol = `${cryptoCurrency}${fiat.fiatCurrency.toUpperCase()}`;
+        const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / fiat.cryptoAmount : 0;
+        entries.push({
+          type: "trade",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          symbol,
+          baseAsset: cryptoCurrency,
+          side: isBuy ? "BUY" : "SELL",
+          quantity: fiat.cryptoAmount,
+          price,
+          quoteQuantity: fiat.fiatAmount,
+          fee: fiat.fee ?? undefined,
+          feeAsset: fiat.fiatCurrency.toUpperCase(),
+          executedAt: fiat.updateTime,
+        });
+      } else if (fiat.txType === "0") {
+        // Dépôt fiat pur (virement bancaire EUR)
+        entries.push({
+          type: "deposit",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          baseAsset: fiat.fiatCurrency.toUpperCase(),
+          amount: fiat.fiatAmount,
+          network: fiat.method ?? null,
+          status: fiat.status,
+          timestamp: fiat.updateTime,
+          txId: null,
+          direction: "IN",
+        });
+      } else {
+        // Retrait fiat pur
+        entries.push({
+          type: "withdrawal",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          baseAsset: fiat.fiatCurrency.toUpperCase(),
+          amount: fiat.fiatAmount,
+          network: fiat.method ?? null,
+          status: fiat.status,
+          timestamp: fiat.updateTime,
+          txId: null,
+          fee: fiat.fee ?? 0,
+          direction: "OUT",
+        });
+      }
+    });
+
     return entries.sort((a, b) => {
       const getTime = (entry: TransactionEntry) => {
         if (entry.type === "trade") {
@@ -536,7 +609,7 @@ export function useDashboardMetrics(refreshToken: number) {
       };
       return getTime(b) - getTime(a);
     });
-  }, [depositList, tradesList, withdrawalList]);
+  }, [depositList, fiatList, tradesList, withdrawalList]);
 
   const portfolioTokens = useMemo<PortfolioToken[]>(() => {
     const map = new Map<string, {
