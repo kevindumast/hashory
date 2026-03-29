@@ -83,6 +83,7 @@ export function AccountsView() {
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
+  const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -148,6 +149,26 @@ export function AccountsView() {
       setSyncingAccountId(null)
     }
   }, [handleRefresh, resetAllCursors, syncAccount])
+
+  const handleSyncFiatOnly = React.useCallback(async (accountId: string) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    setSyncingAccountId(accountId)
+    try {
+      const id = accountId as any
+      await syncFiatOnly({ integrationId: id })
+      console.log("✓ Fiat sync completed")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to sync fiat:", error)
+    } finally {
+      setSyncingAccountId(null)
+    }
+  }, [handleRefresh, syncFiatOnly])
 
   const isLoading = integrationsLoading || transactionsLoading
 
@@ -283,6 +304,13 @@ export function AccountsView() {
                           >
                             <span className="text-sm font-medium">Synchroniser</span>
                             <span className="text-xs text-[#808594]">(0 restante)</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncFiatOnly(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                          >
+                            <span className="text-sm font-medium">Sync Fiat uniquement</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
                             <span className="text-sm font-medium">Mettre à jour l'API</span>

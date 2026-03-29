@@ -212,6 +212,7 @@ export function DashboardNewLayout({
                 <thead>
                   <tr className="border-b border-border/40">
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Jeton</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Quantité</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix d'achat moyen</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix actuel</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">24h</th>
@@ -226,6 +227,9 @@ export function DashboardNewLayout({
                     return (
                       <tr key={token.symbol} className="border-b border-border/20 hover:bg-muted/50 transition-colors">
                         <td className="py-3 px-4 font-medium">{token.symbol}</td>
+                        <td className="text-right py-3 px-4 text-muted-foreground">
+                          {token.currentQuantity > 0 ? token.currentQuantity.toLocaleString(undefined, { maximumFractionDigits: 6 }) : "-"}
+                        </td>
                         <td className="text-right py-3 px-4 text-muted-foreground">
                           {avgBuyPrice > 0 ? `$${avgBuyPrice.toFixed(2)}` : "-"}
                         </td>

@@ -4,6 +4,7 @@ import * as React from "react"
 import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown, X } from "lucide-react"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
+import { useCmcTokenMap } from "@/hooks/useCmcTokenMap"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -50,6 +51,7 @@ export function TransactionsView({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
   const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
+  const { getCmcIconUrl } = useCmcTokenMap();
   const itemsPerPage = 100;
 
   // Transformation des données pour l'affichage
@@ -70,24 +72,24 @@ export function TransactionsView({
         label = "Échange";
         const quoteAsset = extractQuoteAsset(tx.symbol);
         const quoteQty = tx.quoteQuantity ?? (tx.price * tx.quantity);
-        
+
         if (tx.side === 'BUY') {
             // Achat: Sortie Quote -> Entrée Base
-            outTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName };
-            inTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName };
+            outTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
         } else {
             // Vente: Sortie Base -> Entrée Quote
-            outTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName };
-            inTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName };
+            outTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
         }
       } else if (tx.type === 'deposit') {
         type = 'deposit';
         label = "Entrée";
-        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName };
+        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
       } else if (tx.type === 'withdrawal') {
         type = 'withdrawal';
         label = "Sortie";
-        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName };
+        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
       }
 
       // Calculer le montant pour tri et affichage
@@ -105,6 +107,14 @@ export function TransactionsView({
 
       const timestamp = tx.type === 'trade' ? tx.executedAt : tx.timestamp;
 
+      // Get provider icon based on provider name
+      const getProviderIcon = (provider: string) => {
+        if (provider.toLowerCase().includes('binance')) {
+          return '🟡'; // Binance yellow
+        }
+        return '⚪'; // Default white
+      };
+
       return {
         id: tx.id,
         type,
@@ -116,6 +126,8 @@ export function TransactionsView({
         amount,
         amountDisplay,
         timestamp,
+        provider: tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName),
+        providerIcon: getProviderIcon(tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName)),
       };
     });
   }, [transactions]);
@@ -329,14 +341,24 @@ export function TransactionsView({
                 </td>
                 <td className="px-4 py-2">
                   {tx.out && (
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="bg-[#eff0f3] rounded px-2 py-0.5 flex items-center gap-1.5 h-[22px]">
-                         <div className="w-4 h-4 rounded-full bg-gray-300 shrink-0"></div>
-                         <span className="text-sm font-medium text-[#3b414f] whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 ml-1">
-                         <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]"></div> {/* Binance yellow */}
-                         <span className="text-[11px] text-[#808594]">{tx.out.account}</span>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={getCmcIconUrl(tx.out.currency) ?? `https://assets.coincap.io/assets/icons/${tx.out.currency.toLowerCase()}@2x.png`}
+                        alt={tx.out.currency}
+                        width={32}
+                        height={32}
+                        className="rounded-full shrink-0 object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
+                          <span className="text-[11px] text-[#808594]">{tx.out.account}</span>
+                        </div>
+                        {tx.out.address && (
+                          <span className="text-[10px] text-[#808594] font-mono">{tx.out.address.slice(0, 20)}...</span>
+                        )}
                       </div>
                     </div>
                   )}
@@ -346,14 +368,24 @@ export function TransactionsView({
                 </td>
                 <td className="px-4 py-2">
                   {tx.in && (
-                    <div className="flex flex-col items-start gap-1">
-                      <div className="bg-[#d8fff0] rounded px-2 py-0.5 flex items-center gap-1.5 h-[22px]">
-                         <div className="w-4 h-4 rounded-full bg-gray-300 shrink-0"></div>
-                         <span className="text-sm font-medium text-[#00492f] whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 ml-1">
-                         <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]"></div>
-                         <span className="text-[11px] text-[#808594]">{tx.in.account}</span>
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={getCmcIconUrl(tx.in.currency) ?? `https://assets.coincap.io/assets/icons/${tx.in.currency.toLowerCase()}@2x.png`}
+                        alt={tx.in.currency}
+                        width={32}
+                        height={32}
+                        className="rounded-full shrink-0 object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                      />
+                      <div className="flex flex-col gap-1">
+                        <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
+                          <span className="text-[11px] text-[#808594]">{tx.in.account}</span>
+                        </div>
+                        {tx.in.address && (
+                          <span className="text-[10px] text-[#808594] font-mono">{tx.in.address.slice(0, 20)}...</span>
+                        )}
                       </div>
                     </div>
                   )}

@@ -26,7 +26,15 @@
       "Bash(npm install cryptoicons)",
       "Bash(npm install github:Cryptofonts/cryptoicons)",
       "Bash(curl -s \"https://api.github.com/repos/Cryptofonts/cryptoicons/contents/SVG\")",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(grep:*)",
+      "Bash(/tmp/cleanup.sed << 'EOF'\n# Remove console.log lines with these patterns that appear in loops\n/console.log.*Fetching.*window:/d\n/console.log.*Empty window/d\n/console.log.*Waiting.*ms before next/d\n/console.log.*Received.*from API/d\n/console.log.*Normalized.*trades.*\\\\|.*Normalized.*orders.*\\\\|.*Normalized.*deposits.*\\\\|.*Normalized.*withdrawals/d\n/console.log.*Inserted.*new.*duplicates/d\n/console.log.*No valid.*after normalization/d\n/console.log.*No new.*found/d\n/console.log.*Got.*total.*in window/d\n/console.log.*Reached.*history/d\n/console.log.*Reached.*beginning.*of timeline/d\n/console.log.*Reached current time/d\n/console.log.*Reached end of/d\nEOF)",
+      "Bash(__NEW_LINE_3696e2e3393d796d__ wc -l /tmp/cleanup.sed)",
+      "Bash(/tmp/cleanup2.sed << 'EOF'\n# Remove per-symbol/per-item logs in loops\n/console.log.*Fetching.*trades retrieved so far/d\nEOF)",
+      "Bash(__NEW_LINE_a578bc41d2c30646__ sed -f /tmp/cleanup2.sed /tmp/binance_cleaned.ts)",
+      "Bash(/tmp/cleanup3.sed << 'EOF'\n# Remove more per-window logs\n/console.log.*Fetched.*from.*toISOString/d\nEOF)",
+      "Bash(__NEW_LINE_05e5e521ffde4d3c__ sed -f /tmp/cleanup3.sed /tmp/binance_cleaned2.ts)",
+      "Bash(__NEW_LINE_ff06b324a5dc4583__ echo \"Before cleanup:\")"
     ],
     "deny": [],
     "ask": []
