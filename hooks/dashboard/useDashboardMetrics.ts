@@ -540,7 +540,32 @@ export function useDashboardMetrics(refreshToken: number) {
     });
 
     fiatList.forEach((fiat) => {
-      if (fiat.txType === "0") {
+      const hasCrypto = fiat.cryptoCurrency && fiat.cryptoAmount && fiat.cryptoAmount > 0;
+
+      if (hasCrypto) {
+        // Échange fiat → crypto (ex: Apple Pay EUR → USDC)
+        const isBuy = fiat.txType === "0";
+        const cryptoCurrency = fiat.cryptoCurrency!;
+        const symbol = `${cryptoCurrency}${fiat.fiatCurrency.toUpperCase()}`;
+        const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / fiat.cryptoAmount : 0;
+        entries.push({
+          type: "trade",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          symbol,
+          baseAsset: cryptoCurrency,
+          side: isBuy ? "BUY" : "SELL",
+          quantity: fiat.cryptoAmount,
+          price,
+          quoteQuantity: fiat.fiatAmount,
+          fee: fiat.fee ?? undefined,
+          feeAsset: fiat.fiatCurrency.toUpperCase(),
+          executedAt: fiat.updateTime,
+        });
+      } else if (fiat.txType === "0") {
+        // Dépôt fiat pur (virement bancaire EUR)
         entries.push({
           type: "deposit",
           id: fiat._id,
@@ -556,6 +581,7 @@ export function useDashboardMetrics(refreshToken: number) {
           direction: "IN",
         });
       } else {
+        // Retrait fiat pur
         entries.push({
           type: "withdrawal",
           id: fiat._id,
