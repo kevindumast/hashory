@@ -64,8 +64,9 @@ export function TransactionsView({
       
       let label = "Transaction";
       let type: "trade" | "deposit" | "withdrawal" = "trade";
-      let outTx = undefined;
-      let inTx = undefined;
+      type TxDisplay = { amount: string; currency: string; account: string; address?: string };
+      let outTx: TxDisplay | undefined = undefined;
+      let inTx: TxDisplay | undefined = undefined;
 
       if (tx.type === 'trade') {
         type = 'trade';
@@ -85,11 +86,11 @@ export function TransactionsView({
       } else if (tx.type === 'deposit') {
         type = 'deposit';
         label = "Entrée";
-        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
+        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       } else if (tx.type === 'withdrawal') {
         type = 'withdrawal';
         label = "Sortie";
-        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
+        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       }
 
       // Calculer le montant pour tri et affichage

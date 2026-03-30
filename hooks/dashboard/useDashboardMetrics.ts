@@ -38,7 +38,7 @@ export type TradeRecord = {
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
-  tradeType?: "SPOT" | "CONVERT" | "FIAT";
+  tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
   symbol: string;
   side: "BUY" | "SELL";
   quantity: number;
@@ -546,8 +546,9 @@ export function useDashboardMetrics(refreshToken: number) {
         // Échange fiat → crypto (ex: Apple Pay EUR → USDC)
         const isBuy = fiat.txType === "0";
         const cryptoCurrency = fiat.cryptoCurrency!;
+        const cryptoAmount = fiat.cryptoAmount!;
         const symbol = `${cryptoCurrency}${fiat.fiatCurrency.toUpperCase()}`;
-        const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / fiat.cryptoAmount : 0;
+        const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / cryptoAmount : 0;
         entries.push({
           type: "trade",
           id: fiat._id,
@@ -557,7 +558,7 @@ export function useDashboardMetrics(refreshToken: number) {
           symbol,
           baseAsset: cryptoCurrency,
           side: isBuy ? "BUY" : "SELL",
-          quantity: fiat.cryptoAmount,
+          quantity: cryptoAmount,
           price,
           quoteQuantity: fiat.fiatAmount,
           fee: fiat.fee ?? undefined,
