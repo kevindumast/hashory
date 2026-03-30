@@ -310,7 +310,7 @@ export function AccountsView() {
                             <span className="text-sm font-medium">Sync Fiat uniquement</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
-                            <span className="text-sm font-medium">Mettre à jour l'API</span>
+                            <span className="text-sm font-medium">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-[#d4d8e1]" />
                           <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50">
