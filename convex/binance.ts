@@ -245,6 +245,29 @@ type BinanceFiatResponse = {
   message?: string;
 };
 
+// Dust conversion (small balances → BNB)
+type BinanceDribbletDetail = {
+  transId: number;
+  serviceChargeAmount: string;
+  amount: string;
+  operateTime: number;
+  transferedAmount: string;
+  fromAsset: string;
+};
+
+type BinanceDribbletEntry = {
+  operateTime: number;
+  totalTransferedAmount: string;
+  totalServiceChargeAmount: string;
+  transId: number;
+  userAssetDribbletDetails: BinanceDribbletDetail[];
+};
+
+type BinanceDribbletResponse = {
+  total: number;
+  userAssetDribblets: BinanceDribbletEntry[];
+};
+
 type BinanceBalance = {
   asset: string;
   free: string;
@@ -427,6 +450,16 @@ export const syncAccount = action({
       apiSecret: decryptedSecret,
     });
     console.log(`Convert trades: ${convertTrades.fetched} fetched, ${convertTrades.inserted} inserted`);
+
+    await sleep(DELAY_BETWEEN_SYNC_TYPES);
+
+    console.log("Starting dust conversion sync...");
+    const dustTrades = await syncDustConversions(ctx, {
+      integrationId: args.integrationId,
+      apiKey: decryptedKey,
+      apiSecret: decryptedSecret,
+    });
+    console.log(`Dust conversions: ${dustTrades.fetched} fetched, ${dustTrades.inserted} inserted`);
 
     const accountCreationFromApi = await fetchAccountCreationTime(decryptedKey, decryptedSecret);
     const earliestActivityCandidates = [
@@ -2224,6 +2257,116 @@ async function fetchWithdrawals(
     return [];
   }
   return response as WithdrawalRecord[];
+}
+
+async function fetchDustLog(
+  apiKey: string,
+  apiSecret: string,
+  startTime?: number,
+  endTime?: number
+): Promise<BinanceDribbletEntry[]> {
+  const params: Record<string, string> = {
+    recvWindow: RECEIPT_WINDOW_MS.toString(),
+  };
+  if (startTime !== undefined) {
+    params.startTime = Math.floor(Math.max(0, startTime)).toString();
+  }
+  if (endTime !== undefined) {
+    params.endTime = Math.floor(Math.max(0, endTime)).toString();
+  }
+
+  const response = await signedGet(apiKey, apiSecret, "/sapi/v1/asset/dribblet", params, SAPI_BASE_URL);
+
+  if (!response || typeof response !== "object") {
+    return [];
+  }
+
+  const typed = response as BinanceDribbletResponse;
+  console.log(`[fetchDustLog] total=${typed.total}, entries=${typed.userAssetDribblets?.length ?? 0}`);
+  return typed.userAssetDribblets ?? [];
+}
+
+async function syncDustConversions(
+  ctx: ActionCtx,
+  params: {
+    integrationId: Id<"integrations">;
+    apiKey: string;
+    apiSecret: string;
+  }
+): Promise<{ fetched: number; inserted: number }> {
+  console.log("🧹 Fetching dust conversion log...");
+
+  const entries = await fetchDustLog(params.apiKey, params.apiSecret);
+  if (entries.length === 0) {
+    console.log("🧹 No dust conversions found");
+    return { fetched: 0, inserted: 0 };
+  }
+
+  const trades: Array<{
+    providerTradeId: string;
+    tradeType: "DUST";
+    symbol: string;
+    side: "SELL";
+    quantity: number;
+    price: number;
+    quoteQuantity: number;
+    fee: number;
+    feeAsset: string;
+    isMaker: boolean;
+    executedAt: number;
+    fromAsset: string;
+    fromAmount: number;
+    toAsset: string;
+    toAmount: number;
+    raw: unknown;
+  }> = [];
+
+  for (const entry of entries) {
+    for (const detail of entry.userAssetDribbletDetails) {
+      const fromAmount = resolveNumber(detail.amount);
+      const toAmount = resolveNumber(detail.transferedAmount);
+      const fee = resolveNumber(detail.serviceChargeAmount);
+      const fromAsset = detail.fromAsset.toUpperCase();
+
+      if (fromAmount <= 0 || toAmount <= 0) continue;
+
+      const price = fromAmount / toAmount; // price of BNB in fromAsset terms
+      const symbol = `${fromAsset}BNB`;
+
+      trades.push({
+        providerTradeId: `dust:${detail.transId}`,
+        tradeType: "DUST",
+        symbol,
+        side: "SELL",
+        quantity: fromAmount,
+        price: toAmount / fromAmount, // BNB per unit of fromAsset
+        quoteQuantity: toAmount,
+        fee,
+        feeAsset: "BNB",
+        isMaker: false,
+        executedAt: detail.operateTime,
+        fromAsset,
+        fromAmount,
+        toAsset: "BNB",
+        toAmount,
+        raw: { source: "dust", entry, detail },
+      });
+    }
+  }
+
+  console.log(`🧹 ${trades.length} dust trades to ingest`);
+
+  if (trades.length === 0) {
+    return { fetched: 0, inserted: 0 };
+  }
+
+  const result = await ctx.runMutation(api.trades.ingestBatch, {
+    integrationId: params.integrationId,
+    trades,
+  });
+
+  console.log(`🧹 Dust conversions: ${trades.length} fetched, ${result.inserted} inserted`);
+  return { fetched: trades.length, inserted: result.inserted };
 }
 
 async function fetchFiatOrders(

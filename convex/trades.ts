@@ -7,7 +7,7 @@ export const ingestBatch = mutation({
     trades: v.array(
       v.object({
         providerTradeId: v.string(),
-        tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT")),
+        tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST")),
         symbol: v.string(),
         side: v.union(v.literal("BUY"), v.literal("SELL")),
         quantity: v.number(),

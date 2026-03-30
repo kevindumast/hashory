@@ -101,7 +101,7 @@ export default function PricingPage() {
             Un plan pour chaque ambition.
           </h1>
           <p className="mt-6 max-w-2xl mx-auto text-pretty text-lg text-muted-foreground">
-            De la simple surveillance à l'optimisation IA avancée, choisissez le plan qui correspond à votre stratégie.
+            De la simple surveillance à l&apos;optimisation IA avancée, choisissez le plan qui correspond à votre stratégie.
           </p>
         </div>
 
