@@ -55,13 +55,13 @@ export function DashboardContent({ userName }: DashboardContentProps) {
     setRefreshError(null);
 
     try {
-      let totalTradeInserted = 0;
-      let totalTradeFetched = 0;
-      let totalDepositInserted = 0;
-      let totalDepositFetched = 0;
-      let totalWithdrawalInserted = 0;
-      let totalWithdrawalFetched = 0;
-      let processedSymbols = 0;
+      const totalTradeInserted = 0;
+      const totalTradeFetched = 0;
+      let totalDepositInserted: number = 0;
+      let totalDepositFetched: number = 0;
+      let totalWithdrawalInserted: number = 0;
+      let totalWithdrawalFetched: number = 0;
+      let processedSymbols: number = 0;
 
       for (const integration of integrations) {
         if (integration.provider !== "binance") {
