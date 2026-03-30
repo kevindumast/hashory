@@ -64,8 +64,9 @@ export function TransactionsView({
       
       let label = "Transaction";
       let type: "trade" | "deposit" | "withdrawal" = "trade";
-      let outTx = undefined;
-      let inTx = undefined;
+      type TxDisplay = { amount: string; currency: string; account: string; address?: string };
+      let outTx: TxDisplay | undefined = undefined;
+      let inTx: TxDisplay | undefined = undefined;
 
       if (tx.type === 'trade') {
         type = 'trade';
