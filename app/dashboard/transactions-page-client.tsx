@@ -8,7 +8,7 @@ import { TransactionsTab } from "@/app/dashboard/sections/transactions/Transacti
 export function TransactionsPageClient() {
   const searchParams = useSearchParams();
   const integrationId = searchParams.get("integrationId");
-  const { transactions, isLoading, refresh, isRefreshing } = useDashboardMetrics();
+  const { transactions, isLoading } = useDashboardMetrics(0);
 
   // Filtrer les transactions par integrationId si présent
   const filteredTransactions = useMemo(() => {
@@ -23,8 +23,6 @@ export function TransactionsPageClient() {
       <TransactionsTab
         transactions={filteredTransactions}
         isLoading={isLoading}
-        onRefresh={refresh}
-        isRefreshing={isRefreshing}
         integrationId={integrationId}
       />
     </div>
