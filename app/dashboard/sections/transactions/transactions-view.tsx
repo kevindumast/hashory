@@ -85,11 +85,11 @@ export function TransactionsView({
       } else if (tx.type === 'deposit') {
         type = 'deposit';
         label = "Entrée";
-        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
+        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       } else if (tx.type === 'withdrawal') {
         type = 'withdrawal';
         label = "Sortie";
-        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: tx.address };
+        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       }
 
       // Calculer le montant pour tri et affichage
