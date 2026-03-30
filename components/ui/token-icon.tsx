@@ -13,7 +13,7 @@ interface TokenIconProps {
 export function TokenIcon({ symbol, className, size = 64 }: TokenIconProps) {
   const { getCmcIconUrl } = useCmcTokenMap();
 
-  const cmcUrl = getCmcIconUrl(symbol, size);
+  const cmcUrl = getCmcIconUrl(symbol);
 
   // Fallback vers CoinCap si CMC n'a pas le token
   const fallbackUrl = `https://assets.coincap.io/assets/icons/${symbol.toLowerCase()}@2x.png`;
