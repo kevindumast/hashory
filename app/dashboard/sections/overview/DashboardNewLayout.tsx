@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { currencyFormatter, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { TrendingDown, TrendingUp } from "lucide-react";
@@ -213,7 +213,7 @@ export function DashboardNewLayout({
                   <tr className="border-b border-border/40">
                     <th className="text-left py-3 px-4 font-medium text-muted-foreground">Jeton</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Quantité</th>
-                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix d'achat moyen</th>
+                    <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix d&apos;achat moyen</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">Prix actuel</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">24h</th>
                     <th className="text-right py-3 px-4 font-medium text-muted-foreground">7 jours</th>

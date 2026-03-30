@@ -38,12 +38,13 @@ import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 import { useAction } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
+import type { Id } from "@/convex/_generated/dataModel"
 
 // Types pour les données
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
-interface Account {
-  id: string
+type Account = {
+  id: Id<"integrations">
   name: string
   type: "API" | "File" | "Address"
   platformId: string
@@ -78,7 +79,7 @@ const PROVIDER_NAMES: Record<string, string> = {
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
-  const [syncingAccountId, setSyncingAccountId] = React.useState<string | null>(null)
+  const [syncingAccountId, setSyncingAccountId] = React.useState<Id<"integrations"> | null>(null)
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
@@ -121,7 +122,7 @@ export function AccountsView() {
     setRefreshToken((prev) => prev + 1)
   }, [])
 
-  const handleSyncAccount = React.useCallback(async (accountId: string) => {
+  const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
       return
@@ -129,15 +130,12 @@ export function AccountsView() {
 
     setSyncingAccountId(accountId)
     try {
-      // Cast the account ID to the proper Convex ID type
-      const id = accountId as any
-
       // First reset all cursors to force re-sync from the beginning
-      await resetAllCursors({ integrationId: id })
+      await resetAllCursors({ integrationId: accountId })
       console.log("✓ Cursors reset, now starting data sync...")
 
       // Then call syncAccount to fetch the actual data
-      await syncAccount({ integrationId: id })
+      await syncAccount({ integrationId: accountId })
       console.log("✓ Sync completed")
 
       // Wait a brief moment before refreshing
@@ -150,7 +148,7 @@ export function AccountsView() {
     }
   }, [handleRefresh, resetAllCursors, syncAccount])
 
-  const handleSyncFiatOnly = React.useCallback(async (accountId: string) => {
+  const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
       return
@@ -158,8 +156,7 @@ export function AccountsView() {
 
     setSyncingAccountId(accountId)
     try {
-      const id = accountId as any
-      await syncFiatOnly({ integrationId: id })
+      await syncFiatOnly({ integrationId: accountId })
       console.log("✓ Fiat sync completed")
       await new Promise((resolve) => setTimeout(resolve, 1000))
       handleRefresh()
@@ -313,7 +310,7 @@ export function AccountsView() {
                             <span className="text-sm font-medium">Sync Fiat uniquement</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
-                            <span className="text-sm font-medium">Mettre à jour l'API</span>
+                            <span className="text-sm font-medium">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-[#d4d8e1]" />
                           <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50">

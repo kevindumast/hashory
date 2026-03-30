@@ -20,7 +20,7 @@ export default defineSchema({
     integrationId: v.id("integrations"),
     providerTradeId: v.string(),
     portfolioId: v.optional(v.id("portfolios")),
-    tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"))),
+    tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST"))),
     symbol: v.string(),
     side: v.union(v.literal("BUY"), v.literal("SELL")),
     quantity: v.number(),
