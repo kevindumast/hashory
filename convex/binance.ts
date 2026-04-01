@@ -401,9 +401,17 @@ export const syncAccount = action({
       throw new Error("Cette intégration n'est pas de type Binance.");
     }
 
+    // Mark as syncing in DB
+    await ctx.runMutation(api.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
+
+    try {
 
     const detection = await detectSymbols(ctx, {
       integrationId: args.integrationId,
@@ -495,6 +503,14 @@ export const syncAccount = action({
       accountCreatedAt,
       spotTradesQueued: true,
     };
+
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
   },
 });
 
@@ -519,16 +535,30 @@ export const syncSpotTradesOnly = action({
     const decryptedSecret = decryptSecret(apiSecret);
 
     console.log("📊 Starting spot trades sync (background action)...");
-    const trades = await syncSpotTrades(ctx, {
-      integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
-      symbols: args.symbols,
-      startTime: args.startTime ?? null,
-    });
-    console.log(`📊 Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
+    try {
+      const trades = await syncSpotTrades(ctx, {
+        integrationId: args.integrationId,
+        apiKey: decryptedKey,
+        apiSecret: decryptedSecret,
+        symbols: args.symbols,
+        startTime: args.startTime ?? null,
+      });
+      console.log(`📊 Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
 
-    return trades;
+      // Spot trades is the last step — mark sync as complete
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "synced",
+      });
+
+      return trades;
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
   },
 });
 
@@ -550,29 +580,47 @@ export const syncFiatOrdersOnly = action({
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
 
-    const exchangeInfo = await fetchExchangeInfo();
-    const symbolCatalog = new Map<string, SymbolMeta>();
-    for (const entry of exchangeInfo) {
-      symbolCatalog.set(entry.symbol.toUpperCase(), entry);
-    }
-
-    // Reset cursors to force full backfill
-    await saveFiatCursor(ctx, args.integrationId, {
-      initialized: false,
-      lastUpdateTime: null,
-      earliestUpdateTime: null,
-    });
-    console.log("📲 Fiat cursor reset, starting full fiat sync...");
-
-    // Unified fiat sync: Acheter + Vendre + Dépôt + Retrait
-    const result = await syncFiatOrders(ctx, {
+    await ctx.runMutation(api.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
-      apiKey: decryptedKey,
-      apiSecret: decryptedSecret,
+      syncStatus: "syncing",
     });
-    console.log(`📲 Fiat (all types): ${result.fetched} fetched, ${result.inserted} inserted`);
 
-    return result;
+    try {
+      const exchangeInfo = await fetchExchangeInfo();
+      const symbolCatalog = new Map<string, SymbolMeta>();
+      for (const entry of exchangeInfo) {
+        symbolCatalog.set(entry.symbol.toUpperCase(), entry);
+      }
+
+      // Reset cursors to force full backfill
+      await saveFiatCursor(ctx, args.integrationId, {
+        initialized: false,
+        lastUpdateTime: null,
+        earliestUpdateTime: null,
+      });
+      console.log("📲 Fiat cursor reset, starting full fiat sync...");
+
+      // Unified fiat sync: Acheter + Vendre + Dépôt + Retrait
+      const result = await syncFiatOrders(ctx, {
+        integrationId: args.integrationId,
+        apiKey: decryptedKey,
+        apiSecret: decryptedSecret,
+      });
+      console.log(`📲 Fiat (all types): ${result.fetched} fetched, ${result.inserted} inserted`);
+
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "synced",
+      });
+
+      return result;
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
   },
 });
 

@@ -31,6 +31,7 @@ export const list = query({
       createdAt: integration.createdAt,
       updatedAt: integration.updatedAt,
       lastSyncedAt: integration.lastSyncedAt ?? null,
+      syncStatus: integration.syncStatus ?? "idle",
       accountCreatedAt: integration.accountCreatedAt ?? null,
     }));
   },
@@ -211,6 +212,20 @@ export const updateSyncState = mutation({
     });
 
     return { status: "ok", updatedAt: now };
+  },
+});
+
+export const updateSyncStatus = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    syncStatus: v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error")),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.integrationId, {
+      syncStatus: args.syncStatus,
+      updatedAt: Date.now(),
+    });
+    return { status: "ok" };
   },
 });
 

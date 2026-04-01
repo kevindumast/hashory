@@ -145,12 +145,11 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
-  const { getCmcIconUrl } = useCmcTokenMap();
+  const tokenSymbols = useMemo(() => tokens.map((t) => t.symbol), [tokens]);
+  const { getCmcIconUrl } = useCmcTokenMap(tokenSymbols);
 
-  const getCryptoIconUrl = (symbol: string): string => {
-    const cmcUrl = getCmcIconUrl(symbol);
-    if (cmcUrl) return cmcUrl;
-    return `https://cryptoicons.co/${symbol.toLowerCase()}.svg`;
+  const getCryptoIconUrl = (symbol: string): string | null => {
+    return getCmcIconUrl(symbol);
   };
 
   const handleSort = (column: SortColumn) => {
@@ -695,26 +694,18 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="relative h-8 w-8 flex-shrink-0">
-                                  <Image
-                                    src={getCryptoIconUrl(token.symbol)}
-                                    alt={token.symbol}
-                                    fill
-                                    className="rounded-full object-cover"
-                                    onError={(e) => {
-                                      // Try local fallback first
-                                      if (!e.currentTarget.src.includes("/crypto-icons/")) {
-                                        e.currentTarget.src = `/crypto-icons/${token.symbol.toLowerCase()}.svg`;
-                                        return;
-                                      }
-                                      // Final fallback to letter if all sources fail
-                                      e.currentTarget.style.display = "none";
-                                      e.currentTarget.parentElement?.classList.add("flex", "items-center", "justify-center", "bg-muted", "rounded-full");
-                                      const fallback = document.createElement("span");
-                                      fallback.className = "text-xs font-semibold uppercase text-foreground";
-                                      fallback.textContent = token.symbol.charAt(0);
-                                      e.currentTarget.parentElement?.appendChild(fallback);
-                                    }}
-                                  />
+                                  {getCryptoIconUrl(token.symbol) ? (
+                                    <Image
+                                      src={getCryptoIconUrl(token.symbol)!}
+                                      alt={token.symbol}
+                                      fill
+                                      className="rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-full w-full items-center justify-center rounded-full bg-muted">
+                                      <span className="text-xs font-semibold uppercase text-foreground">{token.symbol.charAt(0)}</span>
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold uppercase tracking-wide text-foreground">

@@ -150,16 +150,40 @@ export const clearAll = internalMutation({
   },
 });
 
+/** @deprecated Use getBySymbols instead — getAll hits the 1024-field Convex limit */
 export const getAll = query({
   args: {},
   handler: async (ctx): Promise<Record<string, string>> => {
     const map: Record<string, string> = {};
     const iter = ctx.db.query("cmcTokenMap");
+    let count = 0;
 
     for await (const t of iter) {
       if (!VALID_SYMBOL_RE.test(t.symbol)) continue;
       if (t.iconUrl) {
         map[t.symbol] = t.iconUrl;
+        count++;
+        if (count >= 1000) break;
+      }
+    }
+
+    return map;
+  },
+});
+
+export const getBySymbols = query({
+  args: { symbols: v.array(v.string()) },
+  handler: async (ctx, { symbols }): Promise<Record<string, string>> => {
+    const map: Record<string, string> = {};
+
+    for (const symbol of symbols) {
+      if (!VALID_SYMBOL_RE.test(symbol)) continue;
+      const token = await ctx.db
+        .query("cmcTokenMap")
+        .withIndex("by_symbol", (q) => q.eq("symbol", symbol.toUpperCase()))
+        .unique();
+      if (token?.iconUrl) {
+        map[token.symbol] = token.iconUrl;
       }
     }
 
