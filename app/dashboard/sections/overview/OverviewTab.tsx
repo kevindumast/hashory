@@ -24,7 +24,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { currencyFormatter, numberFormatter, type HistoryPoint, type PerformancePoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { currencyFormatter, type HistoryPoint, type PerformancePoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { TokenPortfolioSection } from "./TokenPortfolioSection";
 
 type AllocationEntry = {

@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   Area,
   CartesianGrid,
@@ -19,14 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -702,10 +695,11 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="relative h-8 w-8 flex-shrink-0">
-                                  <img
+                                  <Image
                                     src={getCryptoIconUrl(token.symbol)}
                                     alt={token.symbol}
-                                    className="h-8 w-8 rounded-full object-cover"
+                                    fill
+                                    className="rounded-full object-cover"
                                     onError={(e) => {
                                       // Try local fallback first
                                       if (!e.currentTarget.src.includes("/crypto-icons/")) {

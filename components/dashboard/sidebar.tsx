@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Wallet, LayoutDashboard, FileText, ArrowLeftRight, Sparkles, Gift, ChevronDown, User, Settings, LogOut } from "lucide-react"
+import { Wallet, LayoutDashboard, FileText, ArrowLeftRight, ChevronDown, User, Settings, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"

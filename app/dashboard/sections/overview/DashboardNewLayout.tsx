@@ -24,8 +24,6 @@ type AllocationEntry = {
 type DashboardNewLayoutProps = {
   profitSummary: ProfitSummary;
   historySeries: HistoryPoint[];
-  allocation: AllocationEntry[];
-  totalVolume: number;
   portfolioTokens: PortfolioToken[];
   onOpenIntegrations: () => void;
 };
@@ -33,8 +31,6 @@ type DashboardNewLayoutProps = {
 export function DashboardNewLayout({
   profitSummary,
   historySeries,
-  allocation,
-  totalVolume,
   portfolioTokens,
   onOpenIntegrations,
 }: DashboardNewLayoutProps) {

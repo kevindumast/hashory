@@ -7,10 +7,9 @@ import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
 interface TokenIconProps {
   symbol: string;
   className?: string;
-  size?: 64 | 128 | 200;
 }
 
-export function TokenIcon({ symbol, className, size = 64 }: TokenIconProps) {
+export function TokenIcon({ symbol, className }: TokenIconProps) {
   const { getCmcIconUrl } = useCmcTokenMap();
 
   const cmcUrl = getCmcIconUrl(symbol);

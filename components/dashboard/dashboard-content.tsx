@@ -5,11 +5,10 @@ import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
 import { DashboardNewLayout } from "@/app/dashboard/sections/overview/DashboardNewLayout";
 
 export function DashboardContent({ userName }: { userName: string | null }) {
-  const [refreshToken, setRefreshToken] = useState(0);
+  const [refreshToken] = useState(0);
   const {
     profitSummary,
     historySeries,
-    performanceSeries,
     allocation,
     totalVolume,
     portfolioTokens,
