@@ -9,8 +9,6 @@ export function DashboardContent({ userName }: { userName: string | null }) {
   const {
     profitSummary,
     historySeries,
-    allocation,
-    totalVolume,
     portfolioTokens,
     isLoading,
   } = useDashboardMetrics(refreshToken);
@@ -35,8 +33,6 @@ export function DashboardContent({ userName }: { userName: string | null }) {
       <DashboardNewLayout
         profitSummary={profitSummary}
         historySeries={historySeries}
-        allocation={allocation}
-        totalVolume={totalVolume}
         portfolioTokens={portfolioTokens}
         onOpenIntegrations={handleOpenIntegrations}
       />
