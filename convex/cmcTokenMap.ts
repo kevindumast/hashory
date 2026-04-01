@@ -153,14 +153,16 @@ export const clearAll = internalMutation({
 export const getAll = query({
   args: {},
   handler: async (ctx): Promise<Record<string, string>> => {
-    const tokens = await ctx.db.query("cmcTokenMap").collect();
     const map: Record<string, string> = {};
-    for (const t of tokens) {
+    const iter = ctx.db.query("cmcTokenMap");
+
+    for await (const t of iter) {
       if (!VALID_SYMBOL_RE.test(t.symbol)) continue;
       if (t.iconUrl) {
         map[t.symbol] = t.iconUrl;
       }
     }
+
     return map;
   },
 });
