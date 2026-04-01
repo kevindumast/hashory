@@ -15,12 +15,6 @@ import { Button } from "@/components/ui/button";
 import { currencyFormatter, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { TrendingDown, TrendingUp } from "lucide-react";
 
-type AllocationEntry = {
-  symbol: string;
-  share: number;
-  value: number;
-};
-
 type DashboardNewLayoutProps = {
   profitSummary: ProfitSummary;
   historySeries: HistoryPoint[];
