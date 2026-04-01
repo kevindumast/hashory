@@ -71,6 +71,8 @@ export function AccountsView() {
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
+  const syncDustOnly = useAction(api.binance.syncDustOnly)
+  const syncBalances = useAction(api.binance.getUserAssets)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -145,6 +147,38 @@ export function AccountsView() {
       console.error("Failed to sync fiat:", error)
     }
   }, [handleRefresh, syncFiatOnly])
+
+  const handleSyncDustOnly = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    try {
+      await syncDustOnly({ integrationId: accountId })
+      console.log("✓ Dust sync completed")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to sync dust:", error)
+    }
+  }, [handleRefresh, syncDustOnly])
+
+  const handleSyncBalances = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    try {
+      await syncBalances({ integrationId: accountId })
+      console.log("✓ Balances sync completed")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to sync balances:", error)
+    }
+  }, [handleRefresh, syncBalances])
 
   const isLoading = integrationsLoading || transactionsLoading
 
@@ -287,6 +321,20 @@ export function AccountsView() {
                             className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
                           >
                             <span className="text-sm font-medium">Sync Fiat uniquement</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncDustOnly(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                          >
+                            <span className="text-sm font-medium">Sync Dust/Dribblet uniquement</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncBalances(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                          >
+                            <span className="text-sm font-medium">Sync Balances</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
                             <span className="text-sm font-medium">Mettre à jour l&apos;API</span>

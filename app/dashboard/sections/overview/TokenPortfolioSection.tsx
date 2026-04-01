@@ -702,9 +702,11 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                                       className="rounded-full object-cover"
                                     />
                                   ) : (
-                                    <div className="flex h-full w-full items-center justify-center rounded-full bg-muted">
-                                      <span className="text-xs font-semibold uppercase text-foreground">{token.symbol.charAt(0)}</span>
-                                    </div>
+                                    <img
+                                      src={`https://icons.waltio.com/token/${token.symbol.toLowerCase()}`}
+                                      alt={token.symbol}
+                                      className="h-full w-full rounded-full object-cover"
+                                    />
                                   )}
                                 </div>
                                 <div className="flex flex-col gap-0.5">

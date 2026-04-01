@@ -2,7 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
 import { decryptSecret } from "./utils/encryption";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 
@@ -114,6 +114,8 @@ const DEFAULT_SYMBOLS = [
   "TAOUSDC",
   "FETUSDT",
   "FETUSDC",
+  "STRKUSDT",
+  "STRKUSDC",
 ];
 
 const HISTORY_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
@@ -278,6 +280,17 @@ type BinanceAccount = {
   balances: BinanceBalance[];
 };
 
+type BinanceUserAsset = {
+  asset: string;
+  name: string;
+  free: string;
+  locked: string;
+  freeze: string;
+  withdrawing: string;
+  ipoable: string;
+  btcValuation: string;
+};
+
 type DepositRecord = {
   id: string;
   txId?: string | null;
@@ -378,6 +391,64 @@ type FiatSyncResult = {
   earliest?: number | null;
   latest?: number | null;
 };
+
+// ─── Assets Overview (getUserAsset + deposit addresses) ─────────────────────
+
+export const getUserAssets = action({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const integration = (await ctx.runQuery(api.integrations.getById, {
+      integrationId: args.integrationId,
+    })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
+
+    if (!integration) {
+      throw new Error("Intégration introuvable.");
+    }
+    if (integration.provider !== "binance") {
+      throw new Error("Cette intégration n'est pas de type Binance.");
+    }
+
+    const decryptedKey = decryptSecret(integration.encryptedCredentials.apiKey);
+    const decryptedSecret = decryptSecret(integration.encryptedCredentials.apiSecret);
+
+    const assets = (await signedPost(
+      decryptedKey,
+      decryptedSecret,
+      "/sapi/v3/asset/getUserAsset",
+      {},
+      SAPI_BASE_URL
+    )) as BinanceUserAsset[];
+
+    // Fetch deposit addresses from DB
+    const depositAddresses = (await ctx.runQuery(api.binanceDepositAddresses.getAll, {})) as Record<string, string>;
+
+    const mapped = assets.map((a) => ({
+      asset: a.asset,
+      name: a.name,
+      free: a.free,
+      locked: a.locked,
+      freeze: a.freeze,
+      withdrawing: a.withdrawing,
+      totalPosition: (
+        parseFloat(a.free) +
+        parseFloat(a.locked) +
+        parseFloat(a.freeze)
+      ).toFixed(8),
+      btcValuation: a.btcValuation,
+      depositAddress: depositAddresses[a.asset] ?? undefined,
+    }));
+
+    // Persist to balances table
+    await ctx.runMutation(internal.balances.upsertBatch, {
+      integrationId: args.integrationId,
+      assets: mapped,
+    });
+
+    return mapped;
+  },
+});
 
 export const syncAccount = action({
   args: {
@@ -607,6 +678,53 @@ export const syncFiatOrdersOnly = action({
         apiSecret: decryptedSecret,
       });
       console.log(`📲 Fiat (all types): ${result.fetched} fetched, ${result.inserted} inserted`);
+
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "synced",
+      });
+
+      return result;
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
+  },
+});
+
+// Action to sync only dust conversions (small balances → BNB)
+export const syncDustOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const integration = (await ctx.runQuery(api.integrations.getById, {
+      integrationId: args.integrationId,
+    })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
+
+    if (!integration) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    const { apiKey, apiSecret } = integration.encryptedCredentials;
+    const decryptedKey = decryptSecret(apiKey);
+    const decryptedSecret = decryptSecret(apiSecret);
+
+    await ctx.runMutation(api.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+
+    try {
+      const result = await syncDustConversions(ctx, {
+        integrationId: args.integrationId,
+        apiKey: decryptedKey,
+        apiSecret: decryptedSecret,
+      });
+      console.log(`🧹 Dust only: ${result.fetched} fetched, ${result.inserted} inserted`);
 
       await ctx.runMutation(api.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
@@ -1024,9 +1142,9 @@ async function syncFiatOrders(
 
   const now = Date.now();
   const WINDOW_MS = 90 * 24 * 60 * 60 * 1000; // 90-day windows (Binance fiat API max range)
-  const MAX_HISTORY_MS = 1.5 * 365 * 24 * 60 * 60 * 1000; // 18 mois (depuis jan 2024 + buffer)
+  const MAX_HISTORY_MS = 3 * 365 * 24 * 60 * 60 * 1000; // 3 ans d'historique
   const absoluteStart = now - MAX_HISTORY_MS;
-  const MAX_CONSECUTIVE_EMPTY = 2; // stop after 2 empty windows (= 6 months gap)
+  const MAX_CONSECUTIVE_EMPTY = 4; // stop after 4 empty windows (= 12 months gap)
 
   let totalFetched = 0;
   let totalInserted = 0;
@@ -2382,7 +2500,7 @@ async function syncDustConversions(
       const symbol = `${fromAsset}BNB`;
 
       trades.push({
-        providerTradeId: `dust:${detail.transId}`,
+        providerTradeId: `dust:${detail.transId}:${fromAsset}`,
         tradeType: "DUST",
         symbol,
         side: "SELL",
@@ -2402,6 +2520,9 @@ async function syncDustConversions(
     }
   }
 
+  for (const t of trades) {
+    console.log(`🧹 [dust] id=${t.providerTradeId} ${t.fromAsset} ${t.fromAmount} → BNB ${t.toAmount} (fee=${t.fee} BNB) at ${new Date(t.executedAt).toISOString()}`);
+  }
   console.log(`🧹 ${trades.length} dust trades to ingest`);
 
   if (trades.length === 0) {
@@ -2952,6 +3073,78 @@ async function signedGet(
     console.warn(`Rate limit hit (429), Retry-After=${retryAfterHeader ?? "none"}, waiting ${delay}ms (attempt ${retryCount + 1})`);
     await sleep(delay);
     return signedGet(apiKey, apiSecret, path, params, baseUrl, retryCount + 1);
+  }
+
+  if (!response.ok) {
+    console.error(`Binance API error for ${path}:`, {
+      status: response.status,
+      statusText: response.statusText,
+      body: raw.slice(0, 500),
+    });
+    throw new Error(`Binance API error ${response.status}: ${raw}`);
+  }
+
+  if (!raw) {
+    return [];
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    throw new Error(
+      `Binance API parse error for ${path}: ${(error as Error).message}. Payload: ${raw.slice(0, 200)}`
+    );
+  }
+}
+
+async function signedPost(
+  apiKey: string,
+  apiSecret: string,
+  path: string,
+  params: Record<string, string | number> = {},
+  baseUrl = DEFAULT_BASE_URL,
+  retryCount = 0
+): Promise<unknown> {
+  const MAX_RETRIES = 3;
+  const BASE_DELAY = 30000;
+
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    searchParams.set(key, String(value));
+  }
+
+  searchParams.set("timestamp", Date.now().toString());
+  if (!searchParams.has("recvWindow")) {
+    searchParams.set("recvWindow", RECEIPT_WINDOW_MS.toString());
+  }
+
+  const signature = HmacSHA256(searchParams.toString(), apiSecret).toString();
+  searchParams.set("signature", signature);
+
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: {
+      "X-MBX-APIKEY": apiKey,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: searchParams.toString(),
+  });
+
+  const raw = await response.text();
+
+  if (response.status === 418) {
+    const retryAfter = response.headers.get("Retry-After");
+    throw new Error(`Binance API IP ban (418). Wait ${retryAfter ?? "unknown"} seconds before retrying.`);
+  }
+
+  if (response.status === 429) {
+    const retryAfterHeader = response.headers.get("Retry-After");
+    const delay = retryAfterHeader
+      ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 180_000)
+      : Math.min(BASE_DELAY * Math.pow(2, retryCount), 180_000);
+    console.warn(`Rate limit hit (429), waiting ${delay}ms (attempt ${retryCount + 1})`);
+    await sleep(delay);
+    return signedPost(apiKey, apiSecret, path, params, baseUrl, retryCount + 1);
   }
 
   if (!response.ok) {

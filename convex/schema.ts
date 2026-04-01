@@ -146,6 +146,21 @@ export default defineSchema({
     slug: v.string(),
     updatedAt: v.optional(v.number()),
   }).index("by_symbol", ["symbol"]),
+  balances: defineTable({
+    integrationId: v.id("integrations"),
+    asset: v.string(),
+    name: v.string(),
+    free: v.string(),
+    locked: v.string(),
+    freeze: v.string(),
+    withdrawing: v.string(),
+    totalPosition: v.string(),
+    btcValuation: v.string(),
+    depositAddress: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_asset", ["integrationId", "asset"]),
   binanceDepositAddresses: defineTable({
     coin: v.string(),
     address: v.string(),
