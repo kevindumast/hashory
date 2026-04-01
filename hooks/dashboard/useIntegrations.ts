@@ -15,6 +15,7 @@ export type IntegrationRecord = {
   createdAt: number;
   updatedAt: number;
   lastSyncedAt?: number | null;
+  syncStatus: "idle" | "syncing" | "synced" | "error";
   accountCreatedAt?: number | null;
 };
 

@@ -51,7 +51,17 @@ export function TransactionsView({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
   const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
-  const { getCmcIconUrl } = useCmcTokenMap();
+  const allSymbols = React.useMemo(() => {
+    const symbols = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.baseAsset) symbols.add(tx.baseAsset);
+      if (tx.type === 'trade') {
+        symbols.add(extractQuoteAsset(tx.symbol));
+      }
+    }
+    return [...symbols];
+  }, [transactions]);
+  const { getCmcIconUrl } = useCmcTokenMap(allSymbols);
   const itemsPerPage = 100;
 
   // Transformation des données pour l'affichage
@@ -343,14 +353,19 @@ export function TransactionsView({
                 <td className="px-4 py-2">
                   {tx.out && (
                     <div className="flex items-center gap-3">
-                      <Image
-                        src={getCmcIconUrl(tx.out.currency) ?? `https://assets.coincap.io/assets/icons/${tx.out.currency.toLowerCase()}@2x.png`}
-                        alt={tx.out.currency}
-                        width={32}
-                        height={32}
-                        className="rounded-full shrink-0 object-cover"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
+                      {getCmcIconUrl(tx.out.currency) ? (
+                        <Image
+                          src={getCmcIconUrl(tx.out.currency)!}
+                          alt={tx.out.currency}
+                          width={32}
+                          height={32}
+                          className="rounded-full shrink-0 object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
+                          {tx.out.currency.slice(0, 3)}
+                        </div>
+                      )}
                       <div className="flex flex-col gap-1">
                         <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
                         <div className="flex items-center gap-1.5">
@@ -370,14 +385,19 @@ export function TransactionsView({
                 <td className="px-4 py-2">
                   {tx.in && (
                     <div className="flex items-center gap-3">
-                      <Image
-                        src={getCmcIconUrl(tx.in.currency) ?? `https://assets.coincap.io/assets/icons/${tx.in.currency.toLowerCase()}@2x.png`}
-                        alt={tx.in.currency}
-                        width={32}
-                        height={32}
-                        className="rounded-full shrink-0 object-cover"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                      />
+                      {getCmcIconUrl(tx.in.currency) ? (
+                        <Image
+                          src={getCmcIconUrl(tx.in.currency)!}
+                          alt={tx.in.currency}
+                          width={32}
+                          height={32}
+                          className="rounded-full shrink-0 object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
+                          {tx.in.currency.slice(0, 3)}
+                        </div>
+                      )}
                       <div className="flex flex-col gap-1">
                         <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
                         <div className="flex items-center gap-1.5">

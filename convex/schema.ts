@@ -71,6 +71,7 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSyncedAt: v.optional(v.number()),
+    syncStatus: v.optional(v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error"))),
     accountCreatedAt: v.optional(v.number()),
   })
     .index("by_user", ["clerkUserId"])

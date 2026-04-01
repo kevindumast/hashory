@@ -66,7 +66,6 @@ const PROVIDER_NAMES: Record<string, string> = {
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
-  const [syncingAccountId, setSyncingAccountId] = React.useState<Id<"integrations"> | null>(null)
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
@@ -83,12 +82,11 @@ export function AccountsView() {
         ? new Date(integration.lastSyncedAt).toLocaleString("fr-FR")
         : "Jamais"
 
-      const isSyncing = syncingAccountId === integration._id
-      const status: AccountStatus = isSyncing
+      const status: AccountStatus = (integration.syncStatus === "syncing"
         ? "syncing"
-        : integrationTransactions.length > 0
-          ? ("synced" as AccountStatus)
-          : ("synced" as AccountStatus)
+        : integration.syncStatus === "error"
+          ? "error"
+          : "synced") as AccountStatus
 
       return {
         id: integration._id,
@@ -103,7 +101,7 @@ export function AccountsView() {
         status,
       }
     })
-  }, [integrations, transactions, syncingAccountId])
+  }, [integrations, transactions])
 
   const handleRefresh = React.useCallback(() => {
     setRefreshToken((prev) => prev + 1)
@@ -115,13 +113,12 @@ export function AccountsView() {
       return
     }
 
-    setSyncingAccountId(accountId)
     try {
       // First reset all cursors to force re-sync from the beginning
       await resetAllCursors({ integrationId: accountId })
       console.log("✓ Cursors reset, now starting data sync...")
 
-      // Then call syncAccount to fetch the actual data
+      // Then call syncAccount to fetch the actual data (status is managed in the backend)
       await syncAccount({ integrationId: accountId })
       console.log("✓ Sync completed")
 
@@ -130,8 +127,6 @@ export function AccountsView() {
       handleRefresh()
     } catch (error) {
       console.error("Failed to sync account:", error)
-    } finally {
-      setSyncingAccountId(null)
     }
   }, [handleRefresh, resetAllCursors, syncAccount])
 
@@ -141,7 +136,6 @@ export function AccountsView() {
       return
     }
 
-    setSyncingAccountId(accountId)
     try {
       await syncFiatOnly({ integrationId: accountId })
       console.log("✓ Fiat sync completed")
@@ -149,8 +143,6 @@ export function AccountsView() {
       handleRefresh()
     } catch (error) {
       console.error("Failed to sync fiat:", error)
-    } finally {
-      setSyncingAccountId(null)
     }
   }, [handleRefresh, syncFiatOnly])
 
