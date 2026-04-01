@@ -136,17 +136,17 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-6 bg-background/95">
-        <DialogHeader className="space-y-2">
+      <DialogContent className="max-w-md gap-4 bg-background/95">
+        <DialogHeader className="space-y-1">
           <DialogTitle>Connecter une plateforme</DialogTitle>
-          <DialogDescription>
-            Saisissez les identifiants fournis par votre exchange pour activer la synchronisation automatique.
+          <DialogDescription className="text-xs">
+            Saisissez les identifiants pour activer la synchronisation.
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="provider">Plateforme</Label>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="provider" className="text-sm">Plateforme</Label>
             <Select
               value={provider.value}
               onValueChange={(value) => {
@@ -156,13 +156,13 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 }
               }}
             >
-              <SelectTrigger id="provider">
+              <SelectTrigger id="provider" className="h-9">
                 <SelectValue placeholder="Choisir un provider" />
               </SelectTrigger>
               <SelectContent>
                 {providerConfigs.map((config) => (
                   <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-0.5">
                       <span>{config.label}</span>
                       <span className="text-xs text-muted-foreground">{config.description}</span>
                     </div>
@@ -174,23 +174,24 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
           {!provider.disabled ? (
             <>
-              <div className="grid gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="label">Nom interne (optionnel)</Label>
+              <div className="grid gap-2.5">
+                <div className="space-y-1">
+                  <Label htmlFor="label" className="text-sm">Nom interne (optionnel)</Label>
                   <Input
                     id="label"
                     placeholder={`Ex: ${maskedProviderLabel} - Mandat #42`}
                     value={label}
                     onChange={(event) => setLabel(event.target.value)}
+                    className="h-8 text-sm"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Ce nom apparait uniquement dans Oracly pour distinguer vos connexions.
+                  <p className="text-[11px] text-muted-foreground leading-tight">
+                    Visible uniquement dans Oracly pour distinguer vos connexions.
                   </p>
                 </div>
 
                 {provider.fields.map((field) => (
-                  <div className="space-y-2" key={field.name}>
-                    <Label htmlFor={field.name}>{field.label}</Label>
+                  <div className="space-y-1" key={field.name}>
+                    <Label htmlFor={field.name} className="text-sm">{field.label}</Label>
                     <Input
                       id={field.name}
                       placeholder={field.placeholder}
@@ -199,30 +200,28 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                       onChange={(event) =>
                         field.name === "apiKey" ? setApiKey(event.target.value) : setApiSecret(event.target.value)
                       }
+                      className="h-8 text-sm"
                       required
                     />
-                    {field.helper ? <p className="text-xs text-muted-foreground">{field.helper}</p> : null}
+                    {field.helper ? <p className="text-[11px] text-muted-foreground leading-tight">{field.helper}</p> : null}
                   </div>
                 ))}
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/40 p-3">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-10 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-                    <Shield className="size-4" />
+              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2.5">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+                    <Shield className="size-3" />
                   </span>
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium text-foreground">Lecture seule obligatoire</p>
-                    <p className="text-xs text-muted-foreground">
-                      Oracly ne réalise aucune transaction. Limitez la clé aux permissions de lecture.
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-xs font-medium text-foreground">Lecture seule obligatoire</p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      Limitez à la lecture seule
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <Switch checked={readOnly} onCheckedChange={setReadOnly} />
-                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    {readOnly ? "Activé" : "Désactivé"}
-                  </p>
+                <div className="text-right shrink-0 ml-2">
+                  <Switch checked={readOnly} onCheckedChange={setReadOnly} className="scale-75" />
                 </div>
               </div>
             </>
@@ -232,39 +231,39 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </div>
           )}
 
-          <div className="rounded-xl border border-border/40 bg-muted/30 p-4 text-xs text-muted-foreground">
-            <p className="flex items-center gap-2 text-foreground">
-              <Lock className="size-4 text-primary" />
+          <details className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
+            <summary className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground hover:text-foreground/80">
+              <Lock className="size-3 text-primary" />
               Sécurité & RGPD
-            </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5">
-              <li>Les identifiants sont chiffrés côté serveur avec ORACLY_ENCRYPTION_KEY.</li>
-              <li>Ils ne sont jamais affichés en clair et restent stockés dans Convex.</li>
-              <li>Vous pouvez révoquer la connexion depuis l&apos;onglet Intégrations à tout moment.</li>
+            </summary>
+            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[10px] text-muted-foreground">
+              <li>Chiffrés côté serveur</li>
+              <li>Jamais affichés en clair</li>
+              <li>Révocables à tout moment</li>
             </ul>
-          </div>
+          </details>
 
           {error ? (
-            <div className="rounded-md border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-500">{error}</div>
+            <div className="rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-500">{error}</div>
           ) : null}
 
-          <DialogFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting}>
+          <DialogFooter className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting} className="h-8 text-sm">
               Annuler
             </Button>
             <Button
               type="submit"
               disabled={submitting || provider.disabled || !apiKey || !apiSecret || !readOnly}
-              className="min-w-[160px]"
+              className="h-8 min-w-[140px] text-sm"
             >
               {submitting ? (
-                <span className="flex items-center gap-2">
-                  <LoaderCircle className="size-4 animate-spin" />
-                  Connexion en cours
+                <span className="flex items-center gap-1.5">
+                  <LoaderCircle className="size-3 animate-spin" />
+                  Connexion...
                 </span>
               ) : completed ? (
-                <span className="flex items-center gap-2">
-                  <Check className="size-4" />
+                <span className="flex items-center gap-1.5">
+                  <Check className="size-3" />
                   Ajouté
                 </span>
               ) : (
