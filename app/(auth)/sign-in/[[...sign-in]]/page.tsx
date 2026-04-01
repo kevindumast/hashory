@@ -23,8 +23,7 @@ export default function SignInPage() {
           footerActionLink: "text-primary hover:text-primary/90",
         },
       }}
-      afterSignInUrl="/dashboard"
-      redirectUrl="/dashboard"
+      fallbackRedirectUrl="/dashboard"
     />
   );
 }
