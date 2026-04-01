@@ -213,7 +213,7 @@ export function TransactionsView({
   return (
     <div className="flex flex-col h-full bg-[#f8f9fc] font-sans rounded-xl overflow-hidden border border-[#d4d8e1]">
       {/* Header Tabs & Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-20 bg-[#f8f9fc]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-[#f8f9fc]">
         {/* Tabs */}
         <div className="flex border-b md:border-b-0 border-[#d4d8e1] w-full md:w-auto overflow-x-auto">
           <Tab label="Transactions" count={transactions.length} active />
@@ -240,7 +240,7 @@ export function TransactionsView({
       </div>
 
       {/* Filters Bar */}
-      <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] sticky top-[56px] z-10">
+      <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] shrink-0">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -290,7 +290,7 @@ export function TransactionsView({
       </div>
 
       {/* Table */}
-      <div className="bg-white flex-1 overflow-auto">
+      <div className="bg-white flex-1 min-h-0 overflow-auto">
         {isLoading ? (
             <div className="flex h-64 items-center justify-center">
                 <LoaderCircle className="w-8 h-8 animate-spin text-[#503bff]" />
@@ -362,9 +362,13 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
-                          {tx.out.currency.slice(0, 3)}
-                        </div>
+                        <img
+                          src={`https://icons.waltio.com/token/${tx.out.currency.toLowerCase()}`}
+                          alt={tx.out.currency}
+                          width={32}
+                          height={32}
+                          className="rounded-full shrink-0 object-cover"
+                        />
                       )}
                       <div className="flex flex-col gap-1">
                         <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
@@ -394,9 +398,13 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold shrink-0">
-                          {tx.in.currency.slice(0, 3)}
-                        </div>
+                        <img
+                          src={`https://icons.waltio.com/token/${tx.in.currency.toLowerCase()}`}
+                          alt={tx.in.currency}
+                          width={32}
+                          height={32}
+                          className="rounded-full shrink-0 object-cover"
+                        />
                       )}
                       <div className="flex flex-col gap-1">
                         <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>

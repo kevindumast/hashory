@@ -16,6 +16,7 @@ import type {
 import type * as ai from "../ai.js";
 import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
+import type * as balances from "../balances.js";
 import type * as binance from "../binance.js";
 import type * as binanceDepositAddresses from "../binanceDepositAddresses.js";
 import type * as client from "../client.js";
@@ -43,6 +44,7 @@ declare const fullApi: ApiFromModules<{
   ai: typeof ai;
   analytics: typeof analytics;
   auth: typeof auth;
+  balances: typeof balances;
   binance: typeof binance;
   binanceDepositAddresses: typeof binanceDepositAddresses;
   client: typeof client;
