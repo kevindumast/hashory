@@ -43,19 +43,6 @@ import type { Id } from "@/convex/_generated/dataModel"
 // Types pour les données
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
-type Account = {
-  id: Id<"integrations">
-  name: string
-  type: "API" | "File" | "Address"
-  platformId: string
-  iconUrl: string
-  subAccountsCount: number
-  addressOrId: string
-  transactionCount: number
-  lastSync: string
-  status: AccountStatus
-}
-
 const PROVIDER_ICONS: Record<string, string> = {
   binance: "https://icons.waltio.com/account/BINANCE",
   kucoin: "https://icons.waltio.com/account/KUCOIN",

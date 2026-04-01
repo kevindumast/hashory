@@ -21,16 +21,8 @@ type DirectionFilter = "all" | "buy" | "sell" | "in" | "out";
 export function TransactionsTab({
   transactions,
   isLoading,
-  onRefresh,
-  isRefreshing,
-  integrationId,
 }: TransactionsTabProps) {
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
-  const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all");
-  const [providerFilter, setProviderFilter] = useState<string>("all");
   const [symbolFilter, setSymbolFilter] = useState<string>("all");
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
 
   const filteredTransactions = useMemo(() => {
     const startTimestamp = startDate ? new Date(startDate).getTime() : null;

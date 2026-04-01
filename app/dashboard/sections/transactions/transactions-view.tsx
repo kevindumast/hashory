@@ -1,7 +1,8 @@
 "use client"
 
 import * as React from "react"
-import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, Check, LoaderCircle, ArrowUpDown, X } from "lucide-react"
+import Image from "next/image"
+import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, LoaderCircle, ArrowUpDown } from "lucide-react"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap"
@@ -12,7 +13,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogClose,
 } from "@/components/ui/dialog"
 import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 
@@ -343,7 +343,7 @@ export function TransactionsView({
                 <td className="px-4 py-2">
                   {tx.out && (
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src={getCmcIconUrl(tx.out.currency) ?? `https://assets.coincap.io/assets/icons/${tx.out.currency.toLowerCase()}@2x.png`}
                         alt={tx.out.currency}
                         width={32}
@@ -370,7 +370,7 @@ export function TransactionsView({
                 <td className="px-4 py-2">
                   {tx.in && (
                     <div className="flex items-center gap-3">
-                      <img
+                      <Image
                         src={getCmcIconUrl(tx.in.currency) ?? `https://assets.coincap.io/assets/icons/${tx.in.currency.toLowerCase()}@2x.png`}
                         alt={tx.in.currency}
                         width={32}

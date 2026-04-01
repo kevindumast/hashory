@@ -42,7 +42,7 @@ export function TaxReportView() {
           <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
           <h2 className="text-lg font-semibold mb-2">Aucune déclaration disponible</h2>
           <p className="text-muted-foreground mb-4">
-            Veuillez connecter un compte d'échange pour générer votre déclaration fiscale.
+            Veuillez connecter un compte d&apos;échange pour générer votre déclaration fiscale.
           </p>
           <Button>
             <Download className="w-4 h-4 mr-2" />
