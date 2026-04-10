@@ -57,25 +57,41 @@ export const listByUser = query({
         .collect();
 
       for (const balance of balances) {
-        records.push({
-          _id: balance._id as Id<"balances">,
-          integrationId: integration._id as Id<"integrations">,
-          asset: balance.asset,
-          name: balance.name,
-          free: balance.free,
-          locked: balance.locked,
-          freeze: balance.freeze,
-          withdrawing: balance.withdrawing,
-          totalPosition: balance.totalPosition,
-          btcValuation: balance.btcValuation,
-          depositAddress: balance.depositAddress ?? undefined,
-          updatedAt: balance.updatedAt,
-        });
+        // Validate all required fields exist before pushing
+        if (
+          balance.asset &&
+          balance.name &&
+          typeof balance.free === "string" &&
+          typeof balance.locked === "string" &&
+          typeof balance.freeze === "string" &&
+          typeof balance.withdrawing === "string" &&
+          typeof balance.totalPosition === "string" &&
+          typeof balance.btcValuation === "string" &&
+          typeof balance.updatedAt === "number"
+        ) {
+          records.push({
+            _id: balance._id as Id<"balances">,
+            integrationId: integration._id as Id<"integrations">,
+            asset: balance.asset,
+            name: balance.name,
+            free: balance.free,
+            locked: balance.locked,
+            freeze: balance.freeze,
+            withdrawing: balance.withdrawing,
+            totalPosition: balance.totalPosition,
+            btcValuation: balance.btcValuation,
+            depositAddress: balance.depositAddress ?? undefined,
+            updatedAt: balance.updatedAt,
+          });
+        }
       }
     }
 
     return records.map((record) => {
-      const integration = integrationMap.get(record.integrationId)!;
+      const integration = integrationMap.get(record.integrationId);
+      if (!integration) {
+        throw new Error(`Integration not found for balance ${record._id}`);
+      }
       return {
         _id: record._id,
         integrationId: record.integrationId,
