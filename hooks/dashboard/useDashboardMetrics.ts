@@ -33,6 +33,17 @@ const dayLabelFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
 });
 
+const parseAmount = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export type TradeRecord = {
   _id: Id<"trades">;
   integrationId: Id<"integrations">;
@@ -110,6 +121,23 @@ export type WithdrawalRecord = {
   updateTime: number | null;
   fee: number;
   txId: string | null;
+};
+
+export type BalanceRecord = {
+  _id: Id<"balances">;
+  integrationId: Id<"integrations">;
+  provider: string;
+  providerDisplayName: string;
+  asset: string;
+  name: string;
+  free: string;
+  locked: string;
+  freeze: string;
+  withdrawing: string;
+  totalPosition: string;
+  btcValuation: string;
+  depositAddress?: string;
+  updatedAt: number;
 };
 
 export type TransactionEntry =
@@ -281,6 +309,13 @@ export function useDashboardMetrics(refreshToken: number) {
       : "skip"
   );
 
+  const balances = useQuery(
+    api.balances.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id, refreshToken }
+      : "skip"
+  );
+
   const syncScopes = useQuery(
     api.integrations.listSyncScopes,
     isConvexConfigured && isLoaded && user
@@ -314,6 +349,8 @@ export function useDashboardMetrics(refreshToken: number) {
     return fiatTransactions;
   }, [fiatTransactions]);
 
+  const balanceList: BalanceRecord[] = Array.isArray(balances) ? balances : [];
+
   const syncScopeList = useMemo<SyncScopeRecord[]>(() => {
     if (!Array.isArray(syncScopes)) {
       return [];
@@ -333,8 +370,9 @@ export function useDashboardMetrics(refreshToken: number) {
     tradesList.forEach((trade) => assets.add(extractBaseAsset(trade.symbol)));
     depositList.forEach((deposit) => assets.add(deposit.coin.toUpperCase()));
     withdrawalList.forEach((withdrawal) => assets.add(withdrawal.coin.toUpperCase()));
+    balanceList.forEach((balance) => assets.add(balance.asset.toUpperCase()));
     return assets;
-  }, [depositList, tradesList, withdrawalList]);
+  }, [balanceList, depositList, tradesList, withdrawalList]);
 
   const uniqueAssets = trackedAssets.size;
   const lastTradeAt = tradesList[0]?.executedAt ?? null;
@@ -540,6 +578,10 @@ export function useDashboardMetrics(refreshToken: number) {
     });
 
     fiatList.forEach((fiat) => {
+      const status = (fiat.status ?? "").toUpperCase();
+      if (status.includes("FAIL")) {
+        return;
+      }
       const hasCrypto = fiat.cryptoCurrency && fiat.cryptoAmount && fiat.cryptoAmount > 0;
 
       if (hasCrypto) {
@@ -613,6 +655,13 @@ export function useDashboardMetrics(refreshToken: number) {
   }, [depositList, fiatList, tradesList, withdrawalList]);
 
   const portfolioTokens = useMemo<PortfolioToken[]>(() => {
+    const balanceTotals = new Map<string, number>();
+    balanceList.forEach((balance) => {
+      const symbol = balance.asset.toUpperCase();
+      const total = balance.totalPosition ?? balance.free ?? "0";
+      balanceTotals.set(symbol, parseAmount(total));
+    });
+
     const map = new Map<string, {
       symbol: string;
       currentQuantity: number;
@@ -652,6 +701,10 @@ export function useDashboardMetrics(refreshToken: number) {
       }
       return map.get(upper)!;
     };
+
+    balanceTotals.forEach((_, symbol) => {
+      ensureEntry(symbol);
+    });
 
     tradesList.forEach((trade) => {
       // Handle CONVERT trades specially
@@ -770,7 +823,7 @@ export function useDashboardMetrics(refreshToken: number) {
       entry.lastActivityAt = Math.max(entry.lastActivityAt, withdrawal.applyTime);
     });
 
-    return Array.from(map.values())
+    const tokens = Array.from(map.values())
       .map((entry) => {
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
@@ -829,8 +882,16 @@ export function useDashboardMetrics(refreshToken: number) {
           events: sortedEvents,
         };
       })
+      .map((entry) => {
+        const actualQuantity = balanceTotals.get(entry.symbol);
+        return actualQuantity !== undefined
+          ? { ...entry, currentQuantity: actualQuantity }
+          : entry;
+      })
       .sort((a, b) => b.investedUsd - a.investedUsd);
-  }, [depositList, tradesList, withdrawalList]);
+
+    return tokens;
+  }, [balanceList, depositList, tradesList, withdrawalList]);
 
   const profitSummary = useMemo<ProfitSummary>(() => {
     if (portfolioTokens.length === 0) {
@@ -961,7 +1022,10 @@ export function useDashboardMetrics(refreshToken: number) {
     isConvexConfigured &&
     isLoaded &&
     !!user &&
-    (trades === undefined || deposits === undefined || withdrawals === undefined);
+    (trades === undefined ||
+      deposits === undefined ||
+      withdrawals === undefined ||
+      balances === undefined);
 
   return {
     overviewCards,

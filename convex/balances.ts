@@ -1,5 +1,6 @@
 import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 
 // ─── Query: toutes les balances d'une intégration ───────────────────────────
 
@@ -10,6 +11,70 @@ export const getByIntegration = query({
       .query("balances")
       .withIndex("by_integration", (q) => q.eq("integrationId", integrationId))
       .collect();
+  },
+});
+
+export const listByUser = query({
+  args: {
+    clerkId: v.string(),
+    refreshToken: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    void args.refreshToken;
+
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .collect();
+
+    if (integrations.length === 0) {
+      return [];
+    }
+
+    const results: Array<{
+      _id: Id<"balances">;
+      integrationId: Id<"integrations">;
+      provider: string;
+      providerDisplayName: string;
+      asset: string;
+      name: string;
+      free: string;
+      locked: string;
+      freeze: string;
+      withdrawing: string;
+      totalPosition: string;
+      btcValuation: string;
+      depositAddress?: string;
+      updatedAt: number;
+    }> = [];
+
+    for (const integration of integrations) {
+      const balances = await ctx.db
+        .query("balances")
+        .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+        .collect();
+
+      for (const balance of balances) {
+        results.push({
+          _id: balance._id as Id<"balances">,
+          integrationId: integration._id as Id<"integrations">,
+          provider: integration.provider,
+          providerDisplayName: integration.displayName ?? integration.provider,
+          asset: balance.asset,
+          name: balance.name,
+          free: balance.free,
+          locked: balance.locked,
+          freeze: balance.freeze,
+          withdrawing: balance.withdrawing,
+          totalPosition: balance.totalPosition,
+          btcValuation: balance.btcValuation,
+          depositAddress: balance.depositAddress ?? undefined,
+          updatedAt: balance.updatedAt,
+        });
+      }
+    }
+
+    return results;
   },
 });
 
