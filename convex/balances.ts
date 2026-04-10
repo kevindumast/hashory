@@ -31,11 +31,13 @@ export const listByUser = query({
       return [];
     }
 
-    const results: Array<{
+    const integrationMap = new Map(
+      integrations.map((integration) => [integration._id, integration])
+    );
+
+    const records: Array<{
       _id: Id<"balances">;
       integrationId: Id<"integrations">;
-      provider: string;
-      providerDisplayName: string;
       asset: string;
       name: string;
       free: string;
@@ -49,41 +51,15 @@ export const listByUser = query({
     }> = [];
 
     for (const integration of integrations) {
-      if (!integration.provider) continue;
-
       const balances = await ctx.db
         .query("balances")
         .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
         .collect();
 
       for (const balance of balances) {
-        // Skip invalid balance records
-        if (
-          !balance.asset ||
-          !balance.name ||
-          balance.free === null ||
-          balance.free === undefined ||
-          balance.locked === null ||
-          balance.locked === undefined ||
-          balance.freeze === null ||
-          balance.freeze === undefined ||
-          balance.withdrawing === null ||
-          balance.withdrawing === undefined ||
-          balance.totalPosition === null ||
-          balance.totalPosition === undefined ||
-          balance.btcValuation === null ||
-          balance.btcValuation === undefined ||
-          balance.updatedAt === null ||
-          balance.updatedAt === undefined
-        ) {
-          continue;
-        }
-
-        results.push({
+        records.push({
           _id: balance._id as Id<"balances">,
           integrationId: integration._id as Id<"integrations">,
-          provider: integration.provider,
-          providerDisplayName: integration.displayName ?? integration.provider,
           asset: balance.asset,
           name: balance.name,
           free: balance.free,
@@ -98,7 +74,25 @@ export const listByUser = query({
       }
     }
 
-    return results;
+    return records.map((record) => {
+      const integration = integrationMap.get(record.integrationId)!;
+      return {
+        _id: record._id,
+        integrationId: record.integrationId,
+        provider: integration.provider,
+        providerDisplayName: integration.displayName ?? integration.provider,
+        asset: record.asset,
+        name: record.name,
+        free: record.free,
+        locked: record.locked,
+        freeze: record.freeze,
+        withdrawing: record.withdrawing,
+        totalPosition: record.totalPosition,
+        btcValuation: record.btcValuation,
+        depositAddress: record.depositAddress,
+        updatedAt: record.updatedAt,
+      };
+    });
   },
 });
 
