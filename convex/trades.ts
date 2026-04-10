@@ -69,6 +69,66 @@ export const ingestBatch = mutation({
   },
 });
 
+const KNOWN_QUOTES = [
+  "USDT",
+  "USDC",
+  "BUSD",
+  "USD",
+  "FDUSD",
+  "TUSD",
+  "DAI",
+  "BTC",
+  "ETH",
+  "BNB",
+  "EUR",
+  "GBP",
+  "TRY",
+  "AUD",
+  "CAD",
+  "BRL",
+  "ARS",
+];
+
+function extractBaseAsset(symbol: string) {
+  const upper = symbol.toUpperCase();
+  for (const quote of KNOWN_QUOTES) {
+    if (upper.endsWith(quote)) {
+      const base = upper.slice(0, upper.length - quote.length);
+      if (base) {
+        return base;
+      }
+    }
+  }
+  return upper;
+}
+
+export const listAssetsByIntegration = query({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_integration_trade", (q) => q.eq("integrationId", args.integrationId))
+      .collect();
+
+    const assets = new Set<string>();
+    for (const trade of trades) {
+      if (trade.symbol) {
+        assets.add(extractBaseAsset(trade.symbol));
+      }
+      if (trade.fromAsset) {
+        assets.add(trade.fromAsset.toUpperCase());
+      }
+      if (trade.toAsset) {
+        assets.add(trade.toAsset.toUpperCase());
+      }
+    }
+
+    return Array.from(assets);
+  },
+});
+
 export const listByUser = query({
   args: {
     clerkId: v.string(),

@@ -18,6 +18,7 @@ const MAX_LIMIT = 1000;
 const MAX_CONVERT_LIMIT = 1000;
 const MAX_FIAT_LIMIT = 500;
 const RECEIPT_WINDOW_MS = 60_000;
+const MAX_RATE_LIMIT_DELAY_MS = 180_000;
 const PREFERRED_QUOTES = new Set([
   "USDT",
   "BUSD",
@@ -413,7 +414,16 @@ export const getUserAssets = action({
     const decryptedKey = decryptSecret(integration.encryptedCredentials.apiKey);
     const decryptedSecret = decryptSecret(integration.encryptedCredentials.apiSecret);
 
-    const assets = (await signedPost(
+    const accountBalancesRaw = await fetchAccountBalances(decryptedKey, decryptedSecret);
+    const accountBalances = accountBalancesRaw.map((balance) => ({
+      asset: balance.asset.toUpperCase(),
+      free: balance.free,
+      locked: balance.locked,
+    }));
+
+    const balancesByAsset = new Map(accountBalances.map((balance) => [balance.asset, balance]));
+
+    const userAssets = (await signedPost(
       decryptedKey,
       decryptedSecret,
       "/sapi/v3/asset/getUserAsset",
@@ -421,24 +431,46 @@ export const getUserAssets = action({
       SAPI_BASE_URL
     )) as BinanceUserAsset[];
 
+    const userAssetsBySymbol = new Map(
+      userAssets.map((asset) => [asset.asset.toUpperCase(), asset])
+    );
+
     // Fetch deposit addresses from DB
     const depositAddresses = (await ctx.runQuery(api.binanceDepositAddresses.getAll, {})) as Record<string, string>;
 
-    const mapped = assets.map((a) => ({
-      asset: a.asset,
-      name: a.name,
-      free: a.free,
-      locked: a.locked,
-      freeze: a.freeze,
-      withdrawing: a.withdrawing,
-      totalPosition: (
-        parseFloat(a.free) +
-        parseFloat(a.locked) +
-        parseFloat(a.freeze)
-      ).toFixed(8),
-      btcValuation: a.btcValuation,
-      depositAddress: depositAddresses[a.asset] ?? undefined,
-    }));
+    const allAssets = new Set<string>([
+      ...balancesByAsset.keys(),
+      ...userAssetsBySymbol.keys(),
+    ]);
+
+    const mapped = Array.from(allAssets)
+      .sort()
+      .map((symbol) => {
+        const balance = balancesByAsset.get(symbol);
+        const userAsset = userAssetsBySymbol.get(symbol);
+
+        const free = balance?.free ?? userAsset?.free ?? "0";
+        const locked = balance?.locked ?? userAsset?.locked ?? "0";
+        const freeze = userAsset?.freeze ?? "0";
+        const withdrawing = userAsset?.withdrawing ?? "0";
+        const totalPosition = (
+          resolveNumber(free) +
+          resolveNumber(locked) +
+          resolveNumber(freeze)
+        ).toFixed(8);
+
+        return {
+          asset: symbol,
+          name: userAsset?.name && userAsset.name.trim().length > 0 ? userAsset.name : symbol,
+          free,
+          locked,
+          freeze,
+          withdrawing,
+          totalPosition,
+          btcValuation: userAsset?.btcValuation ?? "0",
+          depositAddress: depositAddresses[symbol] ?? undefined,
+        };
+      });
 
     // Persist to balances table
     await ctx.runMutation(internal.balances.upsertBatch, {
@@ -3067,10 +3099,10 @@ async function signedGet(
   // Binance rate limits are temporary, we just need to be patient
   if (response.status === 429) {
     const retryAfterHeader = response.headers.get("Retry-After");
-    const delay = retryAfterHeader
-      ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 180_000) // respect header, max 3 min
-      : Math.min(BASE_DELAY * Math.pow(2, retryCount), 180_000); // fallback: exponential backoff, max 3 min
-    console.warn(`Rate limit hit (429), Retry-After=${retryAfterHeader ?? "none"}, waiting ${delay}ms (attempt ${retryCount + 1})`);
+    const { delay, reason } = resolveRateLimitDelay(retryAfterHeader, retryCount, BASE_DELAY);
+    console.warn(
+      `[binance] Rate limit hit (429) on ${path}, waiting ${formatDelay(delay)} (${reason})`
+    );
     await sleep(delay);
     return signedGet(apiKey, apiSecret, path, params, baseUrl, retryCount + 1);
   }
@@ -3095,6 +3127,29 @@ async function signedGet(
       `Binance API parse error for ${path}: ${(error as Error).message}. Payload: ${raw.slice(0, 200)}`
     );
   }
+}
+
+function resolveRateLimitDelay(
+  retryAfterHeader: string | null,
+  retryCount: number,
+  baseDelay: number
+) {
+  const parsedSeconds = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+  if (Number.isFinite(parsedSeconds) && parsedSeconds > 0) {
+    return {
+      delay: Math.min(parsedSeconds * 1000, MAX_RATE_LIMIT_DELAY_MS),
+      reason: `Retry-After=${parsedSeconds}s`,
+    };
+  }
+
+  return {
+    delay: Math.min(baseDelay * Math.pow(2, retryCount), MAX_RATE_LIMIT_DELAY_MS),
+    reason: "exponential backoff",
+  };
+}
+
+function formatDelay(ms: number) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`;
 }
 
 async function signedPost(
@@ -3139,10 +3194,10 @@ async function signedPost(
 
   if (response.status === 429) {
     const retryAfterHeader = response.headers.get("Retry-After");
-    const delay = retryAfterHeader
-      ? Math.min(parseInt(retryAfterHeader, 10) * 1000, 180_000)
-      : Math.min(BASE_DELAY * Math.pow(2, retryCount), 180_000);
-    console.warn(`Rate limit hit (429), waiting ${delay}ms (attempt ${retryCount + 1})`);
+    const { delay, reason } = resolveRateLimitDelay(retryAfterHeader, retryCount, BASE_DELAY);
+    console.warn(
+      `[binance] Rate limit hit (429) on ${path}, waiting ${formatDelay(delay)} (${reason})`
+    );
     await sleep(delay);
     return signedPost(apiKey, apiSecret, path, params, baseUrl, retryCount + 1);
   }
