@@ -11,7 +11,6 @@ import {
   Pie,
   PieChart,
   ResponsiveContainer,
-  Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -24,6 +23,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { currencyFormatter, type HistoryPoint, type PerformancePoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { TokenPortfolioSection } from "./TokenPortfolioSection";
 
@@ -165,48 +169,47 @@ export function OverviewTab({
           </CardHeader>
           <CardContent className="flex-1 h-72">
             {filteredHistory.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={filteredHistory}>
-                  <defs>
-                    <linearGradient id="overviewHistoryGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#C9A646" stopOpacity={0.35} />
-                      <stop offset="95%" stopColor="#C9A646" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                  <XAxis
-                    dataKey="label"
-                    stroke="hsl(var(--muted-foreground))"
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    stroke="hsl(var(--muted-foreground))"
-                    tickLine={false}
-                    axisLine={false}
-                    width={64}
-                    domain={historyYAxisDomain as [number, number]}
-                    tickFormatter={(value) => currencyFormatter.format(value)}
-                  />
-                  <RechartsTooltip
-                    cursor={{ strokeDasharray: "3 3" }}
-                    contentStyle={{
-                      background: "hsl(var(--background))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: "12px",
-                      color: "hsl(var(--foreground))",
-                    }}
-                    formatter={(value: number) => currencyFormatter.format(value)}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="profitUsd"
-                    stroke="#C9A646"
-                    strokeWidth={3}
-                    fill="url(#overviewHistoryGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+              (() => {
+                const isPositive = filteredHistory.length > 0 && filteredHistory[filteredHistory.length - 1].profitUsd >= 0;
+                const chartColor = isPositive ? "#10B981" : "#EF4444";
+                return (
+                  <ChartContainer config={{ profitUsd: { label: "Profit", color: chartColor } }} className="h-full w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={filteredHistory}>
+                        <defs>
+                          <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor={chartColor} stopOpacity={0.3} />
+                            <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                        <XAxis
+                          dataKey="label"
+                          stroke="hsl(var(--muted-foreground))"
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke="hsl(var(--muted-foreground))"
+                          tickLine={false}
+                          axisLine={false}
+                          width={64}
+                          domain={historyYAxisDomain as [number, number]}
+                          tickFormatter={(value) => currencyFormatter.format(value)}
+                        />
+                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <Area
+                          type="monotone"
+                          dataKey="profitUsd"
+                          stroke={chartColor}
+                          strokeWidth={3}
+                          fill="url(#colorProfit)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </ChartContainer>
+                );
+              })()
             ) : (
               <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                 Import transactions to display the cumulative chart.
@@ -225,22 +228,25 @@ export function OverviewTab({
               {allocationData.length > 0 ? (
                 <>
                   <div className="mx-auto h-48 w-full max-w-[240px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <PieChart>
-                        <Pie
-                          data={allocationData}
-                          dataKey="share"
-                          nameKey="symbol"
-                          innerRadius="60%"
-                          outerRadius="90%"
-                          paddingAngle={2}
-                        >
-                          {allocationData.map((item) => (
-                            <Cell key={item.symbol} fill={item.color} stroke="transparent" />
-                          ))}
-                        </Pie>
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <ChartContainer config={allocationData.reduce((acc, item) => ({ ...acc, [item.symbol]: { label: item.symbol, color: item.color } }), {})}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={allocationData}
+                            dataKey="share"
+                            nameKey="symbol"
+                            innerRadius="60%"
+                            outerRadius="90%"
+                            paddingAngle={2}
+                          >
+                            {allocationData.map((item) => (
+                              <Cell key={item.symbol} fill={item.color} stroke="transparent" />
+                            ))}
+                          </Pie>
+                          <ChartTooltip content={<ChartTooltipContent />} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
                   </div>
                   <div className="flex-1 space-y-3">
                     {allocationData.slice(0, 6).map((item) => (
@@ -282,49 +288,43 @@ export function OverviewTab({
             </CardHeader>
             <CardContent className="flex-1 h-72">
               {performanceSeries.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={performanceSeries}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                    <XAxis
-                      dataKey="label"
-                      stroke="hsl(var(--muted-foreground))"
-                      tickLine={false}
-                      axisLine={false}
-                    />
-                    <YAxis
-                      stroke="hsl(var(--muted-foreground))"
-                      tickLine={false}
-                      axisLine={false}
-                      width={56}
-                      tickFormatter={(value) => `${value.toFixed(1)}%`}
-                    />
-                    <RechartsTooltip
-                      contentStyle={{
-                        background: "hsl(var(--background))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: "12px",
-                        color: "hsl(var(--foreground))",
-                      }}
-                      formatter={(value: number) => `${value.toFixed(2)}%`}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="profitPercent"
-                      stroke="#2563EB"
-                      strokeWidth={2}
-                      dot={false}
-                      name="All-time profit"
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="benchmarkPercent"
-                      stroke="#F97316"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Net invested"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <ChartContainer config={{ profitPercent: { label: "Profit %" }, benchmarkPercent: { label: "Benchmark %" } }} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={performanceSeries}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                      <XAxis
+                        dataKey="label"
+                        stroke="hsl(var(--muted-foreground))"
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        tickLine={false}
+                        axisLine={false}
+                        width={56}
+                        tickFormatter={(value) => `${value.toFixed(1)}%`}
+                      />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Line
+                        type="monotone"
+                        dataKey="profitPercent"
+                        stroke="hsl(var(--chart-1))"
+                        strokeWidth={2}
+                        dot={false}
+                        name="All-time profit"
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="benchmarkPercent"
+                        stroke="hsl(var(--chart-2))"
+                        strokeWidth={2}
+                        dot={false}
+                        name="Net invested"
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
                   Import transactions to display performance.
