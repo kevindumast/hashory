@@ -7,6 +7,7 @@ export const ingestBatch = mutation({
     trades: v.array(
       v.object({
         providerTradeId: v.string(),
+        providerOrderId: v.optional(v.string()),
         tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST")),
         symbol: v.string(),
         side: v.union(v.literal("BUY"), v.literal("SELL")),
@@ -44,6 +45,7 @@ export const ingestBatch = mutation({
       await ctx.db.insert("trades", {
         integrationId: args.integrationId,
         providerTradeId: trade.providerTradeId,
+        providerOrderId: trade.providerOrderId,
         portfolioId: undefined,
         tradeType: trade.tradeType,
         symbol: trade.symbol,

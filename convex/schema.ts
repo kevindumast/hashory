@@ -19,6 +19,7 @@ export default defineSchema({
   trades: defineTable({
     integrationId: v.id("integrations"),
     providerTradeId: v.string(),
+    providerOrderId: v.optional(v.string()), // Binance orderId for deduplication with orders table
     portfolioId: v.optional(v.id("portfolios")),
     tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST"))),
     symbol: v.string(),
@@ -35,6 +36,45 @@ export default defineSchema({
     fromAmount: v.optional(v.number()),
     toAsset: v.optional(v.string()),
     toAmount: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_trade", ["integrationId", "providerTradeId"])
+    .index("by_integration_order", ["integrationId", "providerOrderId"]),
+  orders: defineTable({
+    integrationId: v.id("integrations"),
+    providerOrderId: v.string(), // Binance orderId
+    symbol: v.string(),
+    side: v.union(v.literal("BUY"), v.literal("SELL")),
+    orderType: v.string(), // LIMIT, MARKET, TAKE_PROFIT_LIMIT, STOP_LOSS_LIMIT, etc.
+    status: v.string(), // FILLED, PARTIALLY_FILLED, CANCELED, etc.
+    quantity: v.number(), // executedQty
+    price: v.number(), // average execution price
+    quoteQuantity: v.number(), // cummulativeQuoteQty
+    executedAt: v.number(), // updateTime (when filled)
+    fromAsset: v.optional(v.string()),
+    fromAmount: v.optional(v.number()),
+    toAsset: v.optional(v.string()),
+    toAmount: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_order", ["integrationId", "providerOrderId"]),
+  convertTrades: defineTable({
+    integrationId: v.id("integrations"),
+    providerTradeId: v.string(), // convert:{orderId}
+    orderStatus: v.string(), // SUCCESS, PROCESS, FAIL
+    fromAsset: v.string(),
+    fromAmount: v.number(),
+    toAsset: v.string(),
+    toAmount: v.number(),
+    price: v.number(),
+    inversePrice: v.optional(v.number()),
+    fee: v.optional(v.number()),
+    feeAsset: v.optional(v.string()),
+    executedAt: v.number(),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })

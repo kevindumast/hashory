@@ -966,14 +966,12 @@ export function useDashboardMetrics(refreshToken: number) {
         };
       })
       .map((entry) => {
-        // Ne pas surcharger avec les données de balance si on a de l'historique de transactions
-        // Utiliser la balance comme fallback uniquement si pas d'historique du tout
+        // Toujours faire confiance à la balance Binance pour le stock réel.
+        // Les transactions servent au calcul du PRU et du PnL, mais il peut
+        // manquer des opérations (dust conversion, staking, distributions…)
+        // donc la balance API est la source de vérité pour la quantité détenue.
         const actualQuantity = balanceTotals.get(entry.symbol);
-        const hasTransactionHistory = entry.events.length > 0;
-
-        // Si on n'a pas d'historique de transactions (jeton jamais tradé/dépôté/retiré),
-        // on utilise la balance API. Sinon on fait confiance aux transactions.
-        if (!hasTransactionHistory && actualQuantity !== undefined) {
+        if (actualQuantity !== undefined) {
           return { ...entry, currentQuantity: actualQuantity };
         }
         return entry;
