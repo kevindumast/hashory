@@ -280,17 +280,25 @@ const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI",
  * Calcule le prix d'achat moyen pondéré (AVCO) et le PnL réalisé.
  * Identique à la méthode "Prix garanti" de Binance.
  */
-function computeAvco(sortedEvents: TokenTimelineEvent[]): {
+function computeAvco(sortedEvents: TokenTimelineEvent[], baseSymbol: string): {
   avgCostBasis: number;
   realizedPnlAvco: number;
 } {
   let avgCost = 0;
   let holdingQty = 0;
   let realizedPnl = 0;
+  const upperSymbol = baseSymbol.toUpperCase();
 
   for (const event of sortedEvents) {
+    // Fee paid in the base asset reduces the effective quantity
+    const feeInBase =
+      event.fee && event.feeAsset?.toUpperCase() === upperSymbol
+        ? event.fee
+        : 0;
+
     if (event.type === "BUY" && event.valueUsd) {
-      const newQty = holdingQty + event.quantity;
+      const effectiveQty = event.quantity - feeInBase;
+      const newQty = holdingQty + effectiveQty;
       avgCost = newQty > 0
         ? (holdingQty * avgCost + event.valueUsd) / newQty
         : 0;
@@ -299,7 +307,7 @@ function computeAvco(sortedEvents: TokenTimelineEvent[]): {
       const saleProceeds = event.valueUsd ?? event.quantity * (event.price ?? avgCost);
       const costOfSold = event.quantity * avgCost;
       realizedPnl += saleProceeds - costOfSold;
-      holdingQty = Math.max(0, holdingQty - event.quantity);
+      holdingQty = Math.max(0, holdingQty - event.quantity - feeInBase);
     } else if (event.type === "DEPOSIT") {
       // Dépôt externe : augmente la quantité sans changer le coût moyen
       holdingQty += event.quantity;
@@ -837,16 +845,26 @@ export function useDashboardMetrics(refreshToken: number) {
         entry.tradeSymbols.add(trade.symbol.toUpperCase());
         entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
 
+        // Binance qty is BEFORE fee deduction. When the fee is paid in the
+        // received asset we must subtract it to match the real wallet balance.
+        const feeInBase =
+          trade.fee && trade.feeAsset?.toUpperCase() === baseAsset
+            ? trade.fee
+            : 0;
+
         if (trade.side === "BUY") {
           entry.buyQuantity += trade.quantity;
           entry.buyValueUsd += valueUsd;
           entry.investedUsd += valueUsd;
-          entry.currentQuantity += trade.quantity;
+          entry.currentQuantity += trade.quantity - feeInBase;
         } else {
           entry.sellQuantity += trade.quantity;
           entry.sellValueUsd += valueUsd;
           entry.realizedUsd += valueUsd;
           entry.currentQuantity -= trade.quantity;
+          // For SELL, fee is usually in quote asset, but if paid in base asset
+          // it means additional base was deducted
+          entry.currentQuantity -= feeInBase;
         }
       }
     });
@@ -888,7 +906,7 @@ export function useDashboardMetrics(refreshToken: number) {
         const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
 
         // AVCO : prix d'achat moyen pondéré (même méthode que Binance "Prix garanti")
-        const { avgCostBasis, realizedPnlAvco } = computeAvco(sortedEvents);
+        const { avgCostBasis, realizedPnlAvco } = computeAvco(sortedEvents, entry.symbol);
 
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;

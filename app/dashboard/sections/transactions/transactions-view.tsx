@@ -136,6 +136,20 @@ export function TransactionsView({
         return '⚪'; // Default white
       };
 
+      // Price & fee details
+      let price: number | undefined;
+      let fee: number | undefined;
+      let feeAsset: string | undefined;
+
+      if (tx.type === 'trade') {
+        price = tx.price;
+        fee = tx.fee;
+        feeAsset = tx.feeAsset;
+      } else if (tx.type === 'withdrawal') {
+        fee = tx.fee;
+        feeAsset = tx.baseAsset;
+      }
+
       return {
         id: tx.id,
         type,
@@ -147,6 +161,9 @@ export function TransactionsView({
         amount,
         amountDisplay,
         timestamp,
+        price,
+        fee,
+        feeAsset,
         provider: tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName),
         providerIcon: getProviderIcon(tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName)),
       };
@@ -206,6 +223,9 @@ export function TransactionsView({
       'Plateforme Sortie': tx.out?.account || '',
       'Entrée': tx.in ? `+${tx.in.amount} ${tx.in.currency}` : '',
       'Plateforme Entrée': tx.in?.account || '',
+      'Prix unitaire': tx.price != null ? tx.price : '',
+      'Fee': tx.fee != null ? tx.fee : '',
+      'Fee Asset': tx.feeAsset || '',
       'Montant': tx.amountDisplay,
     }));
 
@@ -358,6 +378,8 @@ export function TransactionsView({
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Sortie</th>
               <th className="w-10 px-2 py-2 bg-white"></th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Entrée</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Prix unitaire</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Fee</th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant USD</th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant EUR</th>
             </tr>
@@ -457,6 +479,21 @@ export function TransactionsView({
                         )}
                       </div>
                     </div>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <span className="text-sm font-medium text-[#1e2029]">
+                    {tx.price != null ? numberFormatter.format(tx.price) : "-"}
+                  </span>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  {tx.fee != null ? (
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-medium text-[#1e2029]">{numberFormatter.format(tx.fee)}</span>
+                      {tx.feeAsset && <span className="text-[11px] text-[#808594]">{tx.feeAsset}</span>}
+                    </div>
+                  ) : (
+                    <span className="text-sm font-medium text-[#1e2029]">-</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
