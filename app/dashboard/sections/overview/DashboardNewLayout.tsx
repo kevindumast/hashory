@@ -273,7 +273,7 @@ export function DashboardNewLayout({
 
               {/* Préparer les données triées et filtrées */}
               {(() => {
-                let filtered = filteredTokens;
+                const filtered = filteredTokens;
 
                 // Calculer les valeurs de tri pour chaque token
                 const tokensWithValues = filtered.map(token => {
@@ -417,7 +417,7 @@ export function DashboardNewLayout({
                         </tr>
                       </thead>
                       <tbody>
-                        {sorted.map(({ token, currentPrice, currentValue, costOfHoldings, unrealizedPnl, totalPnl }) => {
+                        {sorted.map(({ token, currentPrice, currentValue, unrealizedPnl, totalPnl }) => {
                           const realizedPnl = token.realizedPnlAvco;
 
                           return (

@@ -424,7 +424,7 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <img
+                        <Image
                           src={`https://icons.waltio.com/token/${tx.out.currency.toLowerCase()}`}
                           alt={tx.out.currency}
                           width={32}
@@ -460,7 +460,7 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <img
+                        <Image
                           src={`https://icons.waltio.com/token/${tx.in.currency.toLowerCase()}`}
                           alt={tx.in.currency}
                           width={32}

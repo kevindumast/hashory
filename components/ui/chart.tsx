@@ -43,9 +43,6 @@ const ChartContainer = React.forwardRef<
     children: React.ReactNode
   }
 >(({ id, className, children, config, ...props }, ref) => {
-  const uniqueId = React.useId()
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
-
   return (
     <ChartContext.Provider value={{ config }}>
       <div
@@ -69,7 +66,7 @@ const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> &
     Pick<RechartsPrimitive.TooltipProps, "active" | "payload" | "label">
->(({ active, payload, label, className, indicator = "dot" }, ref) => {
+>(({ active, payload, label, className }, ref) => {
   const { config } = useChart()
 
   if (active && payload && payload.length) {
