@@ -7,6 +7,7 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { useState } from "react";
 
 const navLinks = [
   { href: "/pricing", label: "Tarifs" },
@@ -17,6 +18,7 @@ const hiddenOnRoutes = ["/sign-in", "/sign-up", "/dashboard"];
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
 
   if (hiddenOnRoutes.some((route) => pathname.startsWith(route))) {
     return null;
@@ -67,7 +69,7 @@ export function SiteHeader() {
               afterSignOutUrl="/"
             />
           </SignedIn>
-          <Sheet>
+          <Sheet open={isOpen} onOpenChange={setIsOpen}>
             <SheetTrigger asChild>
               <Button
                 type="button"
@@ -79,12 +81,13 @@ export function SiteHeader() {
                 <Menu className="h-5 w-5 text-foreground" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="flex w-full max-w-xs flex-col gap-6 bg-background">
+            <SheetContent side="right" className="flex w-full max-w-xs flex-col gap-6 bg-background overscroll-contain">
               <div className="flex flex-col gap-2 pt-6">
                 {navLinks.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
+                    onClick={() => setIsOpen(false)}
                     className={cn(
                       "rounded-lg px-2 py-3 text-base font-medium transition hover:bg-muted/40 hover:text-foreground",
                       pathname.startsWith(link.href) && "bg-muted/40 text-foreground"
@@ -96,15 +99,15 @@ export function SiteHeader() {
               </div>
               <div className="flex flex-col gap-3">
                 <SignedOut>
-                  <Button asChild variant="outline" className="w-full">
+                  <Button asChild variant="outline" className="w-full" onClick={() => setIsOpen(false)}>
                     <Link href="/sign-in">Se connecter</Link>
                   </Button>
-                  <Button asChild className="w-full">
+                  <Button asChild className="w-full" onClick={() => setIsOpen(false)}>
                     <Link href="/sign-up">Créer un compte</Link>
                   </Button>
                 </SignedOut>
                 <SignedIn>
-                  <Button asChild variant="outline" className="w-full">
+                  <Button asChild variant="outline" className="w-full" onClick={() => setIsOpen(false)}>
                     <Link href="/dashboard">Mon espace</Link>
                   </Button>
                   <div className="flex justify-start">
