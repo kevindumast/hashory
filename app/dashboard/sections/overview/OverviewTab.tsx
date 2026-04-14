@@ -197,7 +197,7 @@ export function OverviewTab({
                           domain={historyYAxisDomain as [number, number]}
                           tickFormatter={(value) => currencyFormatter.format(value)}
                         />
-                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
                         <Area
                           type="monotone"
                           dataKey="profitUsd"
@@ -243,7 +243,7 @@ export function OverviewTab({
                               <Cell key={item.symbol} fill={item.color} stroke="transparent" />
                             ))}
                           </Pie>
-                          <ChartTooltip content={<ChartTooltipContent />} />
+                          <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
                         </PieChart>
                       </ResponsiveContainer>
                     </ChartContainer>
