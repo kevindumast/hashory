@@ -62,10 +62,16 @@ ChartContainer.displayName = "ChartContainer"
 
 const ChartTooltip = RechartsPrimitive.Tooltip
 
+type ChartTooltipContentProps = React.HTMLAttributes<HTMLDivElement> & {
+  active?: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any[]
+  label?: string | number
+}
+
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> &
-    Pick<RechartsPrimitive.TooltipProps, "active" | "payload" | "label">
+  ChartTooltipContentProps
 >(({ active, payload, label, className }, ref) => {
   const { config } = useChart()
 
@@ -129,8 +135,11 @@ const ChartLegend = RechartsPrimitive.Legend
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign">
+  React.HTMLAttributes<HTMLDivElement> & {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    payload?: any[]
+    verticalAlign?: "top" | "middle" | "bottom"
+  }
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}

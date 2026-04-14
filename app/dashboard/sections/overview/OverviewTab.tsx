@@ -305,7 +305,7 @@ export function OverviewTab({
                         width={56}
                         tickFormatter={(value) => `${value.toFixed(1)}%`}
                       />
-                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
                       <Line
                         type="monotone"
                         dataKey="profitPercent"
