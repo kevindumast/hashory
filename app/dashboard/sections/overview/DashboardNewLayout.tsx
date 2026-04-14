@@ -136,7 +136,7 @@ export function DashboardNewLayout({
                           tickFormatter={(value) => currencyFormatter.format(value)}
                           style={{ fontSize: "12px" }}
                         />
-                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
                         <Area
                           type="monotone"
                           dataKey="profitUsd"
