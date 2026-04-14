@@ -143,6 +143,7 @@ export type BalanceRecord = {
 export type TransactionEntry =
   | {
       type: "trade";
+      tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
       id: string;
       integrationId: Id<"integrations">;
       provider: string;
@@ -213,6 +214,10 @@ export type PortfolioToken = {
   buyValueUsd: number;
   sellValueUsd: number;
   netProfitUsd: number;
+  /** Prix d'achat moyen pondéré AVCO (même calcul que Binance "Prix garanti") */
+  avgCostBasis: number;
+  /** PnL réalisé calculé avec AVCO */
+  realizedPnlAvco: number;
   averageBuyPrice?: number;
   averageSellPrice?: number;
   lastActivityAt: number;
@@ -267,6 +272,52 @@ const QUOTE_ASSETS = [
   "CAD",
   "BRL",
 ];
+
+/** Stablecoins dont on connaît la valeur ≈ 1 USD */
+const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USD"]);
+
+/**
+ * Calcule le prix d'achat moyen pondéré (AVCO) et le PnL réalisé.
+ * Identique à la méthode "Prix garanti" de Binance.
+ */
+function computeAvco(sortedEvents: TokenTimelineEvent[], baseSymbol: string): {
+  avgCostBasis: number;
+  realizedPnlAvco: number;
+} {
+  let avgCost = 0;
+  let holdingQty = 0;
+  let realizedPnl = 0;
+  const upperSymbol = baseSymbol.toUpperCase();
+
+  for (const event of sortedEvents) {
+    // Fee paid in the base asset reduces the effective quantity
+    const feeInBase =
+      event.fee && event.feeAsset?.toUpperCase() === upperSymbol
+        ? event.fee
+        : 0;
+
+    if (event.type === "BUY" && event.valueUsd) {
+      const effectiveQty = event.quantity - feeInBase;
+      const newQty = holdingQty + effectiveQty;
+      avgCost = newQty > 0
+        ? (holdingQty * avgCost + event.valueUsd) / newQty
+        : 0;
+      holdingQty = newQty;
+    } else if (event.type === "SELL") {
+      const saleProceeds = event.valueUsd ?? event.quantity * (event.price ?? avgCost);
+      const costOfSold = event.quantity * avgCost;
+      realizedPnl += saleProceeds - costOfSold;
+      holdingQty = Math.max(0, holdingQty - event.quantity - feeInBase);
+    } else if (event.type === "DEPOSIT") {
+      // Dépôt externe : augmente la quantité sans changer le coût moyen
+      holdingQty += event.quantity;
+    } else if (event.type === "WITHDRAWAL") {
+      holdingQty = Math.max(0, holdingQty - event.quantity);
+    }
+  }
+
+  return { avgCostBasis: avgCost, realizedPnlAvco: realizedPnl };
+}
 
 function extractBaseAsset(symbol: string) {
   const upper = symbol.toUpperCase();
@@ -527,6 +578,7 @@ export function useDashboardMetrics(refreshToken: number) {
   const transactions = useMemo<TransactionEntry[]>(() => {
     const entries: TransactionEntry[] = tradesList.map((trade) => ({
       type: "trade",
+      tradeType: trade.tradeType,
       id: trade._id,
       integrationId: trade.integrationId,
       provider: trade.provider,
@@ -593,6 +645,7 @@ export function useDashboardMetrics(refreshToken: number) {
         const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / cryptoAmount : 0;
         entries.push({
           type: "trade",
+          tradeType: "FIAT",
           id: fiat._id,
           integrationId: fiat.integrationId,
           provider: fiat.provider,
@@ -709,12 +762,25 @@ export function useDashboardMetrics(refreshToken: number) {
     tradesList.forEach((trade) => {
       // Handle CONVERT trades specially
       if (trade.tradeType === "CONVERT") {
+        // Valeur USD de la conversion :
+        // - Si fromAsset est un stablecoin (ex: USDT→TAO), on sait que fromAmount = USD dépensé
+        // - Si toAsset est un stablecoin (ex: TAO→USDT), on sait que toAmount = USD reçu
+        // - Sinon on estime avec quoteQuantity ou price×qty
+        const fromIsStable = USD_STABLECOINS.has((trade.fromAsset ?? "").toUpperCase());
+        const toIsStable   = USD_STABLECOINS.has((trade.toAsset ?? "").toUpperCase());
+        const convertValueUsd =
+          fromIsStable ? (trade.fromAmount ?? 0)
+          : toIsStable ? (trade.toAmount ?? 0)
+          : (trade.quoteQuantity ?? trade.price * (trade.toAmount ?? trade.quantity));
+
         // Process fromAsset (sale)
         if (trade.fromAsset && trade.fromAmount !== undefined) {
           const fromEntry = ensureEntry(trade.fromAsset);
           fromEntry.convertQuantity -= trade.fromAmount;
           fromEntry.currentQuantity -= trade.fromAmount;
           fromEntry.sellQuantity += trade.fromAmount;
+          fromEntry.sellValueUsd += convertValueUsd;
+          fromEntry.realizedUsd += convertValueUsd;
           fromEntry.lastActivityAt = Math.max(fromEntry.lastActivityAt, trade.executedAt);
 
           fromEntry.events.push({
@@ -722,8 +788,8 @@ export function useDashboardMetrics(refreshToken: number) {
             type: "SELL",
             timestamp: trade.executedAt,
             quantity: trade.fromAmount,
-            price: trade.price,
-            valueUsd: trade.quoteQuantity ?? 0,
+            price: fromIsStable ? 1 : (trade.toAmount ? convertValueUsd / trade.fromAmount : trade.price),
+            valueUsd: convertValueUsd,
             fee: trade.fee,
             feeAsset: trade.feeAsset,
             provider: trade.provider,
@@ -738,6 +804,8 @@ export function useDashboardMetrics(refreshToken: number) {
           toEntry.convertQuantity += trade.toAmount;
           toEntry.currentQuantity += trade.toAmount;
           toEntry.buyQuantity += trade.toAmount;
+          toEntry.buyValueUsd += convertValueUsd;   // ← bug corrigé
+          toEntry.investedUsd += convertValueUsd;   // ← bug corrigé
           toEntry.lastActivityAt = Math.max(toEntry.lastActivityAt, trade.executedAt);
 
           toEntry.events.push({
@@ -745,8 +813,8 @@ export function useDashboardMetrics(refreshToken: number) {
             type: "BUY",
             timestamp: trade.executedAt,
             quantity: trade.toAmount,
-            price: trade.price,
-            valueUsd: trade.quoteQuantity ?? 0,
+            price: toIsStable ? 1 : (trade.toAmount > 0 ? convertValueUsd / trade.toAmount : trade.price),
+            valueUsd: convertValueUsd,
             fee: trade.fee,
             feeAsset: trade.feeAsset,
             provider: trade.provider,
@@ -777,16 +845,26 @@ export function useDashboardMetrics(refreshToken: number) {
         entry.tradeSymbols.add(trade.symbol.toUpperCase());
         entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
 
+        // Binance qty is BEFORE fee deduction. When the fee is paid in the
+        // received asset we must subtract it to match the real wallet balance.
+        const feeInBase =
+          trade.fee && trade.feeAsset?.toUpperCase() === baseAsset
+            ? trade.fee
+            : 0;
+
         if (trade.side === "BUY") {
           entry.buyQuantity += trade.quantity;
           entry.buyValueUsd += valueUsd;
           entry.investedUsd += valueUsd;
-          entry.currentQuantity += trade.quantity;
+          entry.currentQuantity += trade.quantity - feeInBase;
         } else {
           entry.sellQuantity += trade.quantity;
           entry.sellValueUsd += valueUsd;
           entry.realizedUsd += valueUsd;
           entry.currentQuantity -= trade.quantity;
+          // For SELL, fee is usually in quote asset, but if paid in base asset
+          // it means additional base was deducted
+          entry.currentQuantity -= feeInBase;
         }
       }
     });
@@ -825,6 +903,11 @@ export function useDashboardMetrics(refreshToken: number) {
 
     const tokens = Array.from(map.values())
       .map((entry) => {
+        const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
+
+        // AVCO : prix d'achat moyen pondéré (même méthode que Binance "Prix garanti")
+        const { avgCostBasis, realizedPnlAvco } = computeAvco(sortedEvents, entry.symbol);
+
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
         const averageSellPrice =
@@ -860,8 +943,6 @@ export function useDashboardMetrics(refreshToken: number) {
           return scored[0]?.symbol;
         })();
 
-        const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
-
         return {
           symbol: entry.symbol,
           currentQuantity: entry.currentQuantity,
@@ -874,6 +955,8 @@ export function useDashboardMetrics(refreshToken: number) {
           buyValueUsd: entry.buyValueUsd,
           sellValueUsd: entry.sellValueUsd,
           netProfitUsd: entry.sellValueUsd - entry.buyValueUsd,
+          avgCostBasis,
+          realizedPnlAvco,
           averageBuyPrice,
           averageSellPrice,
           lastActivityAt: entry.lastActivityAt,
@@ -883,10 +966,15 @@ export function useDashboardMetrics(refreshToken: number) {
         };
       })
       .map((entry) => {
+        // Toujours faire confiance à la balance Binance pour le stock réel.
+        // Les transactions servent au calcul du PRU et du PnL, mais il peut
+        // manquer des opérations (dust conversion, staking, distributions…)
+        // donc la balance API est la source de vérité pour la quantité détenue.
         const actualQuantity = balanceTotals.get(entry.symbol);
-        return actualQuantity !== undefined
-          ? { ...entry, currentQuantity: actualQuantity }
-          : entry;
+        if (actualQuantity !== undefined) {
+          return { ...entry, currentQuantity: actualQuantity };
+        }
+        return entry;
       })
       .sort((a, b) => b.investedUsd - a.investedUsd);
 

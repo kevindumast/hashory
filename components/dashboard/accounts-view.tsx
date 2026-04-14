@@ -35,7 +35,7 @@ import {
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
-import { useAction } from "convex/react"
+import { useAction, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
 import type { Id } from "@/convex/_generated/dataModel"
@@ -73,6 +73,8 @@ export function AccountsView() {
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
+  const syncOrders = useAction(api.binance.syncOrdersOnly)
+  const purgeAllData = useMutation(api.integrations.purgeAllData)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -90,6 +92,10 @@ export function AccountsView() {
           ? "error"
           : "synced") as AccountStatus
 
+      const accountCreatedAt = integration.accountCreatedAt
+        ? new Date(integration.accountCreatedAt).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })
+        : null
+
       return {
         id: integration._id,
         name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider,
@@ -101,6 +107,7 @@ export function AccountsView() {
         transactionCount: integrationTransactions.length,
         lastSync,
         status,
+        accountCreatedAt,
       }
     })
   }, [integrations, transactions])
@@ -180,6 +187,42 @@ export function AccountsView() {
     }
   }, [handleRefresh, syncBalances])
 
+  const handleSyncOrders = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    try {
+      await syncOrders({ integrationId: accountId })
+      console.log("✓ Orders sync completed")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to sync orders:", error)
+    }
+  }, [handleRefresh, syncOrders])
+
+  const handlePurgeData = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    if (!window.confirm("Vider toutes les données de ce compte ? (trades, orders, deposits, balances…)\nL'API restera connectée.")) {
+      return
+    }
+
+    try {
+      const counts = await purgeAllData({ integrationId: accountId })
+      console.log("✓ Data purged:", counts)
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to purge data:", error)
+    }
+  }, [handleRefresh, purgeAllData])
+
   const isLoading = integrationsLoading || transactionsLoading
 
   return (
@@ -246,6 +289,9 @@ export function AccountsView() {
                         <AvatarFallback>{account.name.slice(0, 2)}</AvatarFallback>
                       </Avatar>
                       <span className="text-sm font-bold text-[#1e2029]">{account.name}</span>
+                      {account.accountCreatedAt && (
+                        <span className="text-xs text-[#808594]">depuis le {account.accountCreatedAt}</span>
+                      )}
                       <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-[#d4d8e1]">
                         <span className="text-xs font-medium text-[#808594]">{account.subAccountsCount}</span>
                       </div>
@@ -336,10 +382,23 @@ export function AccountsView() {
                           >
                             <span className="text-sm font-medium">Sync Balances</span>
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncOrders(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                          >
+                            <span className="text-sm font-medium">Sync Order History</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
                             <span className="text-sm font-medium">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator className="bg-[#d4d8e1]" />
+                          <DropdownMenuItem
+                            onClick={() => handlePurgeData(account.id)}
+                            className="cursor-pointer text-orange-600 hover:bg-orange-50"
+                          >
+                            <span className="text-sm font-medium">Vider les données</span>
+                          </DropdownMenuItem>
                           <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50">
                             <span className="text-sm font-medium">Supprimer</span>
                           </DropdownMenuItem>

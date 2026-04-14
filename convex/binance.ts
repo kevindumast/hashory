@@ -591,6 +591,13 @@ export const syncAccount = action({
       startTime: args.options?.startTime,
     });
 
+    // Queue orders sync in background (runs after converts/deposits are done
+    // so it can discover all assets including zero-balance ones like SNX)
+    console.log("📋 Launching order history sync in background...");
+    ctx.scheduler.runAfter(5000, api.binance.syncOrdersOnly, {
+      integrationId: args.integrationId,
+    });
+
     await ctx.runMutation(api.integrations.updateMetadata, {
       integrationId: args.integrationId,
       accountCreatedAt: accountCreatedAt ?? undefined,
@@ -774,6 +781,208 @@ export const syncDustOnly = action({
   },
 });
 
+// Action to sync all filled spot orders (take_profit, stop_loss, etc.)
+// Uses /api/v3/allOrders and stores into the `orders` table (no collision with trades)
+export const syncOrdersOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const integration = (await ctx.runQuery(api.integrations.getById, {
+      integrationId: args.integrationId,
+    })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
+
+    if (!integration) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    const { apiKey, apiSecret } = integration.encryptedCredentials;
+    const decryptedKey = decryptSecret(apiKey);
+    const decryptedSecret = decryptSecret(apiSecret);
+
+    await ctx.runMutation(api.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+
+    try {
+      const exchangeInfo = await fetchExchangeInfo();
+      const symbolCatalog = new Map<string, SymbolMeta>();
+      const baseIndex = new Map<string, Set<string>>();
+      for (const entry of exchangeInfo) {
+        symbolCatalog.set(entry.symbol.toUpperCase(), entry);
+        const baseSet = baseIndex.get(entry.baseAsset.toUpperCase()) ?? new Set<string>();
+        baseSet.add(entry.symbol.toUpperCase());
+        baseIndex.set(entry.baseAsset.toUpperCase(), baseSet);
+      }
+
+      // Collect ALL known assets from every source:
+      // 1. trades (spot + convert + fiat + dust) → includes SNX from conversions
+      // 2. deposits → includes SNX from external deposits
+      // 3. withdrawals
+      const tradeAssets = await ctx.runQuery(api.trades.listAssetsByIntegration, {
+        integrationId: args.integrationId,
+      });
+      const depositAssets = await ctx.runQuery(api.deposits.listAssetsByIntegration, {
+        integrationId: args.integrationId,
+      });
+
+      const allAssets = new Set<string>();
+      for (const asset of tradeAssets) allAssets.add(asset.toUpperCase());
+      for (const asset of depositAssets) allAssets.add(asset.toUpperCase());
+      // Remove stablecoins / quote-only assets (no point syncing USDTUSDC orders)
+      for (const q of PREFERRED_QUOTES) allAssets.delete(q);
+
+      // For each asset, find all valid trading pairs on Binance
+      const symbolSet = new Set<string>();
+      for (const asset of allAssets) {
+        const pairs = baseIndex.get(asset);
+        if (pairs) {
+          for (const pair of pairs) symbolSet.add(pair);
+        }
+      }
+
+      // Also add symbols from spot_trades scopes and detected balances
+      const clerkUserId = integration.clerkUserId;
+      const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(api.integrations.listSyncScopes, {
+        clerkId: clerkUserId,
+        dataset: DATASET_SPOT_TRADES,
+      });
+      for (const s of existingScopes) {
+        if (s.integrationId === args.integrationId && symbolCatalog.has(s.scope.toUpperCase())) {
+          symbolSet.add(s.scope.toUpperCase());
+        }
+      }
+
+      const allSymbols = Array.from(symbolSet);
+
+      console.log(`📋 Syncing orders for ${allSymbols.length} symbols (assets: ${Array.from(allAssets).join(", ")})`);
+
+      let totalFetched = 0;
+      let totalInserted = 0;
+
+      for (const symbol of allSymbols) {
+        const scope = symbol.toUpperCase();
+        const symbolMeta = symbolCatalog.get(scope);
+
+        // Always start from the beginning for a manual sync — ingestBatch deduplicates
+        let lastOrderId: number | null = null;
+
+        let iterations = 0;
+
+        while (true) {
+          const paramsMap: Record<string, string> = {
+            symbol: scope,
+            limit: MAX_LIMIT.toString(),
+            recvWindow: RECEIPT_WINDOW_MS.toString(),
+          };
+          if (lastOrderId !== null) {
+            // Continue from last seen orderId
+            paramsMap.orderId = (lastOrderId + 1).toString();
+          } else {
+            // First page: start from orderId=0 to get ALL historical orders.
+            // startTime="0" only covers a 24h window — orderId pagination has no time limit.
+            paramsMap.orderId = "0";
+          }
+
+          const orders = (await signedGet(decryptedKey, decryptedSecret, "/api/v3/allOrders", paramsMap)) as Array<{
+            orderId: number;
+            symbol: string;
+            side: string;
+            type: string;
+            status: string;
+            origQty: string;
+            executedQty: string;
+            cummulativeQuoteQty: string;
+            price: string;
+            updateTime: number;
+          }>;
+
+          if (!Array.isArray(orders) || orders.length === 0) break;
+
+          totalFetched += orders.length;
+
+          if (orders.length > 0) {
+            const formatted = orders.map((order) => {
+              const side: "BUY" | "SELL" = order.side === "BUY" ? "BUY" : "SELL";
+              const executedQty = Number(order.executedQty);
+              const origQty = Number(order.origQty);
+              // For filled orders use executedQty, for others use origQty (intended quantity)
+              const quantity = executedQty > 0 ? executedQty : origQty;
+              const quoteQuantity = Number(order.cummulativeQuoteQty);
+              const price = quoteQuantity > 0 && executedQty > 0 ? quoteQuantity / executedQty : Number(order.price);
+
+              let fromAsset: string | undefined;
+              let fromAmount: number | undefined;
+              let toAsset: string | undefined;
+              let toAmount: number | undefined;
+
+              if (symbolMeta) {
+                if (side === "BUY") {
+                  fromAsset = symbolMeta.quoteAsset;
+                  fromAmount = quoteQuantity;
+                  toAsset = symbolMeta.baseAsset;
+                  toAmount = quantity;
+                } else {
+                  fromAsset = symbolMeta.baseAsset;
+                  fromAmount = quantity;
+                  toAsset = symbolMeta.quoteAsset;
+                  toAmount = quoteQuantity;
+                }
+              }
+
+              return {
+                providerOrderId: order.orderId.toString(),
+                symbol: order.symbol.toUpperCase(),
+                side,
+                orderType: order.type,
+                status: order.status,
+                quantity,
+                price,
+                quoteQuantity,
+                executedAt: Number(order.updateTime),
+                fromAsset,
+                fromAmount,
+                toAsset,
+                toAmount,
+                raw: order,
+              };
+            });
+
+            const result = await ctx.runMutation(api.orders.ingestBatch, {
+              integrationId: args.integrationId,
+              orders: formatted,
+            });
+            totalInserted += result.inserted;
+          }
+
+          const lastOrder = orders[orders.length - 1];
+          lastOrderId = lastOrder.orderId;
+
+          iterations += 1;
+          if (orders.length < MAX_LIMIT || iterations > 1_000) break;
+          await sleep(DELAY_FORWARD_REQUEST);
+        }
+      }
+
+      console.log(`📋 Orders sync: ${totalFetched} fetched, ${totalInserted} inserted`);
+
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "synced",
+      });
+
+      return { fetched: totalFetched, inserted: totalInserted };
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
+  },
+});
+
 async function detectSymbols(
   ctx: ActionCtx,
   params: {
@@ -808,7 +1017,7 @@ async function detectSymbols(
 
   const balances = await fetchAccountBalances(params.apiKey, params.apiSecret);
 
-  const existingScopes = await ctx.runQuery(api.integrations.listSyncScopes, {
+  const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(api.integrations.listSyncScopes, {
     clerkId: params.clerkUserId,
     dataset: DATASET_SPOT_TRADES,
   });
@@ -1031,6 +1240,23 @@ async function backfillConvertTrades(
     });
     inserted += result.inserted;
 
+    // Also insert into dedicated convertTrades table
+    await ctx.runMutation(api.convertTrades.ingestBatch, {
+      integrationId: params.integrationId,
+      trades: normalized.map((n) => ({
+        providerTradeId: n.payload.providerTradeId,
+        orderStatus: "SUCCESS",
+        fromAsset: n.payload.fromAsset ?? "",
+        fromAmount: n.payload.fromAmount ?? 0,
+        toAsset: n.payload.toAsset ?? "",
+        toAmount: n.payload.toAmount ?? 0,
+        price: n.payload.price,
+        fee: n.payload.fee,
+        feeAsset: n.payload.feeAsset,
+        executedAt: n.payload.executedAt,
+        raw: n.payload.raw,
+      })),
+    });
 
     const windowEarliest = normalized[0].updateTime;
     const windowLatest = normalized[normalized.length - 1].updateTime;
@@ -1115,6 +1341,24 @@ async function syncConvertTradesForward(
     const result = await ctx.runMutation(api.trades.ingestBatch, {
       integrationId: params.integrationId,
       trades: payload,
+    });
+
+    // Also insert into dedicated convertTrades table
+    await ctx.runMutation(api.convertTrades.ingestBatch, {
+      integrationId: params.integrationId,
+      trades: normalized.map((n) => ({
+        providerTradeId: n.payload.providerTradeId,
+        orderStatus: "SUCCESS",
+        fromAsset: n.payload.fromAsset ?? "",
+        fromAmount: n.payload.fromAmount ?? 0,
+        toAsset: n.payload.toAsset ?? "",
+        toAmount: n.payload.toAmount ?? 0,
+        price: n.payload.price,
+        fee: n.payload.fee,
+        feeAsset: n.payload.feeAsset,
+        executedAt: n.payload.executedAt,
+        raw: n.payload.raw,
+      })),
     });
 
     fetched += normalized.length;

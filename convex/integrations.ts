@@ -215,6 +215,72 @@ export const updateSyncState = mutation({
   },
 });
 
+export const purgeAllData = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const id = args.integrationId;
+
+    async function purgeTable(
+      queryFn: () => Promise<Array<{ _id: any }>>
+    ) {
+      const rows = await queryFn();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+      return rows.length;
+    }
+
+    const trades = await purgeTable(() =>
+      ctx.db.query("trades").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const orders = await purgeTable(() =>
+      ctx.db.query("orders").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const convertTrades = await purgeTable(() =>
+      ctx.db.query("convertTrades").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const deposits = await purgeTable(() =>
+      ctx.db.query("deposits").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const withdrawals = await purgeTable(() =>
+      ctx.db.query("withdrawals").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const fiatTransactions = await purgeTable(() =>
+      ctx.db.query("fiatTransactions").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const balances = await purgeTable(() =>
+      ctx.db.query("balances").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    const syncStates = await purgeTable(() =>
+      ctx.db.query("integrationSyncStates").withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", id)).collect()
+    );
+
+    return { trades, orders, convertTrades, deposits, withdrawals, fiatTransactions, balances, syncStates };
+  },
+});
+
+export const deleteAllSyncStates = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const states = await ctx.db
+      .query("integrationSyncStates")
+      .withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", args.integrationId))
+      .collect();
+
+    let deleted = 0;
+    for (const state of states) {
+      await ctx.db.delete(state._id);
+      deleted++;
+    }
+
+    return { deleted };
+  },
+});
+
 export const updateSyncStatus = mutation({
   args: {
     integrationId: v.id("integrations"),

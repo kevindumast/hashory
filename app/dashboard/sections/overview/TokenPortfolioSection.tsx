@@ -41,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
+import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
@@ -144,7 +145,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const { currentPrices } = useCurrentPrices(tokens);
   const tokenSymbols = useMemo(() => tokens.map((t) => t.symbol), [tokens]);
   const { getCmcIconUrl } = useCmcTokenMap(tokenSymbols);
 
@@ -167,50 +168,6 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
     }
   };
 
-  useEffect(() => {
-    // Fetch current prices from Binance
-    const fetchPrices = async () => {
-      const prices: Record<string, number> = {};
-
-      for (const token of tokens) {
-        // tradeSymbols are already full pairs like "ETHUSDT", so use directly
-        const pairs = token.tradeSymbols.length > 0
-          ? token.tradeSymbols
-          : [token.primarySymbol ? `${token.primarySymbol}USDT` : `${token.symbol}USDT`];
-
-        let found = false;
-        for (const pair of pairs) {
-          try {
-            const response = await fetch(
-              `https://api.binance.com/api/v3/ticker/price?symbol=${pair.toUpperCase()}`,
-              { signal: AbortSignal.timeout(5000) }
-            );
-            if (response.ok) {
-              const data = (await response.json()) as { symbol: string; price: string };
-              prices[token.symbol] = parseFloat(data.price);
-              found = true;
-              break;
-            }
-          } catch (error) {
-            console.debug(`Failed to fetch price for ${pair}:`, error);
-          }
-        }
-
-        if (!found) {
-          console.warn(`Could not fetch price for token ${token.symbol}`);
-        }
-      }
-
-      setCurrentPrices(prices);
-    };
-
-    if (tokens.length > 0) {
-      fetchPrices();
-      // Refresh prices every 30 seconds
-      const interval = setInterval(fetchPrices, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [tokens]);
 
   const orderedTokens = useMemo(
     () => {
@@ -702,10 +659,12 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                                       className="rounded-full object-cover"
                                     />
                                   ) : (
-                                    <img
+                                    <Image
                                       src={`https://icons.waltio.com/token/${token.symbol.toLowerCase()}`}
                                       alt={token.symbol}
                                       className="h-full w-full rounded-full object-cover"
+                                      width={40}
+                                      height={40}
                                     />
                                   )}
                                 </div>

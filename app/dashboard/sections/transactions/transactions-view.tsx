@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Image from "next/image"
-import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, LoaderCircle, ArrowUpDown } from "lucide-react"
+import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, LoaderCircle, ArrowUpDown, Search, X } from "lucide-react"
 import * as XLSX from "xlsx"
 import { cn } from "@/lib/utils"
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap"
@@ -51,6 +51,7 @@ export function TransactionsView({
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
   const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
+  const [tokenSearch, setTokenSearch] = React.useState("");
   const allSymbols = React.useMemo(() => {
     const symbols = new Set<string>();
     for (const tx of transactions) {
@@ -80,7 +81,16 @@ export function TransactionsView({
 
       if (tx.type === 'trade') {
         type = 'trade';
-        label = "Échange";
+        const tradeType = tx.tradeType;
+        if (tradeType === "CONVERT") {
+          label = "Conversion";
+        } else if (tradeType === "FIAT") {
+          label = "Achat fiat";
+        } else if (tradeType === "DUST") {
+          label = "Dust";
+        } else {
+          label = "Trade spot";
+        }
         const quoteAsset = extractQuoteAsset(tx.symbol);
         const quoteQty = tx.quoteQuantity ?? (tx.price * tx.quantity);
 
@@ -126,6 +136,20 @@ export function TransactionsView({
         return '⚪'; // Default white
       };
 
+      // Price & fee details
+      let price: number | undefined;
+      let fee: number | undefined;
+      let feeAsset: string | undefined;
+
+      if (tx.type === 'trade') {
+        price = tx.price;
+        fee = tx.fee;
+        feeAsset = tx.feeAsset;
+      } else if (tx.type === 'withdrawal') {
+        fee = tx.fee;
+        feeAsset = tx.baseAsset;
+      }
+
       return {
         id: tx.id,
         type,
@@ -137,21 +161,35 @@ export function TransactionsView({
         amount,
         amountDisplay,
         timestamp,
+        price,
+        fee,
+        feeAsset,
         provider: tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName),
         providerIcon: getProviderIcon(tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName)),
       };
     });
   }, [transactions]);
 
-  // Appliquer le tri
+  // Appliquer la recherche par token puis le tri
   const sortedTransactions = React.useMemo(() => {
-    const sorted = [...mappedTransactions];
+    let filtered = mappedTransactions;
+
+    if (tokenSearch.trim()) {
+      const search = tokenSearch.trim().toUpperCase();
+      filtered = filtered.filter((tx) => {
+        const outMatch = tx.out?.currency?.toUpperCase().includes(search);
+        const inMatch = tx.in?.currency?.toUpperCase().includes(search);
+        return outMatch || inMatch;
+      });
+    }
+
+    const sorted = [...filtered];
     sorted.sort((a, b) => {
       const diff = b.timestamp - a.timestamp;
       return sortOrder === 'asc' ? -diff : diff;
     });
     return sorted;
-  }, [mappedTransactions, sortOrder]);
+  }, [mappedTransactions, sortOrder, tokenSearch]);
 
   const toggleDateSort = () => {
     setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
@@ -170,10 +208,10 @@ export function TransactionsView({
     setCurrentPage((prev) => Math.min(totalPages, prev + 1));
   };
 
-  // Réinitialiser à la première page si le tri change
+  // Réinitialiser à la première page si le tri ou la recherche change
   React.useEffect(() => {
     setCurrentPage(1);
-  }, [sortOrder]);
+  }, [sortOrder, tokenSearch]);
 
   const handleExport = () => {
     // Préparer les données pour l'export
@@ -185,6 +223,9 @@ export function TransactionsView({
       'Plateforme Sortie': tx.out?.account || '',
       'Entrée': tx.in ? `+${tx.in.amount} ${tx.in.currency}` : '',
       'Plateforme Entrée': tx.in?.account || '',
+      'Prix unitaire': tx.price != null ? tx.price : '',
+      'Fee': tx.fee != null ? tx.fee : '',
+      'Fee Asset': tx.feeAsset || '',
       'Montant': tx.amountDisplay,
     }));
 
@@ -216,7 +257,7 @@ export function TransactionsView({
       <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-[#f8f9fc]">
         {/* Tabs */}
         <div className="flex border-b md:border-b-0 border-[#d4d8e1] w-full md:w-auto overflow-x-auto">
-          <Tab label="Transactions" count={transactions.length} active />
+          <Tab label="Transactions" count={sortedTransactions.length} active />
           <Tab label="Transactions imposables" count={0} />
           <Tab label="Corrections" count={1} />
         </div>
@@ -242,6 +283,25 @@ export function TransactionsView({
       {/* Filters Bar */}
       <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] shrink-0">
         <div className="flex items-center gap-2">
+          {/* Recherche par token */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#808594]" />
+            <input
+              type="text"
+              placeholder="Rechercher un token..."
+              value={tokenSearch}
+              onChange={(e) => setTokenSearch(e.target.value)}
+              className="h-9 w-48 pl-8 pr-8 rounded border border-[#d4d8e1] bg-[#f8f9fc] text-sm text-[#1e2029] placeholder:text-[#808594] focus:outline-none focus:ring-2 focus:ring-[#503bff]/20 focus:border-[#503bff]"
+            />
+            {tokenSearch && (
+              <button
+                onClick={() => setTokenSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#808594] hover:text-[#1e2029]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <Button
             variant="ghost"
             onClick={() => {
@@ -253,7 +313,7 @@ export function TransactionsView({
             <Filter className="w-4 h-4 mr-2" />
             Filtres
             <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
-              {symbolFilter !== "all" ? "1" : "0"}
+              {symbolFilter !== "all" || tokenSearch ? "1" : "0"}
             </span>
           </Button>
           <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
@@ -318,6 +378,8 @@ export function TransactionsView({
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Sortie</th>
               <th className="w-10 px-2 py-2 bg-white"></th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Entrée</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Prix unitaire</th>
+              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Fee</th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant USD</th>
               <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant EUR</th>
             </tr>
@@ -362,7 +424,7 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <img
+                        <Image
                           src={`https://icons.waltio.com/token/${tx.out.currency.toLowerCase()}`}
                           alt={tx.out.currency}
                           width={32}
@@ -398,7 +460,7 @@ export function TransactionsView({
                           className="rounded-full shrink-0 object-cover"
                         />
                       ) : (
-                        <img
+                        <Image
                           src={`https://icons.waltio.com/token/${tx.in.currency.toLowerCase()}`}
                           alt={tx.in.currency}
                           width={32}
@@ -417,6 +479,21 @@ export function TransactionsView({
                         )}
                       </div>
                     </div>
+                  )}
+                </td>
+                <td className="px-4 py-2 text-right">
+                  <span className="text-sm font-medium text-[#1e2029]">
+                    {tx.price != null ? numberFormatter.format(tx.price) : "-"}
+                  </span>
+                </td>
+                <td className="px-4 py-2 text-right">
+                  {tx.fee != null ? (
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-medium text-[#1e2029]">{numberFormatter.format(tx.fee)}</span>
+                      {tx.feeAsset && <span className="text-[11px] text-[#808594]">{tx.feeAsset}</span>}
+                    </div>
+                  ) : (
+                    <span className="text-sm font-medium text-[#1e2029]">-</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
