@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { Check, LoaderCircle, Lock, Shield } from "lucide-react";
+import { Check, LoaderCircle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
@@ -208,22 +207,6 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 ))}
               </div>
 
-              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2.5">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-                    <Shield className="size-3" />
-                  </span>
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="text-xs font-medium text-foreground">Lecture seule obligatoire</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      Limitez à la lecture seule
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0 ml-2">
-                  <Switch checked={readOnly} onCheckedChange={setReadOnly} className="scale-75" />
-                </div>
-              </div>
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
@@ -231,17 +214,6 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </div>
           )}
 
-          <details className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
-            <summary className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground hover:text-foreground/80">
-              <Lock className="size-3 text-primary" />
-              Sécurité & RGPD
-            </summary>
-            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[10px] text-muted-foreground">
-              <li>Chiffrés côté serveur</li>
-              <li>Jamais affichés en clair</li>
-              <li>Révocables à tout moment</li>
-            </ul>
-          </details>
 
           {error ? (
             <div className="rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-500">{error}</div>
@@ -253,7 +225,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </Button>
             <Button
               type="submit"
-              disabled={submitting || provider.disabled || !apiKey || !apiSecret || !readOnly}
+              disabled={submitting || provider.disabled || !apiKey || !apiSecret}
               className="h-8 min-w-[140px] text-sm"
             >
               {submitting ? (
