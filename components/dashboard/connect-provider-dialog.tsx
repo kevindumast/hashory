@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation } from "convex/react";
-import { Check, LoaderCircle, Lock, Shield } from "lucide-react";
+import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -14,8 +15,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 
@@ -28,12 +29,14 @@ type ProviderConfig = {
   value: string;
   label: string;
   description: string;
+  iconUrl: string;
   disabled?: boolean;
   fields: Array<{
-    name: "apiKey" | "apiSecret";
+    name: "apiKey" | "apiSecret" | "address";
     label: string;
     placeholder: string;
     helper?: string;
+    secret?: boolean;
   }>;
 };
 
@@ -42,6 +45,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "binance",
     label: "Binance (API)",
     description: "Connexion par clé API avec permissions lecture seule.",
+    iconUrl: "",
     fields: [
       {
         name: "apiKey",
@@ -54,6 +58,63 @@ const providerConfigs: ProviderConfig[] = [
         label: "API Secret",
         placeholder: "Ex: zYxW9876...",
         helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
+        secret: true,
+      },
+    ],
+  },
+  {
+    value: "kaspa",
+    label: "Kaspa (wallet)",
+    description: "Connexion par adresse publique Kaspa.",
+    iconUrl: "",
+    fields: [
+      {
+        name: "address",
+        label: "Adresse Kaspa",
+        placeholder: "kaspa:qr...",
+        helper: "Adresse publique — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "ethereum",
+    label: "Ethereum (wallet)",
+    description: "Connexion par adresse publique Ethereum.",
+    iconUrl: "",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Ethereum",
+        placeholder: "0x...",
+        helper: "Adresse publique — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "solana",
+    label: "Solana (wallet)",
+    description: "Connexion par adresse publique Solana.",
+    iconUrl: "",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Solana",
+        placeholder: "Ex: 5YNmS...",
+        helper: "Adresse publique — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "bitcoin",
+    label: "Bitcoin (wallet)",
+    description: "Connexion par adresse publique Bitcoin.",
+    iconUrl: "",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Bitcoin",
+        placeholder: "Ex: bc1q... ou 1A1z...",
+        helper: "Adresse publique — aucune clé privée requise.",
       },
     ],
   },
@@ -61,13 +122,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "kucoin",
     label: "KuCoin (bientôt)",
     description: "Support en cours de préparation.",
-    disabled: true,
-    fields: [],
-  },
-  {
-    value: "wallet",
-    label: "Wallet (adresse)",
-    description: "Connexion par adresse publique (prochainement).",
+    iconUrl: "",
     disabled: true,
     fields: [],
   },
@@ -84,8 +139,10 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [address, setAddress] = useState("");
   const [readOnly, setReadOnly] = useState(true);
   const [label, setLabel] = useState("");
+  const [showSecret, setShowSecret] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
@@ -96,8 +153,10 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     if (!open) {
       setApiKey("");
       setApiSecret("");
+      setAddress("");
       setReadOnly(true);
       setLabel("");
+      setShowSecret(false);
       setError(null);
       setCompleted(false);
       setProvider(providerConfigs[0]);
@@ -115,10 +174,14 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     setError(null);
 
     try {
+      const usesAddress = provider.fields.some((f) => f.name === "address");
+      const finalApiKey = usesAddress ? address : apiKey;
+      const finalApiSecret = usesAddress ? undefined : apiSecret;
+
       await upsertIntegration({
         provider: provider.value,
-        apiKey,
-        apiSecret,
+        apiKey: finalApiKey,
+        apiSecret: finalApiSecret,
         readOnly,
         displayName: label ? label.trim() : undefined,
       });
@@ -136,7 +199,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-4 bg-background/95">
+      <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
           <DialogTitle>Connecter une plateforme</DialogTitle>
           <DialogDescription className="text-xs">
@@ -144,7 +207,16 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
+        {/* Rassurance sécurité */}
+        <div className="flex items-start gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+          <span className="leading-snug">
+            Accès <span className="font-semibold">lecture seule</span> — aucun ordre ne peut être passé.
+            Vos clés sont chiffrées immédiatement côté serveur.
+          </span>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="space-y-1.5">
             <Label htmlFor="provider" className="text-sm">Plateforme</Label>
             <Select
@@ -153,18 +225,30 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 const next = providerConfigs.find((config) => config.value === value);
                 if (next) {
                   setProvider(next);
+                  setShowSecret(false);
                 }
               }}
             >
-              <SelectTrigger id="provider" className="h-9">
+              <SelectTrigger id="provider" className="h-10">
                 <SelectValue placeholder="Choisir un provider" />
               </SelectTrigger>
               <SelectContent>
                 {providerConfigs.map((config) => (
                   <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
-                    <div className="flex flex-col gap-0.5">
-                      <span>{config.label}</span>
-                      <span className="text-xs text-muted-foreground">{config.description}</span>
+                    <div className="flex items-center gap-2.5">
+                      <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative">
+                        <Image
+                          src={config.iconUrl}
+                          alt=""
+                          fill
+                          sizes="24px"
+                          className="object-cover"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-0.5 text-left">
+                        <span className="text-sm">{config.label}</span>
+                        <span className="text-xs text-muted-foreground">{config.description}</span>
+                      </div>
                     </div>
                   </SelectItem>
                 ))}
@@ -173,97 +257,98 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
           </div>
 
           {!provider.disabled ? (
-            <>
-              <div className="grid gap-2.5">
-                <div className="space-y-1">
-                  <Label htmlFor="label" className="text-sm">Nom interne (optionnel)</Label>
-                  <Input
-                    id="label"
-                    placeholder={`Ex: ${maskedProviderLabel} - Mandat #42`}
-                    value={label}
-                    onChange={(event) => setLabel(event.target.value)}
-                    className="h-8 text-sm"
-                  />
-                  <p className="text-[11px] text-muted-foreground leading-tight">
-                    Visible uniquement dans Oracly pour distinguer vos connexions.
-                  </p>
-                </div>
+            <div className="grid gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="label" className="text-sm">Nom interne <span className="text-muted-foreground font-normal">(optionnel)</span></Label>
+                <Input
+                  id="label"
+                  placeholder={`Ex: ${maskedProviderLabel} - Mandat #42`}
+                  value={label}
+                  onChange={(event) => setLabel(event.target.value)}
+                  className="h-9 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground leading-tight">
+                  Visible uniquement dans Oracly pour distinguer vos connexions.
+                </p>
+              </div>
 
-                {provider.fields.map((field) => (
-                  <div className="space-y-1" key={field.name}>
+              {provider.fields.map((field) => {
+                const value =
+                  field.name === "apiKey" ? apiKey : field.name === "apiSecret" ? apiSecret : address;
+                const setValue =
+                  field.name === "apiKey"
+                    ? setApiKey
+                    : field.name === "apiSecret"
+                    ? setApiSecret
+                    : setAddress;
+                const isSecret = field.secret === true;
+                const inputType = isSecret && !showSecret ? "password" : "text";
+                return (
+                  <div className="space-y-1.5" key={field.name}>
                     <Label htmlFor={field.name} className="text-sm">{field.label}</Label>
-                    <Input
-                      id={field.name}
-                      placeholder={field.placeholder}
-                      autoComplete="off"
-                      value={field.name === "apiKey" ? apiKey : apiSecret}
-                      onChange={(event) =>
-                        field.name === "apiKey" ? setApiKey(event.target.value) : setApiSecret(event.target.value)
-                      }
-                      className="h-8 text-sm"
-                      required
-                    />
+                    <div className="relative">
+                      <Input
+                        id={field.name}
+                        type={inputType}
+                        placeholder={field.placeholder}
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={value}
+                        onChange={(event) => setValue(event.target.value)}
+                        className={cn("h-9 text-sm font-mono", isSecret && "pr-10")}
+                        required
+                      />
+                      {isSecret && value && (
+                        <button
+                          type="button"
+                          onClick={() => setShowSecret((v) => !v)}
+                          aria-label={showSecret ? "Masquer le secret" : "Afficher le secret"}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+                        >
+                          {showSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                        </button>
+                      )}
+                    </div>
                     {field.helper ? <p className="text-[11px] text-muted-foreground leading-tight">{field.helper}</p> : null}
                   </div>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between rounded-lg border border-border/60 bg-muted/40 p-2.5">
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-                    <Shield className="size-3" />
-                  </span>
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="text-xs font-medium text-foreground">Lecture seule obligatoire</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      Limitez à la lecture seule
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right shrink-0 ml-2">
-                  <Switch checked={readOnly} onCheckedChange={setReadOnly} className="scale-75" />
-                </div>
-              </div>
-            </>
+                );
+              })}
+            </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 p-6 text-sm text-muted-foreground">
-              Cette intégration sera disponible très bientôt. Restez informé dans notre changelog.
+            <div className="rounded-xl border border-dashed border-border bg-muted/40 p-6 text-sm text-muted-foreground text-center">
+              Cette intégration sera disponible très bientôt.
+              <br />
+              Restez informé dans notre changelog.
             </div>
           )}
 
-          <details className="rounded-lg border border-border/40 bg-muted/30 p-2.5">
-            <summary className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground hover:text-foreground/80">
-              <Lock className="size-3 text-primary" />
-              Sécurité & RGPD
-            </summary>
-            <ul className="mt-2 list-disc space-y-0.5 pl-5 text-[10px] text-muted-foreground">
-              <li>Chiffrés côté serveur</li>
-              <li>Jamais affichés en clair</li>
-              <li>Révocables à tout moment</li>
-            </ul>
-          </details>
-
           {error ? (
-            <div className="rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-1.5 text-xs text-red-500">{error}</div>
+            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+              {error}
+            </div>
           ) : null}
 
           <DialogFooter className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting} className="h-8 text-sm">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting} className="h-9 text-sm cursor-pointer">
               Annuler
             </Button>
             <Button
               type="submit"
-              disabled={submitting || provider.disabled || !apiKey || !apiSecret || !readOnly}
-              className="h-8 min-w-[140px] text-sm"
+              disabled={
+                submitting ||
+                provider.disabled ||
+                (provider.fields.some((f) => f.name === "address") ? !address : !apiKey || !apiSecret)
+              }
+              className="h-9 min-w-[140px] text-sm cursor-pointer"
             >
               {submitting ? (
                 <span className="flex items-center gap-1.5">
-                  <LoaderCircle className="size-3 animate-spin" />
-                  Connexion...
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                  Connexion…
                 </span>
               ) : completed ? (
                 <span className="flex items-center gap-1.5">
-                  <Check className="size-3" />
+                  <Check className="size-3.5" />
                   Ajouté
                 </span>
               ) : (
@@ -280,7 +365,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 function ConnectProviderDialogPlaceholder({ open, onOpenChange }: ConnectProviderDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md bg-background/95">
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Intégrations indisponibles</DialogTitle>
           <DialogDescription>

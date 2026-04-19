@@ -29,6 +29,14 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { currencyFormatter, type HistoryPoint, type PerformancePoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+
+function formatAxisValue(v: number): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1).replace(/\.0$/, "")}M $`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k $`;
+  return `${sign}${Math.round(abs)} $`;
+}
 import { TokenPortfolioSection } from "./TokenPortfolioSection";
 
 type AllocationEntry = {
@@ -182,20 +190,20 @@ export function OverviewTab({
                             <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
                           </linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                         <XAxis
                           dataKey="label"
-                          stroke="hsl(var(--muted-foreground))"
+                          stroke="var(--muted-foreground)"
                           tickLine={false}
                           axisLine={false}
                         />
                         <YAxis
-                          stroke="hsl(var(--muted-foreground))"
+                          stroke="var(--muted-foreground)"
                           tickLine={false}
                           axisLine={false}
                           width={64}
                           domain={historyYAxisDomain as [number, number]}
-                          tickFormatter={(value) => currencyFormatter.format(value)}
+                          tickFormatter={(value) => formatAxisValue(value)}
                         />
                         <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
                         <Area
@@ -291,15 +299,15 @@ export function OverviewTab({
                 <ChartContainer config={{ profitPercent: { label: "Profit %" }, benchmarkPercent: { label: "Benchmark %" } }} className="h-full w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={performanceSeries}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                       <XAxis
                         dataKey="label"
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="var(--muted-foreground)"
                         tickLine={false}
                         axisLine={false}
                       />
                       <YAxis
-                        stroke="hsl(var(--muted-foreground))"
+                        stroke="var(--muted-foreground)"
                         tickLine={false}
                         axisLine={false}
                         width={56}
@@ -309,7 +317,7 @@ export function OverviewTab({
                       <Line
                         type="monotone"
                         dataKey="profitPercent"
-                        stroke="hsl(var(--chart-1))"
+                        stroke="var(--chart-1)"
                         strokeWidth={2}
                         dot={false}
                         name="All-time profit"
@@ -317,7 +325,7 @@ export function OverviewTab({
                       <Line
                         type="monotone"
                         dataKey="benchmarkPercent"
-                        stroke="hsl(var(--chart-2))"
+                        stroke="var(--chart-2)"
                         strokeWidth={2}
                         dot={false}
                         name="Net invested"

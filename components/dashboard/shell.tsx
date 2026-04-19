@@ -1,20 +1,48 @@
+"use client";
+
+import { useState } from "react";
 import { Sidebar, MobileNav } from "./sidebar";
+import { DashboardTopbar } from "./topbar";
+import { ConnectProviderDialog } from "./connect-provider-dialog";
+import { ProviderDialogProvider } from "./provider-dialog-context";
 
 interface DashboardShellProps {
   children: React.ReactNode;
 }
 
 export function DashboardShell({ children }: DashboardShellProps) {
-  return (
-    <div className="flex flex-col min-h-screen bg-[#f8f9fc]">
-      {/* Mobile Navigation */}
-      <MobileNav />
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
 
-      {/* Desktop + Content Layout */}
-      <div className="flex flex-1">
+  return (
+    <ProviderDialogProvider
+      value={{
+        open: connectDialogOpen,
+        setOpen: setConnectDialogOpen,
+        openDialog: () => setConnectDialogOpen(true),
+        closeDialog: () => setConnectDialogOpen(false),
+      }}
+    >
+      <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 overflow-auto">{children}</main>
+
+        <div className="flex flex-col flex-1 min-w-0">
+          <MobileNav />
+
+          <div className="hidden md:block">
+            <DashboardTopbar
+              onOpenSidebar={() => {}}
+              onConnectProvider={() => setConnectDialogOpen(true)}
+            />
+          </div>
+
+          <main className="flex-1 overflow-auto">{children}</main>
+        </div>
       </div>
-    </div>
+
+      <ConnectProviderDialog
+        open={connectDialogOpen}
+        onOpenChange={setConnectDialogOpen}
+      />
+    </ProviderDialogProvider>
   );
 }
