@@ -1,9 +1,9 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { encryptSecret } from "./utils/encryption";
+import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
 
-const SUPPORTED_PROVIDERS = ["binance"];
+const SUPPORTED_PROVIDERS = ["binance", "kaspa", "ethereum", "solana", "bitcoin"];
 
 export const list = query({
   args: {
@@ -22,18 +22,29 @@ export const list = query({
       .order("desc")
       .collect();
 
-    return integrations.map((integration) => ({
-      _id: integration._id,
-      provider: integration.provider,
-      displayName: integration.displayName ?? integration.provider,
-      readOnly: integration.readOnly,
-      scopes: integration.scopes ?? [],
-      createdAt: integration.createdAt,
-      updatedAt: integration.updatedAt,
-      lastSyncedAt: integration.lastSyncedAt ?? null,
-      syncStatus: integration.syncStatus ?? "idle",
-      accountCreatedAt: integration.accountCreatedAt ?? null,
-    }));
+    return integrations.map((integration) => {
+      let publicAddress: string | null = null;
+      if (["kaspa", "ethereum", "solana", "bitcoin"].includes(integration.provider)) {
+        try {
+          publicAddress = decryptSecret(integration.encryptedCredentials.apiKey);
+        } catch {
+          publicAddress = null;
+        }
+      }
+      return {
+        _id: integration._id,
+        provider: integration.provider,
+        displayName: integration.displayName ?? integration.provider,
+        readOnly: integration.readOnly,
+        scopes: integration.scopes ?? [],
+        createdAt: integration.createdAt,
+        updatedAt: integration.updatedAt,
+        lastSyncedAt: integration.lastSyncedAt ?? null,
+        syncStatus: integration.syncStatus ?? "idle",
+        accountCreatedAt: integration.accountCreatedAt ?? null,
+        publicAddress,
+      };
+    });
   },
 });
 
@@ -84,7 +95,7 @@ export const upsert = mutation({
   args: {
     provider: v.string(),
     apiKey: v.string(),
-    apiSecret: v.string(),
+    apiSecret: v.optional(v.string()),
     readOnly: v.boolean(),
     displayName: v.optional(v.string()),
   },
@@ -99,7 +110,7 @@ export const upsert = mutation({
 
     const encryptedCredentials = {
       apiKey: encryptSecret(args.apiKey),
-      apiSecret: encryptSecret(args.apiSecret),
+      apiSecret: encryptSecret(args.apiSecret ?? ""),
     };
 
     const existing = await ctx.db

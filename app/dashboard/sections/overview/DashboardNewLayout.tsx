@@ -16,6 +16,14 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { currencyFormatter, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+
+function formatAxisValue(v: number): string {
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1).replace(/\.0$/, "")}M $`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k $`;
+  return `${sign}${Math.round(abs)} $`;
+}
 import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
 import { TrendingUp, LoaderCircle, RefreshCw } from "lucide-react";
@@ -30,13 +38,44 @@ type DashboardNewLayoutProps = {
 const CHART_PERIODS = ["1D", "1W", "1M", "ALL"] as const;
 type ChartPeriod = typeof CHART_PERIODS[number];
 
+const monthLabelFormatter = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" });
+
+function aggregateByPeriod(series: HistoryPoint[], period: ChartPeriod): HistoryPoint[] {
+  if (!series.length) return [];
+  if (period === "ALL" || period === "1D") return series;
+
+  const bucketKey = (ts: number): string => {
+    const d = new Date(ts);
+    if (period === "1M") {
+      return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    }
+    const jan1 = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + jan1.getUTCDay() + 1) / 7);
+    return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+  };
+
+  const buckets = new Map<string, HistoryPoint>();
+  for (const point of series) {
+    buckets.set(bucketKey(point.timestamp), point);
+  }
+  const sorted = Array.from(buckets.values()).sort((a, b) => a.timestamp - b.timestamp);
+
+  if (period === "1M") {
+    return sorted.map((point) => ({
+      ...point,
+      label: monthLabelFormatter.format(new Date(point.timestamp)),
+    }));
+  }
+  return sorted;
+}
+
 export function DashboardNewLayout({
   profitSummary,
   historySeries,
   portfolioTokens,
   onOpenIntegrations,
 }: DashboardNewLayoutProps) {
-  const [activePeriod, setActivePeriod] = useState<ChartPeriod>("1M");
+  const [activePeriod, setActivePeriod] = useState<ChartPeriod>("ALL");
   const [activeTab, setActiveTab] = useState<"jetons" | "plateformes">("jetons");
   const [sortColumn, setSortColumn] = useState<"symbol" | "qty" | "avgPrice" | "current" | "value" | "pnlTotal" | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
@@ -77,19 +116,71 @@ export function DashboardNewLayout({
   const isPositive = totalProfit >= 0;
   const unrealizedPnl = hasCurrentPrices ? totalCurrentValue - totalCostBasis : null;
 
-  const filteredHistory = useMemo(() => {
-    if (!historySeries.length) return [];
-    const now = historySeries[historySeries.length - 1]?.timestamp ?? Date.now();
-    const durationMap: Record<ChartPeriod, number | null> = {
-      "1D": 86400000,
-      "1W": 604800000,
-      "1M": 2592000000,
-      "ALL": null,
+  // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
+  function makeXTick(series: typeof historySeries) {
+    return function XTick({ x, y, payload, index }: { x: number; y: number; payload: { value: string }; index: number }) {
+      const point = series[index];
+      if (!point) return <g />;
+      const year = new Date(point.timestamp).getUTCFullYear();
+      const isYearStart = index === 0 || new Date(series[index - 1].timestamp).getUTCFullYear() !== year;
+
+      return (
+        <g transform={`translate(${x},${y})`}>
+          {/* Month label */}
+          <text
+            dy={14}
+            textAnchor="middle"
+            fill="var(--muted-foreground)"
+            fontSize={11}
+          >
+            {payload.value}
+          </text>
+
+          {/* Year boundary */}
+          {isYearStart && (
+            <>
+              {/* vertical separator line going up into the chart */}
+              <line
+                x1={0} x2={0} y1={-4} y2={-280}
+                stroke="var(--border)"
+                strokeWidth={1}
+                strokeDasharray="3 3"
+                opacity={0.35}
+              />
+              {/* year label */}
+              <text
+                dy={30}
+                textAnchor="middle"
+                fill="var(--muted-foreground)"
+                fontSize={10}
+                fontWeight="700"
+                opacity={0.65}
+              >
+                {year}
+              </text>
+            </>
+          )}
+        </g>
+      );
     };
-    const duration = durationMap[activePeriod];
-    if (!duration) return historySeries;
-    return historySeries.filter(p => p.timestamp >= now - duration);
+  }
+
+  const periodPointCounts = useMemo(() => {
+    const result = {} as Record<ChartPeriod, number>;
+    for (const p of CHART_PERIODS) {
+      result[p] = aggregateByPeriod(historySeries, p).length;
+    }
+    return result;
+  }, [historySeries]);
+
+  const filteredHistory = useMemo(() => {
+    return aggregateByPeriod(historySeries, activePeriod);
   }, [historySeries, activePeriod]);
+
+  const chartIsPositive = useMemo(() => {
+    if (filteredHistory.length === 0) return true;
+    return filteredHistory[filteredHistory.length - 1].profitUsd >= 0;
+  }, [filteredHistory]);
 
   // Portfolio value series with embedded buy/sell markers
   const portfolioValueSeries = useMemo(() => {
@@ -144,7 +235,7 @@ export function DashboardNewLayout({
               style={{ width: `${Math.min(Math.abs(profitPercent), 100)}%` }}
             />
           </div>
-          <p className="mt-2 text-[10px] text-muted-foreground/60 italic">PnL réalisé + latent combiné</p>
+          <p className="mt-2 text-[10px] text-muted-foreground italic">PnL réalisé + latent combiné</p>
         </div>
 
         {/* Valeur actuelle */}
@@ -192,64 +283,82 @@ export function DashboardNewLayout({
         </div>
       </section>
 
+      {/* ── Period selector ── */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Période</p>
+        <div className="flex gap-1.5">
+          {CHART_PERIODS.map((p) => {
+            const count = periodPointCounts[p] ?? 0;
+            const disabled = count < 2;
+            return (
+              <button
+                key={p}
+                onClick={() => !disabled && setActivePeriod(p)}
+                disabled={disabled}
+                title={
+                  disabled
+                    ? "Pas assez de données pour cette agrégation"
+                    : p === "1D" ? "Un point par jour"
+                    : p === "1W" ? "Un point par semaine"
+                    : p === "1M" ? "Un point par mois"
+                    : "Tous les points journaliers"
+                }
+                className={`px-3 py-1 text-[11px] font-bold rounded transition-colors duration-150 ${
+                  disabled
+                    ? "opacity-30 cursor-not-allowed bg-muted/20 text-muted-foreground"
+                    : activePeriod === p
+                    ? "bg-primary text-primary-foreground cursor-pointer"
+                    : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+                }`}
+              >
+                {p}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── Charts Row ── */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
         {/* Performance chart */}
         <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5 pb-4 border-b border-border/40">
-            <div>
-              <h2 className="text-sm font-bold tracking-tight text-foreground">Performance du portefeuille</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">Profit cumulé (USD)</p>
-            </div>
-            <div className="flex gap-1.5">
-              {CHART_PERIODS.map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setActivePeriod(p)}
-                  className={`px-3 py-1 text-[11px] font-bold rounded transition-colors duration-150 cursor-pointer ${
-                    activePeriod === p
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  {p}
-                </button>
-              ))}
-            </div>
+          <div className="mb-5 pb-4 border-b border-border/40">
+            <h2 className="text-sm font-bold tracking-tight text-foreground">Performance du portefeuille</h2>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">Profit cumulé (USD)</p>
           </div>
 
           <div className="h-[260px] w-full">
-            {filteredHistory.length > 0 ? (
+            {filteredHistory.length >= 2 ? (
               <ChartContainer
-                config={{ profitUsd: { label: "Profit USD", color: isPositive ? "var(--positive)" : "var(--negative)" } }}
+                config={{ profitUsd: { label: "Profit USD", color: chartIsPositive ? "var(--positive)" : "var(--negative)" } }}
                 className="h-full w-full"
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={filteredHistory} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={filteredHistory} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
                     <defs>
                       <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={isPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={isPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0} />
+                        <stop offset="5%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0.2} />
+                        <stop offset="95%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
                       dataKey="label"
-                      stroke="hsl(var(--muted-foreground))"
                       tickLine={false}
                       axisLine={false}
-                      style={{ fontSize: "11px" }}
-                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      height={46}
+                      tick={makeXTick(filteredHistory)}
+                      interval="preserveStartEnd"
                     />
                     <YAxis
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       tickLine={false}
                       axisLine={false}
-                      width={72}
-                      tickFormatter={(v) => currencyFormatter.format(v)}
+                      width={62}
+                      tickFormatter={(v) => formatAxisValue(v)}
                       style={{ fontSize: "11px" }}
-                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      tick={{ fill: "var(--muted-foreground)" }}
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
@@ -259,7 +368,7 @@ export function DashboardNewLayout({
                     <Area
                       type="monotone"
                       dataKey="profitUsd"
-                      stroke={isPositive ? "var(--positive)" : "var(--negative)"}
+                      stroke={chartIsPositive ? "var(--positive)" : "var(--negative)"}
                       strokeWidth={2}
                       fill="url(#chartGrad)"
                     />
@@ -268,10 +377,20 @@ export function DashboardNewLayout({
               </ChartContainer>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                <p className="text-sm">Aucune donnée à afficher.</p>
-                <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
-                  Connecter une plateforme →
-                </button>
+                <p className="text-sm">
+                  {historySeries.length === 0
+                    ? "Aucune donnée à afficher."
+                    : "Pas assez de points pour cette agrégation."}
+                </p>
+                {historySeries.length === 0 ? (
+                  <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
+                    Connecter une plateforme →
+                  </button>
+                ) : (
+                  <button onClick={() => setActivePeriod("ALL")} className="text-xs text-primary hover:underline cursor-pointer">
+                    Voir toutes les données →
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -279,7 +398,7 @@ export function DashboardNewLayout({
 
         {/* Portfolio value chart with buy/sell markers */}
         <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-5 pb-4 border-b border-border/40">
+          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/40">
             <div>
               <h2 className="text-sm font-bold tracking-tight text-foreground">Valeur investie</h2>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">Montant du portefeuille (USD)</p>
@@ -297,36 +416,36 @@ export function DashboardNewLayout({
           </div>
 
           <div className="h-[260px] w-full">
-            {portfolioValueSeries.length > 0 ? (
+            {portfolioValueSeries.length >= 2 ? (
               <ChartContainer
                 config={{ portfolioValue: { label: "Montant USD", color: "var(--primary)" } }}
                 className="h-full w-full"
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={portfolioValueSeries} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <AreaChart data={portfolioValueSeries} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
                     <defs>
                       <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.18} />
                         <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
                       dataKey="label"
-                      stroke="hsl(var(--muted-foreground))"
                       tickLine={false}
                       axisLine={false}
-                      style={{ fontSize: "11px" }}
-                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      height={46}
+                      tick={makeXTick(portfolioValueSeries)}
+                      interval="preserveStartEnd"
                     />
                     <YAxis
-                      stroke="hsl(var(--muted-foreground))"
+                      stroke="var(--muted-foreground)"
                       tickLine={false}
                       axisLine={false}
-                      width={72}
-                      tickFormatter={(v) => currencyFormatter.format(v)}
+                      width={62}
+                      tickFormatter={(v) => formatAxisValue(v)}
                       style={{ fontSize: "11px" }}
-                      tick={{ fill: "hsl(var(--muted-foreground))" }}
+                      tick={{ fill: "var(--muted-foreground)" }}
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
@@ -347,6 +466,7 @@ export function DashboardNewLayout({
                       type="monotone"
                       dataKey="buyMarker"
                       stroke="none"
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       dot={(props: any) => {
                         if (props.payload?.buyMarker == null) return <g key={props.key} />;
                         return (
@@ -371,6 +491,7 @@ export function DashboardNewLayout({
                       type="monotone"
                       dataKey="sellMarker"
                       stroke="none"
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
                       dot={(props: any) => {
                         if (props.payload?.sellMarker == null) return <g key={props.key} />;
                         return (
@@ -395,10 +516,20 @@ export function DashboardNewLayout({
               </ChartContainer>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                <p className="text-sm">Aucune donnée à afficher.</p>
-                <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
-                  Connecter une plateforme →
-                </button>
+                <p className="text-sm">
+                  {historySeries.length === 0
+                    ? "Aucune donnée à afficher."
+                    : "Pas assez de points pour cette agrégation."}
+                </p>
+                {historySeries.length === 0 ? (
+                  <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
+                    Connecter une plateforme →
+                  </button>
+                ) : (
+                  <button onClick={() => setActivePeriod("ALL")} className="text-xs text-primary hover:underline cursor-pointer">
+                    Voir toutes les données →
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -446,7 +577,7 @@ export function DashboardNewLayout({
 
         {activeTab === "jetons" && (
           <>
-            <div className="px-5 py-2 border-b border-border/20 flex items-center gap-2">
+            <div className="px-5 py-2 border-b border-border/50 flex items-center gap-2">
               <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -527,7 +658,7 @@ export function DashboardNewLayout({
                       {sorted.map(({ token, currentPrice, currentValue, unrealized, totalPnl }) => {
                         const realized = token.realizedPnlAvco;
                         return (
-                          <tr key={token.symbol} className="border-t border-border/20 hover:bg-muted/20 transition-colors">
+                          <tr key={token.symbol} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <div className="w-7 h-7 shrink-0 relative">
@@ -573,14 +704,14 @@ export function DashboardNewLayout({
                             <td className={`px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
                                 ? `${realized >= 0 ? "+" : ""}${currencyFormatter.format(realized)}`
-                                : <span className="text-muted-foreground/40">—</span>}
+                                : <span className="text-muted-foreground/70">—</span>}
                             </td>
-                            <td className={`px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/40" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
                                 ? `${unrealized >= 0 ? "+" : ""}${currencyFormatter.format(unrealized)}`
                                 : "—"}
                             </td>
-                            <td className={`px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/40" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
                                 ? `${totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(totalPnl)}`
                                 : currencyFormatter.format(realized)}

@@ -98,14 +98,14 @@
   --primary-foreground: #00389a;
   --secondary: rgba(144, 159, 181, 0.12);
   --secondary-foreground: #dfe4ff;
-  --muted: rgba(96, 115, 173, 0.12);
-  --muted-foreground: rgba(150, 169, 230, 0.65);
-  --accent: rgba(180, 197, 255, 0.12);
+  --muted: rgba(96, 115, 173, 0.18);
+  --muted-foreground: rgba(180, 197, 255, 0.82);
+  --accent: rgba(180, 197, 255, 0.14);
   --accent-foreground: #dfe4ff;
   --destructive: #ee7d77;
-  --border: rgba(96, 115, 173, 0.22);
-  --input: rgba(96, 115, 173, 0.18);
-  --ring: rgba(180, 197, 255, 0.45);
+  --border: rgba(130, 155, 210, 0.28);
+  --input: rgba(130, 155, 210, 0.22);
+  --ring: rgba(180, 197, 255, 0.50);
   --chart-1: #b4c5ff;
   --chart-2: #9bffce;
   --chart-3: #58e7ab;
@@ -115,10 +115,10 @@
   --sidebar-foreground: #dfe4ff;
   --sidebar-primary: #b4c5ff;
   --sidebar-primary-foreground: #00389a;
-  --sidebar-accent: rgba(180, 197, 255, 0.1);
+  --sidebar-accent: rgba(180, 197, 255, 0.16);
   --sidebar-accent-foreground: #dfe4ff;
-  --sidebar-border: rgba(255, 255, 255, 0.07);
-  --sidebar-ring: rgba(180, 197, 255, 0.45);
+  --sidebar-border: rgba(255, 255, 255, 0.10);
+  --sidebar-ring: rgba(180, 197, 255, 0.50);
 }
 
 @layer base {

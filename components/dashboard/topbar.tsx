@@ -33,14 +33,14 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-white/[0.07] bg-[#040914]/95 backdrop-blur-md">
+    <header className="sticky top-0 z-30 border-b border-sidebar-border bg-sidebar/95 backdrop-blur-md">
       <div className="flex w-full items-center justify-between gap-4 px-4 py-3">
         {/* Left: Mobile menu + Ticker */}
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden text-slate-400 hover:text-white hover:bg-white/[0.06]"
+            className="lg:hidden text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent"
             aria-label="Open navigation"
             onClick={onOpenSidebar}
           >
@@ -50,11 +50,11 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
           {/* Crypto Ticker */}
           <div className="hidden lg:flex items-center gap-5 text-[11px] font-bold tabular-nums">
             {ticker.map((t) => (
-              <span key={t.symbol} className={t.up === true ? "text-[#9bffce]" : t.up === false ? "text-slate-400" : "text-slate-400"}>
-                <span className="text-slate-500 mr-1">{t.symbol}:</span>
+              <span key={t.symbol} className={t.up === true ? "text-positive" : "text-muted-foreground"}>
+                <span className="text-muted-foreground mr-1">{t.symbol}:</span>
                 {t.price}
                 {t.change && (
-                  <span className="ml-1.5 opacity-70">
+                  <span className="ml-1.5 opacity-80">
                     {t.up ? "▲" : "▼"} {t.change}
                   </span>
                 )}
@@ -70,20 +70,20 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
               placeholder="Rechercher un actif..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="w-full bg-white/[0.04] border-white/[0.07] text-[#dfe4ff] placeholder:text-slate-500 text-xs focus-visible:ring-[#b4c5ff]/30 h-8"
+              className="w-full bg-sidebar-accent/50 border-sidebar-border text-sidebar-foreground placeholder:text-muted-foreground text-xs focus-visible:ring-sidebar-primary/30 h-8"
             />
           </div>
-          <Button variant="ghost" size="icon" className="hidden sm:inline-flex h-8 w-8 text-slate-500 hover:text-[#b4c5ff] hover:bg-white/[0.06]">
+          <Button variant="ghost" size="icon" className="hidden sm:inline-flex h-8 w-8 text-muted-foreground hover:text-sidebar-primary hover:bg-sidebar-accent">
             <Sparkles className="size-3.5" />
           </Button>
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-2">
-          <div className="hidden lg:block h-4 w-px bg-white/10" />
+          <div className="hidden lg:block h-4 w-px bg-sidebar-border" />
 
           <Button
-            className="hidden sm:inline-flex items-center gap-2 h-8 text-xs bg-[#003ea8] hover:bg-[#0050d4] text-[#b4c5ff] border-0 font-bold tracking-tight uppercase"
+            className="hidden sm:inline-flex items-center gap-2 h-8 text-xs font-bold tracking-tight uppercase cursor-pointer"
             onClick={onConnectProvider}
             disabled={!isIntegrationEnabled}
           >
@@ -93,7 +93,7 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
           <Button
             variant="ghost"
             size="icon"
-            className="sm:hidden h-8 w-8 text-slate-400 hover:text-white hover:bg-white/[0.06]"
+            className="sm:hidden h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
             onClick={onConnectProvider}
             disabled={!isIntegrationEnabled}
           >
@@ -106,7 +106,7 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-foreground hover:bg-accent"
+                className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
                 onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
                 aria-label="Basculer le thème"
               >
@@ -120,9 +120,9 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="relative h-8 w-8 text-slate-400 hover:text-foreground hover:bg-accent">
+              <Button variant="ghost" size="icon" className="relative h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer">
                 <Bell className="size-4" />
-                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-[#9bffce]" />
+                <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-positive" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">Notifications</TooltipContent>
@@ -130,22 +130,22 @@ export function DashboardTopbar({ onOpenSidebar, onConnectProvider }: DashboardT
 
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-white hover:bg-white/[0.06]">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer">
                 <HelpCircle className="size-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="bg-[#09122b] border-white/10 text-[#dfe4ff]">Support</TooltipContent>
+            <TooltipContent side="bottom">Support</TooltipContent>
           </Tooltip>
 
           <div className="relative flex min-w-[36px] items-center justify-end">
             <ClerkLoading>
-              <span className="h-8 w-8 animate-pulse rounded-full bg-white/[0.06]" />
+              <span className="h-8 w-8 animate-pulse rounded-full bg-muted" />
             </ClerkLoading>
             <ClerkLoaded>
               <UserButton
                 appearance={{
                   elements: {
-                    avatarBox: "size-8 border border-white/10",
+                    avatarBox: "size-8 border border-sidebar-border",
                   },
                 }}
                 afterSignOutUrl="/"

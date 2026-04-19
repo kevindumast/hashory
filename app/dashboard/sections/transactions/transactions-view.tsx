@@ -52,6 +52,55 @@ export function TransactionsView({
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
   const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
   const [tokenSearch, setTokenSearch] = React.useState("");
+  const [assetPrices, setAssetPrices] = React.useState<Record<string, number>>({});
+
+  const USD_STABLES = React.useMemo(() => new Set([
+    "USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI",
+  ]), []);
+
+  const nonTradeAssets = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const tx of transactions) {
+      if (tx.type === 'deposit' || tx.type === 'withdrawal') {
+        const asset = tx.baseAsset?.toUpperCase();
+        if (asset && !USD_STABLES.has(asset)) {
+          set.add(asset);
+        }
+      }
+    }
+    return Array.from(set);
+  }, [transactions, USD_STABLES]);
+
+  React.useEffect(() => {
+    if (nonTradeAssets.length === 0) return;
+    let cancelled = false;
+    const pairs = nonTradeAssets.map((asset) => `${asset}USDT`);
+
+    fetch('/api/prices', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbols: pairs }),
+    })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data: Array<{ symbol: string; price: string }>) => {
+        if (cancelled) return;
+        const prices: Record<string, number> = {};
+        for (const item of data) {
+          const pair = item.symbol.toUpperCase();
+          if (pair.endsWith('USDT')) {
+            const asset = pair.slice(0, -4);
+            const parsed = parseFloat(item.price);
+            if (!isNaN(parsed)) prices[asset] = parsed;
+          }
+        }
+        setAssetPrices(prices);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [nonTradeAssets]);
   const allSymbols = React.useMemo(() => {
     const symbols = new Set<string>();
     for (const tx of transactions) {
@@ -122,8 +171,15 @@ export function TransactionsView({
         amount = quoteQty;
         amountDisplay = currencyFormatter.format(quoteQty);
       } else if (tx.type === 'deposit' || tx.type === 'withdrawal') {
-        amount = tx.amount;
-        amountDisplay = currencyFormatter.format(tx.amount);
+        const asset = tx.baseAsset?.toUpperCase() ?? "";
+        const priceUsd = USD_STABLES.has(asset) ? 1 : assetPrices[asset];
+        if (priceUsd !== undefined) {
+          amount = tx.amount * priceUsd;
+          amountDisplay = currencyFormatter.format(amount);
+        } else {
+          amount = 0;
+          amountDisplay = "-";
+        }
       }
 
       const timestamp = tx.type === 'trade' ? tx.executedAt : tx.timestamp;
@@ -168,7 +224,7 @@ export function TransactionsView({
         providerIcon: getProviderIcon(tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName)),
       };
     });
-  }, [transactions]);
+  }, [transactions, assetPrices, USD_STABLES]);
 
   // Appliquer la recherche par token puis le tri
   const sortedTransactions = React.useMemo(() => {
@@ -252,28 +308,28 @@ export function TransactionsView({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f8f9fc] font-sans rounded-xl overflow-hidden border border-[#d4d8e1]">
+    <div className="flex flex-col h-full bg-muted/40 font-sans rounded-xl overflow-hidden border border-border">
       {/* Header Tabs & Actions */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-[#f8f9fc]">
+      <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-muted/40">
         {/* Tabs */}
-        <div className="flex border-b md:border-b-0 border-[#d4d8e1] w-full md:w-auto overflow-x-auto">
+        <div className="flex border-b md:border-b-0 border-border w-full md:w-auto overflow-x-auto">
           <Tab label="Transactions" count={sortedTransactions.length} active />
           <Tab label="Transactions imposables" count={0} />
           <Tab label="Corrections" count={1} />
         </div>
 
         {/* Top Actions */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-[#d4d8e1] flex-1 justify-end bg-[#f8f9fc]">
+        <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-1 justify-end bg-muted/40">
           <Button
             variant="outline"
-            className="bg-white border-[#d4d8e1] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium shadow-sm"
+            className="bg-card border-border text-foreground hover:bg-muted h-9 text-sm font-medium shadow-sm"
             onClick={handleExport}
           >
-            <Download className="w-4 h-4 mr-2 text-[#1e2029]" />
+            <Download className="w-4 h-4 mr-2 text-foreground" />
             Exporter
-            <span className="ml-2 bg-[#f8f9fc] border border-[#d4d8e1] rounded-full px-2 py-0.5 text-xs text-[#3b414f]">{sortedTransactions.length}</span>
+            <span className="ml-2 bg-muted/40 border border-border rounded-full px-2 py-0.5 text-xs text-foreground">{sortedTransactions.length}</span>
           </Button>
-          <Button className="bg-[#e0dcff] text-[#503bff] hover:bg-[#d0ccff] border-none h-9 text-sm font-medium shadow-none">
+          <Button className="bg-primary/15 text-primary hover:bg-primary/25 border-none h-9 text-sm font-medium shadow-none">
             <Plus className="w-4 h-4 mr-2" />
             Ajouter des transactions
           </Button>
@@ -281,22 +337,22 @@ export function TransactionsView({
       </div>
 
       {/* Filters Bar */}
-      <div className="flex items-center justify-between px-5 h-14 bg-white border-b border-[#d4d8e1] shrink-0">
+      <div className="flex items-center justify-between px-5 h-14 bg-card border-b border-border shrink-0">
         <div className="flex items-center gap-2">
           {/* Recherche par token */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#808594]" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Rechercher un token..."
               value={tokenSearch}
               onChange={(e) => setTokenSearch(e.target.value)}
-              className="h-9 w-48 pl-8 pr-8 rounded border border-[#d4d8e1] bg-[#f8f9fc] text-sm text-[#1e2029] placeholder:text-[#808594] focus:outline-none focus:ring-2 focus:ring-[#503bff]/20 focus:border-[#503bff]"
+              className="h-9 w-48 pl-8 pr-8 rounded border border-border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
             {tokenSearch && (
               <button
                 onClick={() => setTokenSearch("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[#808594] hover:text-[#1e2029]"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -308,24 +364,24 @@ export function TransactionsView({
               setTempSymbolFilter(symbolFilter);
               setIsFilterDialogOpen(true);
             }}
-            className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]"
+            className="bg-muted/40 text-foreground hover:bg-muted h-9 text-sm font-medium border border-border"
           >
             <Filter className="w-4 h-4 mr-2" />
             Filtres
-            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
+            <span className="ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
               {symbolFilter !== "all" || tokenSearch ? "1" : "0"}
             </span>
           </Button>
-          <Button variant="ghost" className="bg-[#f8f9fc] text-[#1e2029] hover:bg-[#eff0f3] h-9 text-sm font-medium border border-[#d4d8e1]">
+          <Button variant="ghost" className="bg-muted/40 text-foreground hover:bg-muted h-9 text-sm font-medium border border-border">
             <Eye className="w-4 h-4 mr-2" />
             Affichage
-            <span className="ml-2 bg-[#503bff] text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
+            <span className="ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
           </Button>
         </div>
         
         {/* Pagination simple */}
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-[#808594]">Page {currentPage} sur {totalPages || 1}</span>
+          <span className="text-muted-foreground">Page {currentPage} sur {totalPages || 1}</span>
           <div className="flex items-center gap-1">
              <Button
                variant="ghost"
@@ -350,66 +406,65 @@ export function TransactionsView({
       </div>
 
       {/* Table */}
-      <div className="bg-white flex-1 min-h-0 overflow-auto">
+      <div className="bg-card flex-1 min-h-0 overflow-auto">
         {isLoading ? (
             <div className="flex h-64 items-center justify-center">
-                <LoaderCircle className="w-8 h-8 animate-spin text-[#503bff]" />
+                <LoaderCircle className="w-8 h-8 animate-spin text-primary" />
             </div>
         ) : sortedTransactions.length === 0 ? (
-            <div className="flex h-64 items-center justify-center text-[#808594] text-sm">
+            <div className="flex h-64 items-center justify-center text-muted-foreground text-sm">
                 Aucune transaction trouvée.
             </div>
         ) : (
         <table className="w-full text-left border-collapse">
-          <thead className="bg-white sticky top-0 z-10 shadow-sm">
-            <tr className="border-b border-[#d4d8e1] h-10">
-              <th className="w-12 px-4 py-2 bg-white"><Checkbox className="border-[#d4d8e1] data-[state=checked]:bg-[#503bff] data-[state=checked]:border-[#503bff]" /></th>
-              <th className="w-10 px-2 py-2 bg-white"></th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Type de transaction</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">
+          <thead className="bg-card sticky top-0 z-10 shadow-sm">
+            <tr className="border-b border-border h-10">
+              <th className="w-12 px-4 py-2 bg-card"><Checkbox className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary" /></th>
+              <th className="w-10 px-2 py-2 bg-card"></th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Type de transaction</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">
                 <button
                   onClick={toggleDateSort}
-                  className="flex items-center gap-1.5 hover:text-[#503bff] transition-colors"
+                  className="flex items-center gap-1.5 hover:text-primary transition-colors"
                 >
                   Date
                   <ArrowUpDown className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Sortie</th>
-              <th className="w-10 px-2 py-2 bg-white"></th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider bg-white">Entrée</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Prix unitaire</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Fee</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant USD</th>
-              <th className="px-4 py-2 text-xs font-medium text-[#808594] uppercase tracking-wider text-right bg-white">Montant EUR</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Sortie</th>
+              <th className="w-10 px-2 py-2 bg-card"></th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Entrée</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Prix unitaire</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Fee</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Montant USD</th>
+              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Montant EUR</th>
             </tr>
           </thead>
           <tbody>
             {paginatedTransactions.map((tx) => (
-              <tr key={tx.id} className="border-b border-[#d4d8e1] hover:bg-[#eff0f3] group cursor-pointer h-[52px] transition-colors">
-                <td className="px-4 py-2"><Checkbox className="border-[#d4d8e1] data-[state=checked]:bg-[#503bff] data-[state=checked]:border-[#503bff]" /></td>
+              <tr key={tx.id} className="border-b border-border hover:bg-muted group cursor-pointer h-[52px] transition-colors">
+                <td className="px-4 py-2"><Checkbox className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary" /></td>
                 <td className="px-2 py-2">
                   {/* Warning icon placeholder if needed */}
                 </td>
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-3">
-                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-gray-100", 
-                        tx.type === 'trade' && "bg-blue-50",
-                        tx.type === 'deposit' && "bg-green-50",
-                        tx.type === 'withdrawal' && "bg-red-50"
+                    <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-muted",
+                        tx.type === 'trade' && "bg-blue-500/10",
+                        tx.type === 'deposit' && "bg-emerald-500/10",
+                        tx.type === 'withdrawal' && "bg-destructive/10"
                     )}>
-                        {/* Icons mimicking the style */}
-                        {tx.type === 'trade' && <ArrowLeftRight className="w-4 h-4 text-blue-600" />}
-                        {tx.type === 'deposit' && <ArrowRight className="w-4 h-4 text-green-600 rotate-90" />}
-                        {tx.type === 'withdrawal' && <ArrowRight className="w-4 h-4 text-red-600 -rotate-90" />}
+                        {tx.type === 'trade' && <ArrowLeftRight className="w-4 h-4 text-blue-500 dark:text-blue-400" />}
+                        {tx.type === 'deposit' && <ArrowRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400 rotate-90" />}
+                        {tx.type === 'withdrawal' && <ArrowRight className="w-4 h-4 text-destructive -rotate-90" />}
                     </div>
-                    <span className="text-sm font-bold text-[#1e2029]">{tx.label}</span>
+                    <span className="text-sm font-bold text-foreground">{tx.label}</span>
                   </div>
                 </td>
                 <td className="px-4 py-2">
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-[#1e2029]">{tx.date}</span>
-                    <span className="text-[11px] text-[#808594]">{tx.time}</span>
+                    <span className="text-xs font-medium text-foreground">{tx.date}</span>
+                    <span className="text-[11px] text-muted-foreground">{tx.time}</span>
                   </div>
                 </td>
                 <td className="px-4 py-2">
@@ -423,30 +478,22 @@ export function TransactionsView({
                           height={32}
                           className="rounded-full shrink-0 object-cover"
                         />
-                      ) : (
-                        <Image
-                          src={`https://icons.waltio.com/token/${tx.out.currency.toLowerCase()}`}
-                          alt={tx.out.currency}
-                          width={32}
-                          height={32}
-                          className="rounded-full shrink-0 object-cover"
-                        />
-                      )}
+                      ) : null}
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
+                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
                         <div className="flex items-center gap-1.5">
                           <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
-                          <span className="text-[11px] text-[#808594]">{tx.out.account}</span>
+                          <span className="text-[11px] text-muted-foreground">{tx.out.account}</span>
                         </div>
                         {tx.out.address && (
-                          <span className="text-[10px] text-[#808594] font-mono">{tx.out.address.slice(0, 20)}...</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{tx.out.address.slice(0, 20)}...</span>
                         )}
                       </div>
                     </div>
                   )}
                 </td>
                 <td className="px-2 py-2 text-center">
-                    {tx.out && tx.in && <ArrowRight className="w-4 h-4 text-[#808594]" />}
+                    {tx.out && tx.in && <ArrowRight className="w-4 h-4 text-muted-foreground" />}
                 </td>
                 <td className="px-4 py-2">
                   {tx.in && (
@@ -459,48 +506,40 @@ export function TransactionsView({
                           height={32}
                           className="rounded-full shrink-0 object-cover"
                         />
-                      ) : (
-                        <Image
-                          src={`https://icons.waltio.com/token/${tx.in.currency.toLowerCase()}`}
-                          alt={tx.in.currency}
-                          width={32}
-                          height={32}
-                          className="rounded-full shrink-0 object-cover"
-                        />
-                      )}
+                      ) : null}
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-[#1e2029] whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
+                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
                         <div className="flex items-center gap-1.5">
                           <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
-                          <span className="text-[11px] text-[#808594]">{tx.in.account}</span>
+                          <span className="text-[11px] text-muted-foreground">{tx.in.account}</span>
                         </div>
                         {tx.in.address && (
-                          <span className="text-[10px] text-[#808594] font-mono">{tx.in.address.slice(0, 20)}...</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">{tx.in.address.slice(0, 20)}...</span>
                         )}
                       </div>
                     </div>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-[#1e2029]">
+                  <span className="text-sm font-medium text-foreground">
                     {tx.price != null ? numberFormatter.format(tx.price) : "-"}
                   </span>
                 </td>
                 <td className="px-4 py-2 text-right">
                   {tx.fee != null ? (
                     <div className="flex flex-col items-end">
-                      <span className="text-sm font-medium text-[#1e2029]">{numberFormatter.format(tx.fee)}</span>
-                      {tx.feeAsset && <span className="text-[11px] text-[#808594]">{tx.feeAsset}</span>}
+                      <span className="text-sm font-medium text-foreground">{numberFormatter.format(tx.fee)}</span>
+                      {tx.feeAsset && <span className="text-[11px] text-muted-foreground">{tx.feeAsset}</span>}
                     </div>
                   ) : (
-                    <span className="text-sm font-medium text-[#1e2029]">-</span>
+                    <span className="text-sm font-medium text-foreground">-</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-[#1e2029]">{tx.amountDisplay}</span>
+                  <span className="text-sm font-medium text-foreground">{tx.amountDisplay}</span>
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-[#1e2029]">
+                  <span className="text-sm font-medium text-foreground">
                     {tx.amount > 0 ? `€${(tx.amount * 0.92).toFixed(2)}` : "-"}
                   </span>
                 </td>
@@ -513,19 +552,19 @@ export function TransactionsView({
 
       {/* Filters Modal Dialog */}
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] bg-white">
+        <DialogContent className="sm:max-w-[500px] bg-card">
           <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl font-bold text-[#1e2029]">Filtres</DialogTitle>
+            <DialogTitle className="text-xl font-bold text-foreground">Filtres</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
             {/* Filter Section - Jeton */}
             <div className="space-y-3">
-              <label className="text-xs font-medium text-[#808594] uppercase tracking-wider">Jeton</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Jeton</label>
               <select
                 value={tempSymbolFilter}
                 onChange={(e) => setTempSymbolFilter(e.target.value)}
-                className="w-full h-10 px-3 rounded border border-[#d4d8e1] bg-white text-sm text-[#1e2029] hover:border-[#808594] focus:outline-none focus:ring-2 focus:ring-[#503bff]/20"
+                className="w-full h-10 px-3 rounded border border-border bg-card text-sm text-foreground hover:border-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/20"
               >
                 <option value="all">Tous les jetons</option>
                 {availableSymbols.map((symbol) => (
@@ -538,7 +577,7 @@ export function TransactionsView({
           </div>
 
           {/* Divider */}
-          <div className="my-6 h-px bg-[#d4d8e1]" />
+          <div className="my-6 h-px bg-border" />
 
           {/* Actions */}
           <div className="flex items-center justify-between pt-2">
@@ -548,7 +587,7 @@ export function TransactionsView({
                 onSymbolFilterChange?.("all");
                 setIsFilterDialogOpen(false);
               }}
-              className="text-sm font-medium text-[#503bff] hover:text-[#402fd0] transition-colors"
+              className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
             >
               Effacer les filtres
             </button>
@@ -556,7 +595,7 @@ export function TransactionsView({
               <Button
                 variant="outline"
                 onClick={() => setIsFilterDialogOpen(false)}
-                className="bg-white border-[#d4d8e1] text-[#1e2029] hover:bg-[#f8f9fc]"
+                className="bg-card border-border text-foreground hover:bg-muted/40"
               >
                 Annuler
               </Button>
@@ -565,7 +604,7 @@ export function TransactionsView({
                   onSymbolFilterChange?.(tempSymbolFilter);
                   setIsFilterDialogOpen(false);
                 }}
-                className="bg-[#503bff] hover:bg-[#402fd0] text-white"
+                className="bg-primary hover:bg-primary/90 text-white"
               >
                 Appliquer
               </Button>
@@ -580,21 +619,21 @@ export function TransactionsView({
 function Tab({ label, count, active }: { label: string, count: number, active?: boolean }) {
     return (
         <div className={cn(
-            "flex flex-col justify-center h-14 px-5 border-r border-[#d4d8e1] cursor-pointer transition-colors relative min-w-fit", 
-            active ? "bg-white" : "bg-[#f8f9fc] hover:bg-[#eff0f3]"
+            "flex flex-col justify-center h-14 px-5 border-r border-border cursor-pointer transition-colors relative min-w-fit", 
+            active ? "bg-card" : "bg-muted/40 hover:bg-muted"
         )}>
             {active && (
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-[#503bff]/30 rounded-b-[5px]" />
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-primary/30 rounded-b-[5px]" />
             )}
             <div className="flex items-center gap-2 mt-1">
-                <span className={cn("text-sm", active ? "font-medium text-[#1e2029]" : "text-[#808594]")}>
+                <span className={cn("text-sm", active ? "font-medium text-foreground" : "text-muted-foreground")}>
                     {label}
                 </span>
                 <span className={cn(
                     "text-xs font-medium px-1.5 py-0.5 rounded-full border", 
                     active 
-                        ? "bg-white border-[#8678ff] text-[#3b414f]" 
-                        : "border-[#d4d8e1] text-[#808594]"
+                        ? "bg-card border-primary/50 text-foreground" 
+                        : "border-border text-muted-foreground"
                 )}>
                     {count}
                 </span>

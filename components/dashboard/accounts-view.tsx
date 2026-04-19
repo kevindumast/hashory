@@ -12,7 +12,9 @@ import {
   X,
   ExternalLink,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Plus,
+  Inbox,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -44,13 +46,13 @@ import type { Id } from "@/convex/_generated/dataModel"
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
 const PROVIDER_ICONS: Record<string, string> = {
-  binance: "https://icons.waltio.com/account/BINANCE",
-  kucoin: "https://icons.waltio.com/account/KUCOIN",
-  ethereum: "https://icons.waltio.com/account/WALLET_ETH",
-  bitcoin: "https://icons.waltio.com/account/WALLET_BTC",
-  arbitrum: "https://icons.waltio.com/account/WALLET_ARBITRUM",
-  solana: "https://icons.waltio.com/account/SOLANA",
-  kaspa: "https://icons.waltio.com/account/WALLET_KASPA",
+  binance: "",
+  kucoin: "",
+  ethereum: "",
+  bitcoin: "",
+  arbitrum: "",
+  solana: "",
+  kaspa: "",
 }
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -63,9 +65,14 @@ const PROVIDER_NAMES: Record<string, string> = {
   kaspa: "Kaspa",
 }
 
+type AccountType = "All" | "API" | "File"
+
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
+  const [searchQuery, setSearchQuery] = React.useState("")
+  const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
+  const [viewMode, setViewMode] = React.useState<"list" | "grid">("list")
   const { integrations, isLoading: integrationsLoading } = useIntegrations()
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
@@ -74,6 +81,10 @@ export function AccountsView() {
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
   const syncOrders = useAction(api.binance.syncOrdersOnly)
+  const syncKaspaWallet = useAction(api.kaspa.syncKaspaWallet)
+  const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
+  const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
+  const syncBitcoinWallet = useAction(api.bitcoin.syncBitcoinWallet)
   const purgeAllData = useMutation(api.integrations.purgeAllData)
 
   // Calculer les comptes avec les transactions
@@ -101,9 +112,9 @@ export function AccountsView() {
         name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider,
         type: "API" as const,
         platformId: integration.provider,
-        iconUrl: PROVIDER_ICONS[integration.provider] || "https://icons.waltio.com/account/DEFAULT",
+        iconUrl: PROVIDER_ICONS[integration.provider] || "",
         subAccountsCount: 1,
-        addressOrId: integration.displayName || integration.provider,
+        addressOrId: integration.publicAddress || integration.displayName || integration.provider,
         transactionCount: integrationTransactions.length,
         lastSync,
         status,
@@ -116,20 +127,34 @@ export function AccountsView() {
     setRefreshToken((prev) => prev + 1)
   }, [])
 
-  const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">) => {
+  const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">, provider?: string) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
       return
     }
 
     try {
-      // First reset all cursors to force re-sync from the beginning
-      await resetAllCursors({ integrationId: accountId })
-      console.log("✓ Cursors reset, now starting data sync...")
+      if (provider === "kaspa") {
+        await syncKaspaWallet({ integrationId: accountId })
+      } else if (provider === "ethereum") {
+        await syncEthereumWallet({ integrationId: accountId })
+      } else if (provider === "solana") {
+        await syncSolanaWallet({ integrationId: accountId })
+      } else if (provider === "bitcoin") {
+        await syncBitcoinWallet({ integrationId: accountId })
+      } else if (provider === "binance" || !provider) {
+        // Binance flow (default for backward compatibility)
+        // First reset all cursors to force re-sync from the beginning
+        await resetAllCursors({ integrationId: accountId })
+        console.log("✓ Cursors reset, now starting data sync...")
 
-      // Then call syncAccount to fetch the actual data (status is managed in the backend)
-      await syncAccount({ integrationId: accountId })
-      console.log("✓ Sync completed")
+        // Then call syncAccount to fetch the actual data (status is managed in the backend)
+        await syncAccount({ integrationId: accountId })
+        console.log("✓ Sync completed")
+      } else {
+        console.error(`Unsupported provider for sync: ${provider}`)
+        return
+      }
 
       // Wait a brief moment before refreshing
       await new Promise((resolve) => setTimeout(resolve, 1000))
@@ -137,7 +162,7 @@ export function AccountsView() {
     } catch (error) {
       console.error("Failed to sync account:", error)
     }
-  }, [handleRefresh, resetAllCursors, syncAccount])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -225,182 +250,254 @@ export function AccountsView() {
 
   const isLoading = integrationsLoading || transactionsLoading
 
+  const filteredAccounts = React.useMemo(() => {
+    const query = searchQuery.trim().toLowerCase()
+    return accountsWithTransactions
+      .filter((account) => {
+        if (typeFilter !== "All" && account.type !== typeFilter) return false
+        if (!query) return true
+        return (
+          account.name.toLowerCase().includes(query) ||
+          account.addressOrId.toLowerCase().includes(query) ||
+          account.platformId.toLowerCase().includes(query)
+        )
+      })
+      .sort((a, b) => {
+        const rank = (s: AccountStatus) => (s === "error" ? 0 : s === "syncing" ? 1 : s === "unsupported" ? 2 : 3)
+        return rank(a.status) - rank(b.status)
+      })
+  }, [accountsWithTransactions, searchQuery, typeFilter])
+
+  const hasAnyAccounts = accountsWithTransactions.length > 0
+
   return (
-    <div className="flex flex-col h-full bg-[#f8f9fc] min-h-screen font-sans p-6 md:p-9 max-w-[1141px] mx-auto">
+    <div className="flex flex-col h-full bg-background min-h-screen font-sans p-6 md:p-9 max-w-[1141px] mx-auto">
       {/* Header */}
       <div className="flex flex-row justify-between items-center mb-9">
-        <h1 className="text-[28px] font-bold text-[#1e2029]">Mes comptes</h1>
+        <div className="flex flex-col gap-1">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Portefeuille</p>
+          <h1 className="text-[28px] font-bold tracking-tight text-foreground">Mes comptes</h1>
+        </div>
         <Button
-          className="bg-[#503bff] hover:bg-[#402fd0] text-white font-medium rounded-md h-10 px-6 shadow-sm"
           onClick={() => setIsConnectOpen(true)}
+          className="h-10 px-5 rounded-md font-medium shadow-sm cursor-pointer gap-2"
         >
+          <Plus className="w-4 h-4" />
           Ajouter un compte
         </Button>
       </div>
 
       {/* Filters & Search */}
-      <div className="flex flex-col md:flex-row md:items-center gap-5 mb-9">
+      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
         {/* Chips */}
         <div className="flex items-center gap-2">
-          <FilterChip label="Tous" active />
-          <FilterChip label="API" />
-          <FilterChip label="Fichier" />
+          <FilterChip label="Tous" active={typeFilter === "All"} onClick={() => setTypeFilter("All")} />
+          <FilterChip label="API" active={typeFilter === "API"} onClick={() => setTypeFilter("API")} />
+          <FilterChip label="Fichier" active={typeFilter === "File"} onClick={() => setTypeFilter("File")} />
         </div>
 
         {/* Search */}
         <div className="flex-1 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Rechercher un compte"
-            className="h-[42px] bg-white border-[#d4d8e1] rounded-md pl-4 pr-10 text-sm placeholder:text-[#808594] focus-visible:ring-[#503bff]"
+            className="h-[42px] bg-card border-border rounded-md pl-10 pr-9 text-sm placeholder:text-muted-foreground focus-visible:ring-primary/40"
+            aria-label="Rechercher un compte"
           />
-          <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#808594]" />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              aria-label="Effacer la recherche"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* View Toggler */}
-        <div className="flex items-center bg-[#e9e9e9] p-1 rounded-md h-[42px]">
-          <div className="flex items-center justify-center w-[43px] h-[34px] bg-white rounded shadow-sm cursor-pointer">
-            <LayoutGrid className="w-5 h-5 text-[#1e2029]" />
-          </div>
-          <div className="flex items-center justify-center w-[43px] h-[34px] cursor-pointer text-[#808594] hover:text-[#1e2029]">
-            <ListIcon className="w-5 h-5" />
-          </div>
+        <div
+          role="tablist"
+          aria-label="Affichage des comptes"
+          className="flex items-center bg-muted p-1 rounded-md h-[42px]"
+        >
+          <button
+            role="tab"
+            type="button"
+            aria-label="Vue grille"
+            aria-selected={viewMode === "grid"}
+            onClick={() => setViewMode("grid")}
+            className={cn(
+              "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
+              viewMode === "grid"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <LayoutGrid className="w-4 h-4" />
+          </button>
+          <button
+            role="tab"
+            type="button"
+            aria-label="Vue liste"
+            aria-selected={viewMode === "list"}
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
+              viewMode === "list"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <ListIcon className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
       {/* Accounts List */}
-      <div className="flex flex-col gap-3">
+      <div className={cn(
+        viewMode === "grid"
+          ? "grid grid-cols-1 md:grid-cols-2 gap-3"
+          : "flex flex-col gap-3"
+      )}>
         {isLoading ? (
-          <div className="text-center py-8">
-            <p className="text-[#808594]">Chargement des comptes...</p>
-          </div>
-        ) : accountsWithTransactions.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-[#808594]">Aucun compte connecté. Commencez par en ajouter un.</p>
-          </div>
+          <AccountsSkeleton />
+        ) : !hasAnyAccounts ? (
+          <EmptyState onAdd={() => setIsConnectOpen(true)} />
+        ) : filteredAccounts.length === 0 ? (
+          <NoResultsState query={searchQuery} onReset={() => { setSearchQuery(""); setTypeFilter("All") }} />
         ) : (
-          accountsWithTransactions.map((account) => (
-            <Accordion type="single" collapsible key={account.id} className="bg-white rounded-xl border border-[#d4d8e1] shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] overflow-hidden">
+          filteredAccounts.map((account) => (
+            <Accordion type="single" collapsible key={account.id} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden transition-colors hover:border-primary/30">
               <AccordionItem value={account.id} className="border-none">
-                <AccordionTrigger className="px-6 py-4 hover:no-underline hover:bg-[#fcfcfd] transition-colors group">
-                  <div className="flex items-center justify-between w-full pr-4">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-11 h-11 rounded-full border border-[#f0f0f0]">
+                <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
+                  <div className="flex items-center justify-between w-full pr-2 gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <Avatar className="w-11 h-11 rounded-full border border-border bg-muted shrink-0">
                         <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback>{account.name.slice(0, 2)}</AvatarFallback>
+                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{account.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
-                      <span className="text-sm font-bold text-[#1e2029]">{account.name}</span>
-                      {account.accountCreatedAt && (
-                        <span className="text-xs text-[#808594]">depuis le {account.accountCreatedAt}</span>
-                      )}
-                      <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-[#d4d8e1]">
-                        <span className="text-xs font-medium text-[#808594]">{account.subAccountsCount}</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
+                        {account.accountCreatedAt && (
+                          <span className="text-xs text-muted-foreground hidden sm:inline">depuis le {account.accountCreatedAt}</span>
+                        )}
+                        <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50">
+                          <span className="text-[11px] font-medium text-muted-foreground">{account.subAccountsCount}</span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-5">
+                    <div className="flex items-center gap-3 shrink-0">
                       <StatusBadge status={account.status} />
                     </div>
                   </div>
                 </AccordionTrigger>
 
                 <AccordionContent className="px-0 pb-0">
-                  <Separator className="bg-[#d4d8e1]" />
-                  <div className="p-5 grid grid-cols-[1fr_0.5fr_1fr_1fr] gap-4 items-center">
+                  <Separator className="bg-border" />
+                  <div className="p-5 grid grid-cols-1 md:grid-cols-[1.4fr_auto_auto_1fr] gap-4 items-center">
                     {/* Platform Info */}
-                    <div className="flex items-center gap-4">
-                      <Avatar className="w-11 h-11 rounded-full border border-[#f0f0f0]">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-10 h-10 rounded-full border border-border bg-muted">
                         <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback>{account.name.slice(0, 2)}</AvatarFallback>
+                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{account.name.slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col gap-1">
-                        <div className="px-1.5 py-1 rounded hover:bg-[#eff0f3] cursor-pointer w-fit -ml-1.5 transition-colors">
-                          <span className="text-sm font-medium text-[#1e2029]">{account.name}</span>
-                        </div>
-                        <span className="text-[13px] text-[#808594]">{account.addressOrId}</span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
+                        <span className="text-[12px] text-muted-foreground truncate max-w-[260px]" title={account.addressOrId}>{account.addressOrId}</span>
                       </div>
                     </div>
 
                     {/* Type */}
-                    <div className="flex items-center gap-2 px-2 py-1 rounded border border-[#e3e5ea] w-fit hover:border-[#c9cad4] cursor-pointer bg-white">
-                      <div className="w-5 h-5 flex items-center justify-center bg-[#e3e5ea] rounded-[3px]">
-                        <Calendar className="w-3 h-3 text-[#503bff]" />
+                    <div className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border w-fit bg-muted/30">
+                      <div className="w-5 h-5 flex items-center justify-center bg-primary/15 rounded-[4px]">
+                        <Calendar className="w-3 h-3 text-primary" />
                       </div>
-                      <span className="text-[13px] text-[#3b414f]">{account.type}</span>
+                      <span className="text-[12px] font-medium text-foreground">{account.type}</span>
                     </div>
 
                     {/* Transactions Link */}
                     <Link
                       href={`/dashboard/transactions?integrationId=${account.id}`}
-                      className="flex items-center gap-1 px-1.5 py-1 rounded hover:bg-[#503bff]/10 w-fit transition-colors group/link"
+                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-primary/10 w-fit transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                     >
-                      <span className="text-sm font-medium text-[#503bff]">{account.transactionCount} transactions</span>
-                      <ExternalLink className="w-3 h-3 text-[#503bff]" />
+                      <span className="text-sm font-semibold text-primary">{account.transactionCount.toLocaleString("fr-FR")} transactions</span>
+                      <ExternalLink className="w-3.5 h-3.5 text-primary" />
                     </Link>
 
                     {/* Status & Actions */}
-                    <div className="flex items-center justify-end gap-4">
-                      <div className="flex items-center gap-3">
-                        <span className="text-[13px] text-[#808594]">{account.lastSync}</span>
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">{account.lastSync}</span>
                         <StatusBadge status={account.status} showText />
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 text-[#808594] hover:text-[#1e2029]">
-                            <MoreVertical className="w-5 h-5" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Actions sur le compte"
+                            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
+                          >
+                            <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-48 bg-white">
-                          <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
-                            <span className="text-sm font-medium">Renommer</span>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem className="cursor-pointer">
+                            <span className="text-sm">Renommer</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleSyncAccount(account.id)}
+                            onClick={() => handleSyncAccount(account.id, account.platformId)}
                             disabled={account.status === "syncing"}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] flex items-center justify-between disabled:opacity-50"
+                            className="cursor-pointer flex items-center justify-between"
                           >
-                            <span className="text-sm font-medium">Synchroniser</span>
-                            <span className="text-xs text-[#808594]">(0 restante)</span>
+                            <span className="text-sm">Synchroniser</span>
+                            <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleSyncFiatOnly(account.id)}
                             disabled={account.status === "syncing"}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                            className="cursor-pointer"
                           >
-                            <span className="text-sm font-medium">Sync Fiat uniquement</span>
+                            <span className="text-sm">Sync Fiat uniquement</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleSyncDustOnly(account.id)}
                             disabled={account.status === "syncing"}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                            className="cursor-pointer"
                           >
-                            <span className="text-sm font-medium">Sync Dust/Dribblet uniquement</span>
+                            <span className="text-sm">Sync Dust/Dribblet</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleSyncBalances(account.id)}
                             disabled={account.status === "syncing"}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                            className="cursor-pointer"
                           >
-                            <span className="text-sm font-medium">Sync Balances</span>
+                            <span className="text-sm">Sync Balances</span>
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleSyncOrders(account.id)}
                             disabled={account.status === "syncing"}
-                            className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc] disabled:opacity-50"
+                            className="cursor-pointer"
                           >
-                            <span className="text-sm font-medium">Sync Order History</span>
+                            <span className="text-sm">Sync Order History</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="cursor-pointer text-[#1e2029] hover:bg-[#f8f9fc]">
-                            <span className="text-sm font-medium">Mettre à jour l&apos;API</span>
+                          <DropdownMenuItem className="cursor-pointer">
+                            <span className="text-sm">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
-                          <DropdownMenuSeparator className="bg-[#d4d8e1]" />
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handlePurgeData(account.id)}
-                            className="cursor-pointer text-orange-600 hover:bg-orange-50"
+                            className="cursor-pointer text-orange-600 focus:text-orange-600 dark:text-orange-400 dark:focus:text-orange-400"
                           >
-                            <span className="text-sm font-medium">Vider les données</span>
+                            <span className="text-sm">Vider les données</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="cursor-pointer text-red-600 hover:bg-red-50">
-                            <span className="text-sm font-medium">Supprimer</span>
+                          <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+                            <span className="text-sm">Supprimer</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -423,51 +520,115 @@ export function AccountsView() {
   )
 }
 
-function FilterChip({ label, active }: { label: string, active?: boolean }) {
+function FilterChip({ label, active, onClick }: { label: string; active?: boolean; onClick?: () => void }) {
   return (
-    <div className={cn(
-      "px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors border",
-      active 
-        ? "bg-[#503bff] text-white border-[#503bff]" 
-        : "bg-white text-[#808594] border-[#d4d8e1] hover:bg-[#f8f9fc]"
-    )}>
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        "px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        active
+          ? "bg-primary text-primary-foreground border-primary"
+          : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
+      )}
+    >
       {label}
-    </div>
+    </button>
   )
 }
 
 function StatusBadge({ status, showText }: { status: AccountStatus, showText?: boolean }) {
   if (status === 'synced') {
     return (
-      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#d8fff0]">
-        <Check className="w-3.5 h-3.5 text-[#00492f]" />
-        {showText && <span className="text-[13px] font-medium text-[#00492f]">Synchronisé</span>}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+        <Check className="w-3.5 h-3.5" />
+        {showText && <span className="text-[12px] font-medium">Synchronisé</span>}
       </div>
     )
   }
   if (status === 'syncing') {
     return (
-      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#fff3cd]">
-        <RefreshCw className="w-3.5 h-3.5 text-[#856404] animate-spin" />
-        {showText && <span className="text-[13px] font-medium text-[#856404]">Synchronisation</span>}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+        {showText && <span className="text-[12px] font-medium">Synchronisation…</span>}
       </div>
     )
   }
   if (status === 'error') {
     return (
-      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#ffdce4]">
-        <AlertCircle className="w-3.5 h-3.5 text-[#b20000]" />
-        {showText && <span className="text-[13px] font-medium text-[#b20000]">Erreur</span>}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
+        <AlertCircle className="w-3.5 h-3.5" />
+        {showText && <span className="text-[12px] font-medium">Erreur</span>}
       </div>
     )
   }
   if (status === 'unsupported') {
     return (
-      <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-[#eff0f3]">
-        <X className="w-3.5 h-3.5 text-[#3b414f]" />
-        {showText && <span className="text-[13px] font-medium text-[#3b414f]">Plateforme non supportée</span>}
+      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
+        <X className="w-3.5 h-3.5" />
+        {showText && <span className="text-[12px] font-medium">Non supportée</span>}
       </div>
     )
   }
   return null
+}
+
+function AccountsSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <div
+          key={i}
+          className="bg-card rounded-xl border border-border shadow-sm px-5 py-4 flex items-center justify-between animate-pulse"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-full bg-muted" />
+            <div className="flex flex-col gap-2">
+              <div className="h-3.5 w-32 rounded bg-muted" />
+              <div className="h-3 w-24 rounded bg-muted/60" />
+            </div>
+          </div>
+          <div className="h-6 w-24 rounded-full bg-muted" />
+        </div>
+      ))}
+    </>
+  )
+}
+
+function EmptyState({ onAdd }: { onAdd: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-14 px-6 rounded-xl border border-dashed border-border bg-card/60">
+      <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+        <Inbox className="w-6 h-6 text-primary" />
+      </div>
+      <h3 className="text-base font-semibold text-foreground mb-1">Aucun compte connecté</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mb-5">
+        Ajoutez votre premier exchange ou wallet pour démarrer la synchronisation de vos transactions.
+      </p>
+      <Button onClick={onAdd} className="gap-2 cursor-pointer">
+        <Plus className="w-4 h-4" />
+        Ajouter un compte
+      </Button>
+    </div>
+  )
+}
+
+function NoResultsState({ query, onReset }: { query: string; onReset: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-xl border border-dashed border-border bg-card/60">
+      <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center mb-3">
+        <Search className="w-5 h-5 text-muted-foreground" />
+      </div>
+      <h3 className="text-sm font-semibold text-foreground mb-1">Aucun résultat</h3>
+      <p className="text-sm text-muted-foreground max-w-sm mb-4">
+        {query
+          ? <>Aucun compte ne correspond à <span className="font-medium text-foreground">&ldquo;{query}&rdquo;</span>.</>
+          : "Aucun compte ne correspond aux filtres actuels."}
+      </p>
+      <Button variant="outline" onClick={onReset} className="cursor-pointer">
+        Réinitialiser les filtres
+      </Button>
+    </div>
+  )
 }

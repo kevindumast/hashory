@@ -547,7 +547,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -564,7 +564,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -581,7 +581,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -598,7 +598,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -615,7 +615,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -634,7 +634,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                         <>
                           <tr
                             key={token.symbol}
-                            className="border-b border-border/30 transition-colors hover:bg-muted/40"
+                            className="border-b border-border/60 transition-colors hover:bg-muted/40"
                           >
                             <td className="px-4 py-3 text-center">
                               <button
@@ -658,15 +658,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                                       fill
                                       className="rounded-full object-cover"
                                     />
-                                  ) : (
-                                    <Image
-                                      src={`https://icons.waltio.com/token/${token.symbol.toLowerCase()}`}
-                                      alt={token.symbol}
-                                      className="h-full w-full rounded-full object-cover"
-                                      width={40}
-                                      height={40}
-                                    />
-                                  )}
+                                  ) : null}
                                 </div>
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold uppercase tracking-wide text-foreground">
@@ -713,7 +705,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             </td>
                           </tr>
                           {isExpanded && (
-                            <tr className="border-b border-border/30 bg-muted/20">
+                            <tr className="border-b border-border/60 bg-muted/20">
                               <td colSpan={7} className="px-4 py-4">
                                 <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                                   <div className="flex flex-col gap-1">
@@ -839,7 +831,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               </linearGradient>
                             </defs>
                             <CartesianGrid
-                              stroke="hsl(var(--border))"
+                              stroke="var(--border)"
                               opacity={0.2}
                               vertical={false}
                               strokeDasharray="4 4"
@@ -873,12 +865,12 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               tickLine={false}
                               axisLine={false}
                               width={72}
-                              stroke="hsl(var(--muted-foreground) / 0.8)"
+                              stroke="var(--muted-foreground)"
                               tickFormatter={(value) => priceFormatter.format(Number(value))}
                             />
                             <RechartsTooltip
                               cursor={{
-                                stroke: "hsl(var(--border))",
+                                stroke: "var(--border)",
                                 strokeDasharray: "3 3",
                               }}
                               content={<PriceTooltip />}
