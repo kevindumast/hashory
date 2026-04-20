@@ -16,25 +16,25 @@ const body = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Oracly",
+  title: "Termenva",
   description:
-    "Predict. Optimize. Master your crypto portfolio with Oracly's real-time intelligence.",
-  applicationName: "Oracly",
+    "Predict. Optimize. Master your crypto portfolio with Termenva's real-time intelligence.",
+  applicationName: "Termenva",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/icons/oracly-icon.svg", type: "image/svg+xml" },
+      { url: "/icons/termenva-icon.svg", type: "image/svg+xml" },
     ],
-    apple: "/icons/oracly-icon-maskable.svg",
-    shortcut: "/icons/oracly-icon.svg",
+    apple: "/icons/termenva-icon-maskable.svg",
+    shortcut: "/icons/termenva-icon.svg",
     other: [
-      { rel: "mask-icon", url: "/icons/oracly-icon-maskable.svg", color: "#2563eb" },
+      { rel: "mask-icon", url: "/icons/termenva-icon-maskable.svg", color: "#2563eb" },
     ],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Oracly",
+    title: "Termenva",
   },
   formatDetection: {
     telephone: false,

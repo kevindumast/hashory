@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Oracly",
-    short_name: "Oracly",
+    name: "Termenva",
+    short_name: "Termenva",
     description:
-      "Predict. Optimize. Master your crypto portfolio with Oracly's real-time intelligence across devices.",
+      "Predict. Optimize. Master your crypto portfolio with Termenva's real-time intelligence across devices.",
     start_url: "/",
     display: "standalone",
     background_color: "#f7f8fb",
@@ -16,13 +16,13 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     icons: [
       {
-        src: "/icons/oracly-icon.svg",
+        src: "/icons/termenva-icon.svg",
         type: "image/svg+xml",
         sizes: "any",
         purpose: "any",
       },
       {
-        src: "/icons/oracly-icon-maskable.svg",
+        src: "/icons/termenva-icon-maskable.svg",
         type: "image/svg+xml",
         sizes: "any",
         purpose: "maskable",
