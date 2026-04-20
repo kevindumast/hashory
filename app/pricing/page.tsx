@@ -1,3 +1,4 @@
+import { notFound } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,6 +87,9 @@ const faqItems = [
 ];
 
 export default function PricingPage() {
+  // Pricing hidden during beta — uncomment return below when ready
+  notFound();
+
   return (
     <div className="relative overflow-hidden">
       <div className="pointer-events-none absolute inset-x-0 top-[-12rem] z-[-1] h-[28rem] bg-gradient-to-b from-primary/25 via-primary/10 to-transparent blur-3xl" />
