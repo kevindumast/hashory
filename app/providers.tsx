@@ -27,7 +27,7 @@ export function Providers({ children }: ProvidersProps) {
 
     const registerServiceWorker = () => {
       navigator.serviceWorker.register("/sw.js").catch((error) => {
-        console.warn("[oracly] Service worker registration failed", error);
+        console.warn("[termenva] Service worker registration failed", error);
       });
     };
 
@@ -47,7 +47,7 @@ export function Providers({ children }: ProvidersProps) {
   if (!publishableKey) {
     if (process.env.NODE_ENV === "development") {
       console.warn(
-        "[oracly] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Clerk features are disabled for this build."
+        "[termenva] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Clerk features are disabled for this build."
       );
     }
     if (isConvexConfigured && convexClient) {

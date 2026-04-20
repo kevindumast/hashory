@@ -1,13 +1,13 @@
-# 🧭 Oracly — Agents de développement (v0.1)
+# 🧭 Termenva — Agents de développement (v0.1)
 
 ## 🌟 Branding
 
-- **Nom :** Oracly  
+- **Nom :** Termenva  
 - **Tagline :** “Predict. Optimize. Master your portfolio.”  
 - **Couleurs :** Noir `#0B0B0C`, Or `#C9A646`, Gris clair `#ECECEC`  
 - **Police :** Space Grotesk / Satoshi  
 - **Logo :** “O” stylisé (œil / halo de lumière)  
-- **Domaines suggérés :** `oracly.ai`, `oracly.finance`, `oracly.app`
+- **Domaines suggérés :** `termenva.ai`, `termenva.finance`, `termenva.app`
 
 ---
 
@@ -34,8 +34,8 @@ Créer une base solide **Next.js + Convex + Clerk + Vercel** pour un SaaS de sui
 ### Phase 1 — Fondations
 ✅ 1. Créer le projet Next.js  
 ```bash
-npx create-next-app@latest oracly
-cd oracly
+npx create-next-app@latest termenva
+cd termenva
 ```
 
 ✅ 2. Installer TailwindCSS & Shadcn  

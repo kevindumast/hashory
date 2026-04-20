@@ -1,30 +1,22 @@
 "use client";
 
 import { SignUp } from "@clerk/nextjs";
+import { useTheme } from "next-themes";
+import { useEffect, useState } from "react";
+import { getClerkAppearance } from "@/components/auth/clerk-appearance";
 
 export default function SignUpPage() {
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  const isDark = !mounted || resolvedTheme === "dark";
+
   return (
     <SignUp
-      appearance={{
-        layout: {
-          socialButtonsVariant: "iconButton",
-        },
-        variables: {
-          colorPrimary: "#C9A646",
-          colorText: "#0B0B0C",
-          colorTextSecondary: "#4A4A4F",
-          colorBackground: "transparent",
-          borderRadius: "1.25rem",
-        },
-        elements: {
-          card: "shadow-none border-0 bg-transparent",
-          formFieldLabel: "text-sm font-medium text-foreground",
-          formButtonPrimary: "bg-primary text-primary-foreground hover:bg-primary/90",
-          footerActionLink: "text-primary hover:text-primary/90",
-        },
-      }}
-      afterSignUpUrl="/dashboard"
-      redirectUrl="/dashboard"
+      appearance={getClerkAppearance(isDark)}
+      fallbackRedirectUrl="/dashboard"
     />
   );
 }

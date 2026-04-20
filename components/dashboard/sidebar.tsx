@@ -42,7 +42,7 @@ export function Sidebar() {
       {/* Logo */}
       <div>
         <div className="px-6 py-5 border-b border-sidebar-border">
-          <div className="text-base font-bold tracking-tighter text-sidebar-primary mb-0.5">Oracly</div>
+          <div className="text-base font-bold tracking-tighter text-sidebar-primary mb-0.5">Termenva</div>
           <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Intelligence Crypto</div>
         </div>
 
@@ -126,7 +126,7 @@ function MobileHeader({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (open
     <div className="flex md:hidden flex-col w-full">
       <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-sidebar-border bg-sidebar px-4">
         <div>
-          <div className="text-sm font-bold tracking-tighter text-sidebar-primary">Oracly</div>
+          <div className="text-sm font-bold tracking-tighter text-sidebar-primary">Termenva</div>
         </div>
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
           <SheetTrigger asChild>
@@ -142,7 +142,7 @@ function MobileHeader({ isOpen, setIsOpen }: { isOpen: boolean; setIsOpen: (open
           </SheetTrigger>
           <SheetContent side="left" className="flex w-full max-w-xs flex-col gap-0 bg-sidebar border-r border-sidebar-border p-0 overscroll-contain">
             <div className="px-6 py-5 border-b border-sidebar-border">
-              <div className="text-base font-bold tracking-tighter text-sidebar-primary mb-0.5">Oracly</div>
+              <div className="text-base font-bold tracking-tighter text-sidebar-primary mb-0.5">Termenva</div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Intelligence Crypto</div>
             </div>
 
