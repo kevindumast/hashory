@@ -9,13 +9,11 @@ function resolveKey(): string {
   return secret;
 }
 
-const ENCRYPTION_KEY = resolveKey();
-
 export function encryptSecret(plainText: string): string {
-  return AES.encrypt(plainText, ENCRYPTION_KEY).toString();
+  return AES.encrypt(plainText, resolveKey()).toString();
 }
 
 export function decryptSecret(payload: string): string {
-  const bytes = AES.decrypt(payload, ENCRYPTION_KEY);
+  const bytes = AES.decrypt(payload, resolveKey());
   return bytes.toString(Utf8);
 }
