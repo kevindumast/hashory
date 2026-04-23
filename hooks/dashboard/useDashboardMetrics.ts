@@ -49,6 +49,7 @@ export type TradeRecord = {
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
+  providerOrderId?: string;
   tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
   symbol: string;
   side: "BUY" | "SELL";
@@ -200,6 +201,8 @@ export type TokenTimelineEvent = {
   provider: string;
   providerDisplayName: string;
   integrationId: Id<"integrations">;
+  /** Whether the counter-asset of this trade is a USD stablecoin. Only set for BUY/SELL. */
+  vsStablecoin?: boolean;
 };
 
 export type PortfolioToken = {
@@ -274,7 +277,7 @@ const QUOTE_ASSETS = [
 ];
 
 /** Stablecoins dont on connaît la valeur ≈ 1 USD */
-const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USD"]);
+export const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USD"]);
 
 /**
  * Calcule le prix d'achat moyen pondéré (AVCO) et le PnL réalisé.
@@ -339,6 +342,13 @@ export function useDashboardMetrics(refreshToken: number) {
       : "skip"
   );
 
+  const orders = useQuery(
+    api.orders.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id, refreshToken }
+      : "skip"
+  );
+
   const deposits = useQuery(
     api.deposits.listByUser,
     isConvexConfigured && isLoaded && user
@@ -380,6 +390,83 @@ export function useDashboardMetrics(refreshToken: number) {
     }
     return [...trades].sort((a, b) => b.executedAt - a.executedAt);
   }, [trades]);
+
+  // Orders non représentés dans la table trades (ex: TAKE_PROFIT_LIMIT SNX qui
+  // a liquidé le stock mais n'apparaissait pas via /myTrades du symbole).
+  // Dédup par volume agrégé : pour chaque (intégration, symbole, side), on ne
+  // crée un trade synthétique que pour le delta entre volume orders et volume
+  // trades. Nécessaire car providerOrderId n'est historiquement pas renseigné
+  // dans la table trades.
+  const ordersAsTrades = useMemo<TradeRecord[]>(() => {
+    if (!Array.isArray(orders)) {
+      return [];
+    }
+    const keyOf = (integrationId: Id<"integrations">, symbol: string, side: string) =>
+      `${integrationId}|${symbol.toUpperCase()}|${side}`;
+
+    const tradeQtyByKey = new Map<string, number>();
+    for (const trade of tradesList) {
+      if (trade.tradeType && trade.tradeType !== "SPOT") continue;
+      const k = keyOf(trade.integrationId, trade.symbol, trade.side);
+      tradeQtyByKey.set(k, (tradeQtyByKey.get(k) ?? 0) + trade.quantity);
+    }
+
+    type OrderItem = (typeof orders extends readonly (infer U)[] ? U : never);
+    const ordersByKey = new Map<string, OrderItem[]>();
+    for (const order of orders) {
+      if (order.quantity <= 0 || order.quoteQuantity <= 0) continue;
+      const status = order.status?.toUpperCase() ?? "";
+      if (status !== "FILLED" && status !== "PARTIALLY_FILLED") continue;
+      const k = keyOf(order.integrationId, order.symbol, order.side);
+      const arr = ordersByKey.get(k) ?? [];
+      arr.push(order);
+      ordersByKey.set(k, arr);
+    }
+
+    const synthetic: TradeRecord[] = [];
+    for (const [k, list] of ordersByKey) {
+      const orderQty = list.reduce((s, o) => s + o.quantity, 0);
+      const covered = tradeQtyByKey.get(k) ?? 0;
+      const delta = orderQty - covered;
+      // tolérance 0.1% pour absorber les arrondis de Binance
+      if (delta <= orderQty * 0.001) continue;
+
+      const orderQuoteSum = list.reduce((s, o) => s + o.quoteQuantity, 0);
+      const avgPrice = orderQty > 0 ? orderQuoteSum / orderQty : 0;
+      const deltaQuote = delta * avgPrice;
+      const latest = list.reduce((a, b) => (b.executedAt > a.executedAt ? b : a));
+
+      synthetic.push({
+        _id: latest._id as unknown as Id<"trades">,
+        integrationId: latest.integrationId,
+        provider: latest.provider,
+        providerDisplayName: latest.providerDisplayName,
+        providerOrderId: latest.providerOrderId,
+        tradeType: "SPOT",
+        symbol: latest.symbol,
+        side: latest.side,
+        quantity: delta,
+        price: avgPrice,
+        quoteQuantity: deltaQuote,
+        fee: undefined,
+        feeAsset: undefined,
+        isMaker: false,
+        executedAt: latest.executedAt,
+        fromAsset: latest.fromAsset,
+        fromAmount: latest.side === "BUY" ? deltaQuote : delta,
+        toAsset: latest.toAsset,
+        toAmount: latest.side === "BUY" ? delta : deltaQuote,
+        createdAt: latest.executedAt,
+      });
+    }
+
+    return synthetic;
+  }, [orders, tradesList]);
+
+  const portfolioTradesList = useMemo<TradeRecord[]>(
+    () => [...tradesList, ...ordersAsTrades].sort((a, b) => b.executedAt - a.executedAt),
+    [tradesList, ordersAsTrades]
+  );
 
   const depositList = useMemo<DepositRecord[]>(() => {
     if (!Array.isArray(deposits)) {
@@ -576,7 +663,7 @@ export function useDashboardMetrics(refreshToken: number) {
   }, [syncScopeList, tradesList]);
 
   const transactions = useMemo<TransactionEntry[]>(() => {
-    const entries: TransactionEntry[] = tradesList.map((trade) => ({
+    const entries: TransactionEntry[] = portfolioTradesList.map((trade) => ({
       type: "trade",
       tradeType: trade.tradeType,
       id: trade._id,
@@ -705,7 +792,7 @@ export function useDashboardMetrics(refreshToken: number) {
       };
       return getTime(b) - getTime(a);
     });
-  }, [depositList, fiatList, tradesList, withdrawalList]);
+  }, [depositList, fiatList, portfolioTradesList, withdrawalList]);
 
   const portfolioTokens = useMemo<PortfolioToken[]>(() => {
     const balanceTotals = new Map<string, number>();
@@ -759,7 +846,7 @@ export function useDashboardMetrics(refreshToken: number) {
       ensureEntry(symbol);
     });
 
-    tradesList.forEach((trade) => {
+    portfolioTradesList.forEach((trade) => {
       // Handle CONVERT trades specially
       if (trade.tradeType === "CONVERT") {
         // Valeur USD de la conversion :
@@ -795,6 +882,7 @@ export function useDashboardMetrics(refreshToken: number) {
             provider: trade.provider,
             providerDisplayName: trade.providerDisplayName,
             integrationId: trade.integrationId,
+            vsStablecoin: toIsStable,
           });
         }
 
@@ -820,6 +908,7 @@ export function useDashboardMetrics(refreshToken: number) {
             provider: trade.provider,
             providerDisplayName: trade.providerDisplayName,
             integrationId: trade.integrationId,
+            vsStablecoin: fromIsStable,
           });
         }
       } else {
@@ -827,6 +916,8 @@ export function useDashboardMetrics(refreshToken: number) {
         const baseAsset = extractBaseAsset(trade.symbol);
         const entry = ensureEntry(baseAsset);
         const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+        const quoteAsset = trade.symbol.toUpperCase().slice(baseAsset.length);
+        const quoteIsStable = USD_STABLECOINS.has(quoteAsset);
 
         entry.events.push({
           id: trade._id,
@@ -840,6 +931,7 @@ export function useDashboardMetrics(refreshToken: number) {
           provider: trade.provider,
           providerDisplayName: trade.providerDisplayName,
           integrationId: trade.integrationId,
+          vsStablecoin: quoteIsStable,
         });
 
         entry.tradeSymbols.add(trade.symbol.toUpperCase());
@@ -979,7 +1071,7 @@ export function useDashboardMetrics(refreshToken: number) {
       .sort((a, b) => b.investedUsd - a.investedUsd);
 
     return tokens;
-  }, [balanceList, depositList, tradesList, withdrawalList]);
+  }, [balanceList, depositList, portfolioTradesList, withdrawalList]);
 
   const profitSummary = useMemo<ProfitSummary>(() => {
     if (portfolioTokens.length === 0) {

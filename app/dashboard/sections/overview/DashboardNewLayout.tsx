@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { Fragment, useState, useMemo } from "react";
 import {
   Area,
   AreaChart,
@@ -15,7 +15,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { currencyFormatter, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 
 function formatAxisValue(v: number): string {
   const abs = Math.abs(v);
@@ -26,7 +26,7 @@ function formatAxisValue(v: number): string {
 }
 import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
-import { TrendingUp, LoaderCircle, RefreshCw } from "lucide-react";
+import { TrendingUp, LoaderCircle, RefreshCw, ChevronRight } from "lucide-react";
 
 type DashboardNewLayoutProps = {
   profitSummary: ProfitSummary;
@@ -80,6 +80,7 @@ export function DashboardNewLayout({
   const [sortColumn, setSortColumn] = useState<"symbol" | "qty" | "avgPrice" | "current" | "value" | "pnlTotal" | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [hideZeroBalance, setHideZeroBalance] = useState(true);
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
 
@@ -87,6 +88,14 @@ export function DashboardNewLayout({
     if (!hideZeroBalance) return portfolioTokens;
     return portfolioTokens.filter(t => t.currentQuantity > 0.00001);
   }, [portfolioTokens, hideZeroBalance]);
+
+  const platformCount = useMemo(() => {
+    const set = new Set<string>();
+    for (const token of portfolioTokens) {
+      for (const ev of token.events) set.add(ev.provider);
+    }
+    return set.size;
+  }, [portfolioTokens]);
 
   const totalCurrentValue = useMemo(() =>
     portfolioTokens.reduce((sum, token) => {
@@ -184,13 +193,17 @@ export function DashboardNewLayout({
 
   // Portfolio value series with embedded buy/sell markers
   const portfolioValueSeries = useMemo(() => {
-    // Build a set of day-keys that have BUY or SELL events
+    // Build a set of day-keys with stablecoin↔crypto trades only.
+    // Green = stablecoin → crypto (BUY on a non-stable token vs stable)
+    // Red   = crypto → stablecoin (SELL on a non-stable token vs stable)
+    // Crypto↔crypto swaps produce no marker.
     const buyDays = new Set<number>();
     const sellDays = new Set<number>();
     for (const token of portfolioTokens) {
+      if (USD_STABLECOINS.has(token.symbol)) continue; // avoid double-counting the stable side
       for (const event of token.events) {
         if (event.type !== "BUY" && event.type !== "SELL") continue;
-        // Round to nearest UTC midnight to match historySeries timestamps
+        if (!event.vsStablecoin) continue;
         const d = new Date(event.timestamp);
         const dayTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         if (event.type === "BUY") buyDays.add(dayTs);
@@ -552,7 +565,7 @@ export function DashboardNewLayout({
                     : "text-muted-foreground hover:text-foreground hover:bg-muted/40"
                 }`}
               >
-                {tab === "jetons" ? `Jetons (${portfolioTokens.length})` : "Plateformes"}
+                {tab === "jetons" ? `Jetons (${portfolioTokens.length})` : `Plateformes (${platformCount})`}
               </button>
             ))}
           </div>
@@ -591,7 +604,7 @@ export function DashboardNewLayout({
 
             {(() => {
               const tokensWithValues = filteredTokens.map(token => {
-                const currentPrice = currentPrices[token.symbol];
+                const currentPrice = USD_STABLECOINS.has(token.symbol) ? 1 : currentPrices[token.symbol];
                 const currentValue = currentPrice && token.currentQuantity > 0
                   ? currentPrice * token.currentQuantity : null;
                 const costOfHoldings = token.avgCostBasis * token.currentQuantity;
@@ -599,6 +612,8 @@ export function DashboardNewLayout({
                 const totalPnl = unrealized !== null ? token.realizedPnlAvco + unrealized : null;
                 return { token, currentPrice, currentValue, unrealized, totalPnl };
               });
+
+              const totalTokensValue = tokensWithValues.reduce((sum, t) => sum + (t.currentValue ?? 0), 0);
 
               const sorted = [...tokensWithValues].sort((a, b) => {
                 if (sortColumn === "symbol") {
@@ -649,6 +664,7 @@ export function DashboardNewLayout({
                           </span>
                         </th>
                         <SortTh col="value" label="Valeur" />
+                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">% portefeuille</th>
                         <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL réalisé</th>
                         <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL latent</th>
                         <SortTh col="pnlTotal" label="PnL total" />
@@ -701,6 +717,23 @@ export function DashboardNewLayout({
                             <td className="px-4 py-3 text-right font-bold text-foreground">
                               {currentValue !== null ? currencyFormatter.format(currentValue) : "—"}
                             </td>
+                            <td className="px-4 py-3 text-right">
+                              {currentValue !== null && totalTokensValue > 0 ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="w-16 h-1 bg-muted/40 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-primary to-positive rounded-full"
+                                      style={{ width: `${Math.min(100, (currentValue / totalTokensValue) * 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-bold text-foreground tabular-nums min-w-[44px]">
+                                    {((currentValue / totalTokensValue) * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/70">—</span>
+                              )}
+                            </td>
                             <td className={`px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
                                 ? `${realized >= 0 ? "+" : ""}${currencyFormatter.format(realized)}`
@@ -742,11 +775,345 @@ export function DashboardNewLayout({
           </>
         )}
 
-        {activeTab === "plateformes" && (
-          <div className="text-center py-10 text-muted-foreground text-sm">
-            Onglet Plateformes en développement.
-          </div>
-        )}
+        {activeTab === "plateformes" && (() => {
+          // Aggrégation par plateforme à partir des events de chaque token
+          type PlatformTokenBreakdown = {
+            symbol: string;
+            qty: number;
+            costBasis: number;
+            currentValue: number | null;
+            realized: number;
+            unrealized: number | null;
+          };
+          type PlatformStat = {
+            provider: string;
+            providerDisplayName: string;
+            tokenCount: number;
+            currentValueUsd: number;
+            costBasisUsd: number;
+            realizedPnl: number;
+            unrealizedPnl: number | null;
+            totalPnl: number | null;
+            lastActivityAt: number;
+            hasAllPrices: boolean;
+            tokens: PlatformTokenBreakdown[];
+          };
+
+          const byProvider = new Map<string, {
+            provider: string;
+            providerDisplayName: string;
+            perSymbol: Map<string, { qty: number; costUsd: number; realized: number }>;
+            lastActivityAt: number;
+          }>();
+
+          for (const token of portfolioTokens) {
+            // AVCO par plateforme : on recalcule la quantité et le coût moyen
+            // uniquement avec les events de cette plateforme
+            const eventsByProvider = new Map<string, typeof token.events>();
+            for (const ev of token.events) {
+              const key = ev.provider;
+              const arr = eventsByProvider.get(key) ?? [];
+              arr.push(ev);
+              eventsByProvider.set(key, arr);
+            }
+
+            type PerPlatform = { qty: number; avgCost: number; realized: number; lastAt: number; displayName: string };
+            const perPlatform = new Map<string, PerPlatform>();
+            const upper = token.symbol.toUpperCase();
+
+            for (const [provider, events] of eventsByProvider) {
+              const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
+              let qty = 0;
+              let avgCost = 0;
+              let realized = 0;
+              for (const ev of sorted) {
+                const feeInBase = ev.fee && ev.feeAsset?.toUpperCase() === upper ? ev.fee : 0;
+                if (ev.type === "BUY" && ev.valueUsd) {
+                  const eff = ev.quantity - feeInBase;
+                  const newQty = qty + eff;
+                  avgCost = newQty > 0 ? (qty * avgCost + ev.valueUsd) / newQty : 0;
+                  qty = newQty;
+                } else if (ev.type === "SELL") {
+                  const proceeds = ev.valueUsd ?? ev.quantity * (ev.price ?? avgCost);
+                  realized += proceeds - ev.quantity * avgCost;
+                  qty = Math.max(0, qty - ev.quantity - feeInBase);
+                } else if (ev.type === "DEPOSIT") {
+                  qty += ev.quantity;
+                } else if (ev.type === "WITHDRAWAL") {
+                  qty = Math.max(0, qty - ev.quantity);
+                }
+              }
+              perPlatform.set(provider, {
+                qty,
+                avgCost,
+                realized,
+                lastAt: sorted[sorted.length - 1]?.timestamp ?? 0,
+                displayName: sorted[0]?.providerDisplayName ?? provider,
+              });
+            }
+
+            // Rescale : la quantité totale par plateforme (depuis events) peut
+            // diverger de token.currentQuantity (qui est la vérité API, ajustée
+            // pour dust conversions, staking, etc.). On rescale pour garder
+            // la cohérence avec la valeur globale du portefeuille.
+            const sumQty = Array.from(perPlatform.values()).reduce((s, p) => s + Math.max(0, p.qty), 0);
+            const scale = sumQty > 0 ? token.currentQuantity / sumQty : 0;
+
+            for (const [provider, pp] of perPlatform) {
+              const scaledQty = Math.max(0, pp.qty) * scale;
+              if (scaledQty <= 0.00001 && pp.realized === 0) continue;
+
+              const entry = byProvider.get(provider) ?? {
+                provider,
+                providerDisplayName: pp.displayName,
+                perSymbol: new Map(),
+                lastActivityAt: 0,
+              };
+              entry.perSymbol.set(token.symbol, {
+                qty: scaledQty,
+                costUsd: scaledQty * pp.avgCost,
+                realized: pp.realized,
+              });
+              entry.lastActivityAt = Math.max(entry.lastActivityAt, pp.lastAt);
+              byProvider.set(provider, entry);
+            }
+          }
+
+          const stats: PlatformStat[] = Array.from(byProvider.values()).map((p) => {
+            let currentValueUsd = 0;
+            let costBasisUsd = 0;
+            let realizedPnl = 0;
+            let tokenCount = 0;
+            let hasAllPrices = true;
+            const tokens: PlatformTokenBreakdown[] = [];
+            for (const [symbol, info] of p.perSymbol) {
+              if (info.qty > 0.00001) tokenCount += 1;
+              costBasisUsd += info.costUsd;
+              realizedPnl += info.realized;
+              const price = USD_STABLECOINS.has(symbol) ? 1 : currentPrices[symbol];
+              let tokenCurrentValue: number | null = null;
+              if (price && info.qty > 0) {
+                tokenCurrentValue = price * info.qty;
+                currentValueUsd += tokenCurrentValue;
+              } else if (info.qty > 0.00001) {
+                hasAllPrices = false;
+              }
+              tokens.push({
+                symbol,
+                qty: info.qty,
+                costBasis: info.costUsd,
+                currentValue: tokenCurrentValue,
+                realized: info.realized,
+                unrealized: tokenCurrentValue !== null ? tokenCurrentValue - info.costUsd : null,
+              });
+            }
+            tokens.sort((a, b) => (b.currentValue ?? 0) - (a.currentValue ?? 0));
+            const unrealizedPnl = hasAllPrices && hasCurrentPrices
+              ? currentValueUsd - costBasisUsd
+              : null;
+            const totalPnl = unrealizedPnl !== null ? unrealizedPnl + realizedPnl : null;
+            return {
+              provider: p.provider,
+              providerDisplayName: p.providerDisplayName,
+              tokenCount,
+              currentValueUsd,
+              costBasisUsd,
+              realizedPnl,
+              unrealizedPnl,
+              totalPnl,
+              lastActivityAt: p.lastActivityAt,
+              hasAllPrices,
+              tokens,
+            };
+          }).sort((a, b) => b.currentValueUsd - a.currentValueUsd);
+
+          const totalPlatformValue = stats.reduce((sum, s) => sum + s.currentValueUsd, 0);
+
+          if (stats.length === 0) {
+            return (
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                <div className="flex flex-col items-center gap-2">
+                  <p>Aucune plateforme connectée.</p>
+                  <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
+                    Connecter une plateforme →
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse tabular-nums">
+                <thead>
+                  <tr className="bg-muted/20">
+                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Plateforme</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Jetons</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Coût investi</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Valeur</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">% portefeuille</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL réalisé</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL latent</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL total</th>
+                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dernière activité</th>
+                  </tr>
+                </thead>
+                <tbody className="text-xs font-medium">
+                  {stats.map((s) => {
+                    const isExpanded = expandedPlatforms.has(s.provider);
+                    const toggle = () => {
+                      setExpandedPlatforms((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s.provider)) next.delete(s.provider);
+                        else next.add(s.provider);
+                        return next;
+                      });
+                    };
+                    return (
+                    <Fragment key={s.provider}>
+                    <tr
+                      onClick={toggle}
+                      className="border-t border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <ChevronRight
+                            className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                          />
+                          <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary uppercase">
+                            {s.providerDisplayName.slice(0, 2)}
+                          </div>
+                          <div>
+                            <div className="font-bold text-foreground text-xs">{s.providerDisplayName}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">{s.provider}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">{s.tokenCount}</td>
+                      <td className="px-4 py-3 text-right text-muted-foreground">
+                        {s.costBasisUsd > 0 ? currencyFormatter.format(s.costBasisUsd) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-foreground">
+                        {hasCurrentPrices && s.currentValueUsd > 0 ? (
+                          <span className="inline-flex items-center gap-1">
+                            {currencyFormatter.format(s.currentValueUsd)}
+                            {!s.hasAllPrices && (
+                              <span title="Certains tokens n'ont pas de prix courant disponible" className="text-muted-foreground/60">*</span>
+                            )}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {hasCurrentPrices && s.currentValueUsd > 0 && totalPlatformValue > 0 ? (
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-16 h-1 bg-muted/40 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-primary to-positive rounded-full"
+                                style={{ width: `${Math.min(100, (s.currentValueUsd / totalPlatformValue) * 100)}%` }}
+                              />
+                            </div>
+                            <span className="font-bold text-foreground tabular-nums min-w-[44px]">
+                              {((s.currentValueUsd / totalPlatformValue) * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground/70">—</span>
+                        )}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                        {s.realizedPnl !== 0
+                          ? `${s.realizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.realizedPnl)}`
+                          : "—"}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                        {s.unrealizedPnl !== null
+                          ? `${s.unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.unrealizedPnl)}`
+                          : "—"}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                        {s.totalPnl !== null
+                          ? `${s.totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.totalPnl)}`
+                          : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right text-muted-foreground text-[11px]">
+                        {s.lastActivityAt > 0
+                          ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short" }).format(new Date(s.lastActivityAt))
+                          : "—"}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="bg-muted/10 border-t border-border/30">
+                        <td colSpan={9} className="px-4 py-3">
+                          {s.tokens.length === 0 ? (
+                            <div className="text-[11px] text-muted-foreground text-center py-2">Aucun jeton sur cette plateforme.</div>
+                          ) : (
+                            <div className="pl-9">
+                              <table className="w-full text-left border-collapse tabular-nums">
+                                <thead>
+                                  <tr>
+                                    <th className="px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Jeton</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Quantité</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Coût investi</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Valeur</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL réalisé</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL latent</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {s.tokens.map((t) => (
+                                    <tr key={t.symbol} className="border-t border-border/30">
+                                      <td className="px-3 py-2">
+                                        <div className="flex items-center gap-2">
+                                          {getCmcIconUrl(t.symbol) ? (
+                                            <img
+                                              src={getCmcIconUrl(t.symbol) || ""}
+                                              alt={t.symbol}
+                                              className="w-5 h-5 rounded-full object-cover bg-muted"
+                                            />
+                                          ) : (
+                                            <div className="w-5 h-5 bg-muted rounded-full flex items-center justify-center text-[8px] font-black text-primary">
+                                              {t.symbol.slice(0, 2)}
+                                            </div>
+                                          )}
+                                          <span className="font-bold text-foreground text-[11px]">{t.symbol}</span>
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                        {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
+                                      </td>
+                                      <td className="px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                        {t.costBasis > 0 ? currencyFormatter.format(t.costBasis) : "—"}
+                                      </td>
+                                      <td className="px-3 py-2 text-right font-bold text-foreground text-[11px]">
+                                        {t.currentValue !== null ? currencyFormatter.format(t.currentValue) : "—"}
+                                      </td>
+                                      <td className={`px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                                        {t.realized !== 0
+                                          ? `${t.realized >= 0 ? "+" : ""}${currencyFormatter.format(t.realized)}`
+                                          : "—"}
+                                      </td>
+                                      <td className={`px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                                        {t.unrealized !== null
+                                          ? `${t.unrealized >= 0 ? "+" : ""}${currencyFormatter.format(t.unrealized)}`
+                                          : "—"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        })()}
       </section>
     </div>
   );

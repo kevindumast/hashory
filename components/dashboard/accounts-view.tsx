@@ -86,6 +86,7 @@ export function AccountsView() {
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
   const syncBitcoinWallet = useAction(api.bitcoin.syncBitcoinWallet)
   const purgeAllData = useMutation(api.integrations.purgeAllData)
+  const deleteIntegration = useMutation(api.integrations.deleteIntegration)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -247,6 +248,26 @@ export function AccountsView() {
       console.error("Failed to purge data:", error)
     }
   }, [handleRefresh, purgeAllData])
+
+  const handleDeleteAccount = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    if (!window.confirm("Supprimer définitivement ce compte et toutes ses données ?\nCette action est irréversible.")) {
+      return
+    }
+
+    try {
+      await deleteIntegration({ integrationId: accountId })
+      console.log("✓ Integration deleted")
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to delete integration:", error)
+    }
+  }, [handleRefresh, deleteIntegration])
 
   const isLoading = integrationsLoading || transactionsLoading
 
@@ -496,7 +517,10 @@ export function AccountsView() {
                           >
                             <span className="text-sm">Vider les données</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="cursor-pointer text-destructive focus:text-destructive">
+                          <DropdownMenuItem
+                            onClick={() => handleDeleteAccount(account.id)}
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                          >
                             <span className="text-sm">Supprimer</span>
                           </DropdownMenuItem>
                         </DropdownMenuContent>

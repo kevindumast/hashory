@@ -82,6 +82,8 @@ export const listByUser = query({
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    void args.refreshToken;
+
     const integrations = await ctx.db
       .query("integrations")
       .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
@@ -97,6 +99,28 @@ export const listByUser = query({
 
     return allOrders
       .filter((o) => integrationMap.has(o.integrationId))
-      .sort((a, b) => b.executedAt - a.executedAt);
+      .sort((a, b) => b.executedAt - a.executedAt)
+      .map((order) => {
+        const integration = integrationMap.get(order.integrationId)!;
+        return {
+          _id: order._id,
+          integrationId: order.integrationId,
+          provider: integration.provider,
+          providerDisplayName: integration.displayName ?? integration.provider,
+          providerOrderId: order.providerOrderId,
+          symbol: order.symbol,
+          side: order.side,
+          orderType: order.orderType,
+          status: order.status,
+          quantity: order.quantity,
+          price: order.price,
+          quoteQuantity: order.quoteQuantity,
+          executedAt: order.executedAt,
+          fromAsset: order.fromAsset,
+          fromAmount: order.fromAmount,
+          toAsset: order.toAsset,
+          toAmount: order.toAmount,
+        };
+      });
   },
 });
