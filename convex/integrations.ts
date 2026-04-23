@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
 
-const SUPPORTED_PROVIDERS = ["binance", "kaspa", "ethereum", "solana", "bitcoin", "bitstack"];
+const SUPPORTED_PROVIDERS = ["binance", "kucoin", "kaspa", "ethereum", "solana", "bitcoin", "bitstack", "finary"];
 
 export const list = query({
   args: {
@@ -96,6 +96,7 @@ export const upsert = mutation({
     provider: v.string(),
     apiKey: v.string(),
     apiSecret: v.optional(v.string()),
+    passphrase: v.optional(v.string()),
     readOnly: v.boolean(),
     displayName: v.optional(v.string()),
   },
@@ -111,6 +112,7 @@ export const upsert = mutation({
     const encryptedCredentials = {
       apiKey: encryptSecret(args.apiKey),
       apiSecret: encryptSecret(args.apiSecret ?? ""),
+      passphrase: args.passphrase ? encryptSecret(args.passphrase) : undefined,
     };
 
     const existingForProvider = await ctx.db

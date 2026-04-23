@@ -38,6 +38,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
+import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 import { useAction, useMutation } from "convex/react"
@@ -68,15 +69,17 @@ const PROVIDER_NAMES: Record<string, string> = {
   solana: "Solana",
   kaspa: "Kaspa",
   bitstack: "Bitstack",
+  finary: "Finary",
 }
 
-const FILE_IMPORT_PROVIDERS = new Set(["bitstack"])
+const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"])
 
 type AccountType = "All" | "API" | "File"
 
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [isBitstackImportOpen, setIsBitstackImportOpen] = React.useState(false)
+  const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
@@ -85,6 +88,7 @@ export function AccountsView() {
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
+  const syncKucoin = useAction(api.kucoin.syncAccount)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
@@ -160,6 +164,9 @@ export function AccountsView() {
         // Then call syncAccount to fetch the actual data (status is managed in the backend)
         await syncAccount({ integrationId: accountId })
         console.log("✓ Sync completed")
+      } else if (provider === "kucoin") {
+        await syncKucoin({ integrationId: accountId })
+        console.log("✓ KuCoin sync completed")
       } else {
         console.error(`Unsupported provider for sync: ${provider}`)
         return
@@ -171,7 +178,7 @@ export function AccountsView() {
     } catch (error) {
       console.error("Failed to sync account:", error)
     }
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -482,7 +489,7 @@ export function AccountsView() {
                           </DropdownMenuItem>
                           {FILE_IMPORT_PROVIDERS.has(account.platformId) ? (
                             <DropdownMenuItem
-                              onClick={() => setIsBitstackImportOpen(true)}
+                              onClick={() => account.platformId === "finary" ? setIsFinaryImportOpen(true) : setIsBitstackImportOpen(true)}
                               className="cursor-pointer flex items-center justify-between"
                             >
                               <span className="text-sm">Importer un fichier CSV</span>
@@ -564,6 +571,11 @@ export function AccountsView() {
       <BitstackImportDialog
         open={isBitstackImportOpen}
         onOpenChange={setIsBitstackImportOpen}
+        onSuccess={handleRefresh}
+      />
+      <FinaryImportDialog
+        open={isFinaryImportOpen}
+        onOpenChange={setIsFinaryImportOpen}
         onSuccess={handleRefresh}
       />
     </div>

@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 
-// ─── Bitstack CSV parser ───────────────────────────────────────────────────
+// ─── CSV parsers ───────────────────────────────────────────────────────────
 
 type BitstackTrade = { externalId: string; executedAt: number; fromAsset: string; fromAmount: number; toAsset: string; toAmount: number; fee?: number; feeAsset?: string; price?: number };
 type BitstackDeposit = { externalId: string; executedAt: number; fiatCurrency: string; fiatAmount: number };
@@ -106,6 +106,72 @@ function parseBitstackCsv(text: string): { trades: BitstackTrade[]; deposits: Bi
   return { trades, deposits, skipped };
 }
 
+// ─── Finary CSV parser ─────────────────────────────────────────────────────
+
+type FinaryTrade = { externalId: string; executedAt: number; receivedAmount: number; receivedCurrency: string; sentAmount: number; sentCurrency: string; feeAmount?: number; feeCurrency?: string; description: string };
+type FinaryWithdrawal = { externalId: string; executedAt: number; sentAmount: number; sentCurrency: string; feeAmount?: number; feeCurrency?: string; address?: string; txHash?: string };
+
+function parseFinaryCsv(text: string): { trades: FinaryTrade[]; withdrawals: FinaryWithdrawal[]; skipped: number } {
+  const bom = "﻿";
+  const content = text.startsWith(bom) ? text.slice(1) : text;
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return { trades: [], withdrawals: [], skipped: 0 };
+
+  const sep = lines[0].includes(";") ? ";" : ",";
+  const headers = parseCsvLine(lines[0], sep).map((h) => h.toLowerCase().trim());
+  const col = (name: string) => headers.indexOf(name);
+
+  const iType = col("type");
+  const iDate = col("date");
+  const iReceivedAmount = col("received_amount");
+  const iReceivedCurrency = col("received_currency");
+  const iSentAmount = col("sent_amount");
+  const iSentCurrency = col("sent_currency");
+  const iFeeAmount = col("fee_amount");
+  const iFeeCurrency = col("fee_currency");
+  const iDescription = col("description");
+  const iAddress = col("address");
+  const iTxHash = col("transaction_hash");
+  const iExternalId = col("external_id");
+
+  const trades: FinaryTrade[] = [];
+  const withdrawals: FinaryWithdrawal[] = [];
+  let skipped = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i], sep);
+    const type = (iType !== -1 ? cols[iType] : "").toLowerCase().trim();
+    const dateRaw = iDate !== -1 ? cols[iDate] : "";
+    const executedAt = Date.parse(dateRaw.replace(/GMT$/i, "Z").replace(/UTC$/i, "Z").trim());
+    if (isNaN(executedAt)) { skipped++; continue; }
+
+    const externalId = (iExternalId !== -1 && cols[iExternalId]) ? cols[iExternalId] : `row-${i}`;
+    const feeAmount = iFeeAmount !== -1 ? (parseFloat(cols[iFeeAmount].replace(",", ".")) || 0) : 0;
+    const feeCurrency = iFeeCurrency !== -1 ? cols[iFeeCurrency].toUpperCase() || undefined : undefined;
+
+    if (type === "trade") {
+      const receivedAmount = parseFloat((iReceivedAmount !== -1 ? cols[iReceivedAmount] : "").replace(",", ".")) || 0;
+      const receivedCurrency = (iReceivedCurrency !== -1 ? cols[iReceivedCurrency] : "").toUpperCase();
+      const sentAmount = parseFloat((iSentAmount !== -1 ? cols[iSentAmount] : "").replace(",", ".")) || 0;
+      const sentCurrency = (iSentCurrency !== -1 ? cols[iSentCurrency] : "").toUpperCase();
+      const description = (iDescription !== -1 ? cols[iDescription] : "").trim();
+      if (!receivedCurrency || !sentCurrency || receivedAmount === 0) { skipped++; continue; }
+      trades.push({ externalId, executedAt, receivedAmount, receivedCurrency, sentAmount, sentCurrency, feeAmount: feeAmount > 0 ? feeAmount : undefined, feeCurrency, description });
+    } else if (type === "withdrawal") {
+      const sentAmount = parseFloat((iSentAmount !== -1 ? cols[iSentAmount] : "").replace(",", ".")) || 0;
+      const sentCurrency = (iSentCurrency !== -1 ? cols[iSentCurrency] : "").toUpperCase();
+      if (!sentCurrency || sentAmount === 0) { skipped++; continue; }
+      const address = iAddress !== -1 ? cols[iAddress] || undefined : undefined;
+      const txHash = iTxHash !== -1 ? cols[iTxHash] || undefined : undefined;
+      withdrawals.push({ externalId, executedAt, sentAmount, sentCurrency, feeAmount: feeAmount > 0 ? feeAmount : undefined, feeCurrency, address, txHash });
+    } else {
+      skipped++;
+    }
+  }
+
+  return { trades, withdrawals, skipped };
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 
 type ConnectProviderDialogProps = {
@@ -121,7 +187,7 @@ type ProviderConfig = {
   disabled?: boolean;
   fileImport?: boolean;
   fields: Array<{
-    name: "apiKey" | "apiSecret" | "address";
+    name: "apiKey" | "apiSecret" | "address" | "passphrase";
     label: string;
     placeholder: string;
     helper?: string;
@@ -216,12 +282,40 @@ const providerConfigs: ProviderConfig[] = [
     fields: [],
   },
   {
-    value: "kucoin",
-    label: "KuCoin (bientôt)",
-    description: "Support en cours de préparation.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
-    disabled: true,
+    value: "finary",
+    label: "Finary (CSV)",
+    description: "Importez votre historique via un export CSV Finary.",
+    iconUrl: "",
+    fileImport: true,
     fields: [],
+  },
+  {
+    value: "kucoin",
+    label: "KuCoin (API)",
+    description: "Connexion par clé API avec passphrase.",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
+    fields: [
+      {
+        name: "apiKey",
+        label: "Clé API",
+        placeholder: "Ex: aBcD1234...",
+        helper: "Depuis KuCoin > Gestion API > Créer une clé (lecture seule).",
+      },
+      {
+        name: "apiSecret",
+        label: "API Secret",
+        placeholder: "Ex: zYxW9876...",
+        helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
+        secret: true,
+      },
+      {
+        name: "passphrase",
+        label: "Passphrase",
+        placeholder: "Votre passphrase KuCoin",
+        helper: "La passphrase que vous avez définie lors de la création de la clé API.",
+        secret: true,
+      },
+    ],
   },
 ];
 
@@ -236,6 +330,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [address, setAddress] = useState("");
   const [readOnly, setReadOnly] = useState(true);
   const [label, setLabel] = useState("");
@@ -244,20 +339,23 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
 
-  // Bitstack CSV import state
+  // CSV import state (shared UI, per-provider data)
   const fileRef = useRef<HTMLInputElement>(null);
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [csvParsed, setCsvParsed] = useState<{ trades: BitstackTrade[]; deposits: BitstackDeposit[]; skipped: number } | null>(null);
+  const [finaryParsed, setFinaryParsed] = useState<{ trades: FinaryTrade[]; withdrawals: FinaryWithdrawal[]; skipped: number } | null>(null);
   const [csvImportResult, setCsvImportResult] = useState<{ tradesInserted: number; depositsInserted: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const upsertIntegration = useMutation(api.integrations.upsert);
   const ingestBitstackCsv = useMutation(api.bitstack.ingestCsv);
+  const ingestFinaryCsv = useMutation(api.finary.ingestCsv);
 
   useEffect(() => {
     if (!open) {
       setApiKey("");
       setApiSecret("");
+      setPassphrase("");
       setAddress("");
       setReadOnly(true);
       setLabel("");
@@ -267,6 +365,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       setProvider(providerConfigs[0]);
       setCsvFileName(null);
       setCsvParsed(null);
+      setFinaryParsed(null);
       setCsvImportResult(null);
       if (fileRef.current) fileRef.current.value = "";
     }
@@ -277,15 +376,26 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   function loadCsvFile(file: File) {
     setCsvFileName(file.name);
     setCsvParsed(null);
+    setFinaryParsed(null);
     setError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const result = parseBitstackCsv(ev.target?.result as string);
-        if (result.trades.length === 0 && result.deposits.length === 0) {
-          setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Bitstack CSV.");
+        const text = ev.target?.result as string;
+        if (provider.value === "finary") {
+          const result = parseFinaryCsv(text);
+          if (result.trades.length === 0 && result.withdrawals.length === 0) {
+            setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Finary CSV.");
+          } else {
+            setFinaryParsed(result);
+          }
         } else {
-          setCsvParsed(result);
+          const result = parseBitstackCsv(text);
+          if (result.trades.length === 0 && result.deposits.length === 0) {
+            setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Bitstack CSV.");
+          } else {
+            setCsvParsed(result);
+          }
         }
       } catch {
         setError("Impossible de lire le fichier CSV.");
@@ -326,6 +436,18 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     setError(null);
 
     try {
+      if (provider.value === "finary" && finaryParsed) {
+        const result = await ingestFinaryCsv({
+          trades: finaryParsed.trades,
+          withdrawals: finaryParsed.withdrawals,
+          displayName: label.trim() || "Finary",
+        });
+        setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.withdrawalsInserted });
+        setCompleted(true);
+        setTimeout(() => { onOpenChange(false); }, 1500);
+        return;
+      }
+
       if (provider.fileImport && csvParsed) {
         const result = await ingestBitstackCsv({
           trades: csvParsed.trades,
@@ -341,6 +463,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       }
 
       const usesAddress = provider.fields.some((f) => f.name === "address");
+      const hasPassphrase = provider.fields.some((f) => f.name === "passphrase");
       const finalApiKey = usesAddress ? address : apiKey;
       const finalApiSecret = usesAddress ? undefined : apiSecret;
 
@@ -348,6 +471,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         provider: provider.value,
         apiKey: finalApiKey,
         apiSecret: finalApiSecret,
+        passphrase: hasPassphrase ? passphrase : undefined,
         readOnly,
         displayName: label ? label.trim() : undefined,
       });
@@ -447,7 +571,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               {provider.fileImport ? (
                 <div className="space-y-3">
                   <label
-                    htmlFor="bitstack-csv-connect"
+                    htmlFor="csv-connect"
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -465,12 +589,16 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                       <p className="text-sm font-medium text-foreground">{csvFileName}</p>
                     ) : (
                       <div className="text-center">
-                        <p className="text-sm font-medium">Sélectionner un export CSV Bitstack</p>
-                        <p className="text-xs text-muted-foreground">Paramètres Bitstack → Exporter l'historique</p>
+                        <p className="text-sm font-medium">Sélectionner un export CSV {maskedProviderLabel}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {provider.value === "finary"
+                            ? "Finary → Compte → Exporter l'historique"
+                            : "Paramètres Bitstack → Exporter l'historique"}
+                        </p>
                       </div>
                     )}
                     <input
-                      id="bitstack-csv-connect"
+                      id="csv-connect"
                       ref={fileRef}
                       type="file"
                       accept=".csv,text/csv"
@@ -488,23 +616,41 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                     </div>
                   )}
 
+                  {finaryParsed && !completed && (
+                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                      <p className="font-medium text-foreground">Aperçu</p>
+                      {finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length} achat{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 1 ? "s" : ""} crypto</p>
+                      )}
+                      {finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length} swap{finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length > 1 ? "s" : ""}</p>
+                      )}
+                      {finaryParsed.withdrawals.length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.withdrawals.length} retrait{finaryParsed.withdrawals.length > 1 ? "s" : ""}</p>
+                      )}
+                      {finaryParsed.skipped > 0 && <p className="text-amber-600 dark:text-amber-500">{finaryParsed.skipped} ligne{finaryParsed.skipped > 1 ? "s" : ""} ignorée{finaryParsed.skipped > 1 ? "s" : ""}</p>}
+                    </div>
+                  )}
+
                   {completed && csvImportResult && (
                     <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
                       <p className="font-semibold flex items-center gap-1.5"><Check className="size-3.5" />Import réussi</p>
-                      <p>{csvImportResult.tradesInserted} achat{csvImportResult.tradesInserted > 1 ? "s" : ""} · {csvImportResult.depositsInserted} dépôt{csvImportResult.depositsInserted > 1 ? "s" : ""} ajouté{csvImportResult.tradesInserted + csvImportResult.depositsInserted > 1 ? "s" : ""}</p>
+                      <p>{csvImportResult.tradesInserted} transaction{csvImportResult.tradesInserted > 1 ? "s" : ""} · {csvImportResult.depositsInserted} autre{csvImportResult.depositsInserted > 1 ? "s" : ""} ajouté{csvImportResult.tradesInserted + csvImportResult.depositsInserted > 1 ? "s" : ""}</p>
                     </div>
                   )}
                 </div>
               ) : (
                 provider.fields.map((field) => {
                   const value =
-                    field.name === "apiKey" ? apiKey : field.name === "apiSecret" ? apiSecret : address;
+                    field.name === "apiKey" ? apiKey
+                    : field.name === "apiSecret" ? apiSecret
+                    : field.name === "passphrase" ? passphrase
+                    : address;
                   const setValue =
-                    field.name === "apiKey"
-                      ? setApiKey
-                      : field.name === "apiSecret"
-                      ? setApiSecret
-                      : setAddress;
+                    field.name === "apiKey" ? setApiKey
+                    : field.name === "apiSecret" ? setApiSecret
+                    : field.name === "passphrase" ? setPassphrase
+                    : setAddress;
                   const isSecret = field.secret === true;
                   const inputType = isSecret && !showSecret ? "password" : "text";
                   return (
@@ -562,9 +708,17 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               disabled={
                 submitting ||
                 provider.disabled ||
-                (provider.fileImport
+                (provider.value === "finary"
+                  ? !finaryParsed
+                  : provider.fileImport
                   ? !csvParsed
-                  : provider.fields.some((f) => f.name === "address") ? !address : !apiKey || !apiSecret)
+                  : provider.fields.some((f) => {
+                      if (f.name === "address") return !address;
+                      if (f.name === "apiKey") return !apiKey;
+                      if (f.name === "apiSecret") return !apiSecret;
+                      if (f.name === "passphrase") return !passphrase;
+                      return false;
+                    }))
               }
               className="h-9 min-w-[140px] text-sm cursor-pointer"
             >
