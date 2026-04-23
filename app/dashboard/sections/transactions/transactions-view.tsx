@@ -165,17 +165,29 @@ export function TransactionsView({
       // Calculer le montant pour tri et affichage
       let amount = 0;
       let amountDisplay = "";
+      let amountEur: number | null = null;
+      const EUR_USD = 1 / 0.92; // taux approx EUR→USD
 
       if (tx.type === 'trade') {
         const quoteQty = tx.quoteQuantity ?? (tx.price * tx.quantity);
-        amount = quoteQty;
-        amountDisplay = currencyFormatter.format(quoteQty);
+        const quoteAsset = extractQuoteAsset(tx.symbol ?? "");
+        const quoteIsEur = quoteAsset === "EUR";
+        if (quoteIsEur) {
+          // quoteQty est en EUR : convertir en USD pour la colonne USD
+          amount = quoteQty * EUR_USD;
+          amountEur = quoteQty;
+        } else {
+          amount = quoteQty; // USD/stablecoin
+          amountEur = quoteQty * 0.92;
+        }
+        amountDisplay = currencyFormatter.format(amount);
       } else if (tx.type === 'deposit' || tx.type === 'withdrawal') {
         const asset = tx.baseAsset?.toUpperCase() ?? "";
         const priceUsd = USD_STABLES.has(asset) ? 1 : assetPrices[asset];
         if (priceUsd !== undefined) {
           amount = tx.amount * priceUsd;
           amountDisplay = currencyFormatter.format(amount);
+          amountEur = amount * 0.92;
         } else {
           amount = 0;
           amountDisplay = "-";
@@ -216,6 +228,7 @@ export function TransactionsView({
         in: inTx,
         amount,
         amountDisplay,
+        amountEur,
         timestamp,
         price,
         fee,
@@ -540,7 +553,7 @@ export function TransactionsView({
                 </td>
                 <td className="px-4 py-2 text-right">
                   <span className="text-sm font-medium text-foreground">
-                    {tx.amount > 0 ? `€${(tx.amount * 0.92).toFixed(2)}` : "-"}
+                    {tx.amountEur != null && tx.amountEur > 0 ? `€${tx.amountEur.toFixed(2)}` : "-"}
                   </span>
                 </td>
               </tr>

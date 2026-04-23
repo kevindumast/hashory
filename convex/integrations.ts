@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
 
-const SUPPORTED_PROVIDERS = ["binance", "kaspa", "ethereum", "solana", "bitcoin"];
+const SUPPORTED_PROVIDERS = ["binance", "kaspa", "ethereum", "solana", "bitcoin", "bitstack"];
 
 export const list = query({
   args: {

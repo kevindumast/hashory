@@ -20,6 +20,7 @@ import type * as balances from "../balances.js";
 import type * as binance from "../binance.js";
 import type * as binanceDepositAddresses from "../binanceDepositAddresses.js";
 import type * as bitcoin from "../bitcoin.js";
+import type * as bitstack from "../bitstack.js";
 import type * as client from "../client.js";
 import type * as cmcTokenMap from "../cmcTokenMap.js";
 import type * as convertTrades from "../convertTrades.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   binance: typeof binance;
   binanceDepositAddresses: typeof binanceDepositAddresses;
   bitcoin: typeof bitcoin;
+  bitstack: typeof bitstack;
   client: typeof client;
   cmcTokenMap: typeof cmcTokenMap;
   convertTrades: typeof convertTrades;

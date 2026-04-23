@@ -17,6 +17,28 @@ import {
 } from "@/components/ui/chart";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 
+const PROVIDER_ICONS: Record<string, string> = {
+  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
+  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
+  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
+  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
+  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
+  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
+  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
+};
+
+function ProviderAvatar({ provider, name }: { provider: string; name: string }) {
+  const src = PROVIDER_ICONS[provider.toLowerCase()];
+  return src ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt={name} className="w-7 h-7 shrink-0 rounded-full object-cover border border-border bg-muted" />
+  ) : (
+    <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary uppercase border border-border">
+      {name.slice(0, 2)}
+    </div>
+  );
+}
+
 function formatAxisValue(v: number): string {
   const abs = Math.abs(v);
   const sign = v < 0 ? "-" : "";
@@ -980,9 +1002,7 @@ export function DashboardNewLayout({
                           <ChevronRight
                             className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
                           />
-                          <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary uppercase">
-                            {s.providerDisplayName.slice(0, 2)}
-                          </div>
+                          <ProviderAvatar provider={s.provider} name={s.providerDisplayName} />
                           <div>
                             <div className="font-bold text-foreground text-xs">{s.providerDisplayName}</div>
                             <div className="text-[10px] text-muted-foreground uppercase">{s.provider}</div>
