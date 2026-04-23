@@ -113,10 +113,18 @@ export const upsert = mutation({
       apiSecret: encryptSecret(args.apiSecret ?? ""),
     };
 
-    const existing = await ctx.db
+    const existingForProvider = await ctx.db
       .query("integrations")
       .withIndex("by_user_provider", (q) => q.eq("clerkUserId", userId).eq("provider", args.provider))
-      .first();
+      .collect();
+
+    const existing = existingForProvider.find((integration) => {
+      try {
+        return decryptSecret(integration.encryptedCredentials.apiKey) === args.apiKey;
+      } catch {
+        return false;
+      }
+    });
 
     if (existing) {
       await ctx.db.patch(existing._id, {
