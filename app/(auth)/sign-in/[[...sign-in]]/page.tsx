@@ -11,10 +11,13 @@ export default function SignInPage() {
 
   useEffect(() => setMounted(true), []);
 
-  const isDark = !mounted || resolvedTheme === "dark";
+  if (!mounted) return null;
+
+  const isDark = resolvedTheme === "dark";
 
   return (
     <SignIn
+      key={isDark ? "dark" : "light"}
       appearance={getClerkAppearance(isDark)}
       fallbackRedirectUrl="/dashboard"
     />
