@@ -272,6 +272,54 @@ export const purgeAllData = mutation({
   },
 });
 
+export const deleteIntegration = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const id = args.integrationId;
+
+    async function purgeTable(
+      queryFn: () => Promise<Array<{ _id: any }>>
+    ) {
+      const rows = await queryFn();
+      for (const row of rows) {
+        await ctx.db.delete(row._id);
+      }
+      return rows.length;
+    }
+
+    await purgeTable(() =>
+      ctx.db.query("trades").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("orders").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("convertTrades").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("deposits").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("withdrawals").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("fiatTransactions").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("balances").withIndex("by_integration", (q) => q.eq("integrationId", id)).collect()
+    );
+    await purgeTable(() =>
+      ctx.db.query("integrationSyncStates").withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", id)).collect()
+    );
+
+    await ctx.db.delete(id);
+
+    return { deleted: true };
+  },
+});
+
 export const deleteAllSyncStates = mutation({
   args: {
     integrationId: v.id("integrations"),

@@ -166,6 +166,7 @@ export const listByUser = query({
         integrationId: trade.integrationId,
         provider: integration.provider,
         providerDisplayName: integration.displayName ?? integration.provider,
+        providerOrderId: trade.providerOrderId,
         tradeType: trade.tradeType,
         symbol: trade.symbol,
         side: trade.side,
