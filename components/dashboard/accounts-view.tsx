@@ -15,6 +15,8 @@ import {
   RefreshCw,
   Plus,
   Inbox,
+  Copy,
+  FileUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -35,6 +37,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
+import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
+import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 import { useAction, useMutation } from "convex/react"
@@ -46,13 +50,14 @@ import type { Id } from "@/convex/_generated/dataModel"
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
 const PROVIDER_ICONS: Record<string, string> = {
-  binance: "",
-  kucoin: "",
-  ethereum: "",
-  bitcoin: "",
-  arbitrum: "",
-  solana: "",
-  kaspa: "",
+  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
+  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
+  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
+  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
+  arbitrum: "https://s2.coinmarketcap.com/static/img/coins/64x64/11841.png",
+  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
+  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
+  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
 }
 
 const PROVIDER_NAMES: Record<string, string> = {
@@ -63,12 +68,18 @@ const PROVIDER_NAMES: Record<string, string> = {
   arbitrum: "Arbitrum One",
   solana: "Solana",
   kaspa: "Kaspa",
+  bitstack: "Bitstack",
+  finary: "Finary",
 }
+
+const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"])
 
 type AccountType = "All" | "API" | "File"
 
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
+  const [isBitstackImportOpen, setIsBitstackImportOpen] = React.useState(false)
+  const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
   const [refreshToken, setRefreshToken] = React.useState(0)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
@@ -77,6 +88,7 @@ export function AccountsView() {
   const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
+  const syncKucoin = useAction(api.kucoin.syncAccount)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
@@ -110,8 +122,8 @@ export function AccountsView() {
 
       return {
         id: integration._id,
-        name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider,
-        type: "API" as const,
+        name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider || "Compte",
+        type: (FILE_IMPORT_PROVIDERS.has(integration.provider) ? "File" : "API") as "API" | "File",
         platformId: integration.provider,
         iconUrl: PROVIDER_ICONS[integration.provider] || "",
         subAccountsCount: 1,
@@ -152,6 +164,9 @@ export function AccountsView() {
         // Then call syncAccount to fetch the actual data (status is managed in the backend)
         await syncAccount({ integrationId: accountId })
         console.log("✓ Sync completed")
+      } else if (provider === "kucoin") {
+        await syncKucoin({ integrationId: accountId })
+        console.log("✓ KuCoin sync completed")
       } else {
         console.error(`Unsupported provider for sync: ${provider}`)
         return
@@ -163,7 +178,7 @@ export function AccountsView() {
     } catch (error) {
       console.error("Failed to sync account:", error)
     }
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -399,7 +414,7 @@ export function AccountsView() {
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar className="w-11 h-11 rounded-full border border-border bg-muted shrink-0">
                         <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{account.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{(account.name ?? "??").slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="flex items-center gap-2.5 min-w-0">
                         <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
@@ -413,7 +428,8 @@ export function AccountsView() {
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <StatusBadge status={account.status} />
+                      <span className="text-[12px] text-muted-foreground hidden sm:inline whitespace-nowrap">{account.lastSync}</span>
+                      <StatusBadge status={account.status} showText />
                     </div>
                   </div>
                 </AccordionTrigger>
@@ -425,11 +441,11 @@ export function AccountsView() {
                     <div className="flex items-center gap-3">
                       <Avatar className="w-10 h-10 rounded-full border border-border bg-muted">
                         <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{account.name.slice(0, 2).toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{(account.name ?? "??").slice(0, 2).toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col gap-0.5 min-w-0">
                         <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
-                        <span className="text-[12px] text-muted-foreground truncate max-w-[260px]" title={account.addressOrId}>{account.addressOrId}</span>
+                        <CopyableAddress address={account.addressOrId} />
                       </div>
                     </div>
 
@@ -471,14 +487,25 @@ export function AccountsView() {
                           <DropdownMenuItem className="cursor-pointer">
                             <span className="text-sm">Renommer</span>
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncAccount(account.id, account.platformId)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer flex items-center justify-between"
-                          >
-                            <span className="text-sm">Synchroniser</span>
-                            <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
-                          </DropdownMenuItem>
+                          {FILE_IMPORT_PROVIDERS.has(account.platformId) ? (
+                            <DropdownMenuItem
+                              onClick={() => account.platformId === "finary" ? setIsFinaryImportOpen(true) : setIsBitstackImportOpen(true)}
+                              className="cursor-pointer flex items-center justify-between"
+                            >
+                              <span className="text-sm">Importer un fichier CSV</span>
+                              <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={() => handleSyncAccount(account.id, account.platformId)}
+                              disabled={account.status === "syncing"}
+                              className="cursor-pointer flex items-center justify-between"
+                            >
+                              <span className="text-sm">Synchroniser</span>
+                              <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
+                            </DropdownMenuItem>
+                          )}
+                          {!FILE_IMPORT_PROVIDERS.has(account.platformId) && (<>
                           <DropdownMenuItem
                             onClick={() => handleSyncFiatOnly(account.id)}
                             disabled={account.status === "syncing"}
@@ -510,6 +537,7 @@ export function AccountsView() {
                           <DropdownMenuItem className="cursor-pointer">
                             <span className="text-sm">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
+                          </>)}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => handlePurgeData(account.id)}
@@ -540,7 +568,50 @@ export function AccountsView() {
           handleRefresh()
         }
       }} />
+      <BitstackImportDialog
+        open={isBitstackImportOpen}
+        onOpenChange={setIsBitstackImportOpen}
+        onSuccess={handleRefresh}
+      />
+      <FinaryImportDialog
+        open={isFinaryImportOpen}
+        onOpenChange={setIsFinaryImportOpen}
+        onSuccess={handleRefresh}
+      />
     </div>
+  )
+}
+
+function CopyableAddress({ address }: { address: string }) {
+  const [copied, setCopied] = React.useState(false)
+
+  const handleCopy = React.useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    try {
+      await navigator.clipboard.writeText(address)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch (error) {
+      console.error("Failed to copy address:", error)
+    }
+  }, [address])
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={copied ? "Copié !" : `Copier ${address}`}
+      aria-label={copied ? "Adresse copiée" : "Copier l'adresse"}
+      className="group flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded max-w-[260px]"
+    >
+      <span className="truncate">{address}</span>
+      {copied ? (
+        <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+      ) : (
+        <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+      )}
+    </button>
   )
 }
 

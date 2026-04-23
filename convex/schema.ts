@@ -106,6 +106,7 @@ export default defineSchema({
     encryptedCredentials: v.object({
       apiKey: v.string(),
       apiSecret: v.string(),
+      passphrase: v.optional(v.string()),
     }),
     scopes: v.optional(v.array(v.string())),
     createdAt: v.number(),

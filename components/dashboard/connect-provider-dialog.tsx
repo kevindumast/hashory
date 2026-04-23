@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation } from "convex/react";
-import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
+import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText, AlertCircle } from "lucide-react";
 import Image from "next/image";
 import {
   Dialog,
@@ -20,6 +20,160 @@ import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 
+// ─── CSV parsers ───────────────────────────────────────────────────────────
+
+type BitstackTrade = { externalId: string; executedAt: number; fromAsset: string; fromAmount: number; toAsset: string; toAmount: number; fee?: number; feeAsset?: string; price?: number };
+type BitstackDeposit = { externalId: string; executedAt: number; fiatCurrency: string; fiatAmount: number };
+
+function parseCsvLine(line: string, sep: string): string[] {
+  const fields: string[] = [];
+  let field = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === sep && !inQuotes) {
+      fields.push(field.trim()); field = "";
+    } else {
+      field += ch;
+    }
+  }
+  fields.push(field.trim());
+  return fields;
+}
+
+function parseBitstackCsv(text: string): { trades: BitstackTrade[]; deposits: BitstackDeposit[]; skipped: number } {
+  const bom = "﻿";
+  const content = text.startsWith(bom) ? text.slice(1) : text;
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return { trades: [], deposits: [], skipped: 0 };
+
+  const sep = lines[0].includes(";") ? ";" : ",";
+  const headers = parseCsvLine(lines[0], sep).map((h) => h.toLowerCase().trim());
+
+  const idx = (...candidates: string[]) => {
+    for (const c of candidates) {
+      const i = headers.findIndex((h) => h.includes(c));
+      if (i !== -1) return i;
+    }
+    return -1;
+  };
+
+  const iType = idx("type");
+  const iDate = idx("date");
+  const iAmountIn = idx("montant reçu", "montant rec");
+  const iAssetIn = idx("monnaie ou jeton reçu", "jeton reçu", "monnaie ou jeton rec");
+  const iAmountOut = idx("montant envoyé", "montant envoye");
+  const iAssetOut = idx("monnaie ou jeton envoyé", "monnaie ou jeton envoye", "jeton envoyé");
+  const iFee = idx("frais");
+  const iFeeCurrency = idx("monnaie ou jeton des frais", "jeton des frais");
+  const iPrice = idx("prix du jeton du montant reçu", "prix du jeton du montant");
+  const iExternalId = idx("id externe", "id_externe", "external");
+
+  const trades: BitstackTrade[] = [];
+  const deposits: BitstackDeposit[] = [];
+  let skipped = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i], sep);
+    const type = (iType !== -1 ? cols[iType] : "").toLowerCase();
+    const dateRaw = (iDate !== -1 ? cols[iDate] : "").replace(/GMT$/i, "Z").replace(/UTC$/i, "Z").trim();
+    const executedAt = Date.parse(dateRaw);
+    if (isNaN(executedAt)) { skipped++; continue; }
+
+    const externalId = iExternalId !== -1 && cols[iExternalId] ? cols[iExternalId] : `row-${i}`;
+    const toAmount = parseFloat((iAmountIn !== -1 ? cols[iAmountIn] : "").replace(",", ".")) || 0;
+    const toAsset = (iAssetIn !== -1 ? cols[iAssetIn] : "").toUpperCase();
+    const fromAmount = parseFloat((iAmountOut !== -1 ? cols[iAmountOut] : "").replace(",", ".")) || 0;
+    const fromAsset = (iAssetOut !== -1 ? cols[iAssetOut] : "").toUpperCase();
+
+    if (type === "échange" || type === "echange" || type === "exchange") {
+      if (!toAsset || !fromAsset || toAmount === 0) { skipped++; continue; }
+      const fee = iFee !== -1 ? parseFloat(cols[iFee].replace(",", ".")) || undefined : undefined;
+      const feeAsset = iFeeCurrency !== -1 ? cols[iFeeCurrency].toUpperCase() || undefined : undefined;
+      const price = iPrice !== -1 ? parseFloat(cols[iPrice].replace(",", ".")) || undefined : undefined;
+      trades.push({ externalId, executedAt, fromAsset, fromAmount, toAsset, toAmount, fee: fee && fee > 0 ? fee : undefined, feeAsset, price });
+    } else if (type === "dépôt" || type === "depot" || type === "deposit") {
+      if (toAmount === 0) { skipped++; continue; }
+      deposits.push({ externalId, executedAt, fiatCurrency: toAsset || "EUR", fiatAmount: toAmount });
+    } else {
+      skipped++;
+    }
+  }
+
+  return { trades, deposits, skipped };
+}
+
+// ─── Finary CSV parser ─────────────────────────────────────────────────────
+
+type FinaryTrade = { externalId: string; executedAt: number; receivedAmount: number; receivedCurrency: string; sentAmount: number; sentCurrency: string; feeAmount?: number; feeCurrency?: string; description: string };
+type FinaryWithdrawal = { externalId: string; executedAt: number; sentAmount: number; sentCurrency: string; feeAmount?: number; feeCurrency?: string; address?: string; txHash?: string };
+
+function parseFinaryCsv(text: string): { trades: FinaryTrade[]; withdrawals: FinaryWithdrawal[]; skipped: number } {
+  const bom = "﻿";
+  const content = text.startsWith(bom) ? text.slice(1) : text;
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return { trades: [], withdrawals: [], skipped: 0 };
+
+  const sep = lines[0].includes(";") ? ";" : ",";
+  const headers = parseCsvLine(lines[0], sep).map((h) => h.toLowerCase().trim());
+  const col = (name: string) => headers.indexOf(name);
+
+  const iType = col("type");
+  const iDate = col("date");
+  const iReceivedAmount = col("received_amount");
+  const iReceivedCurrency = col("received_currency");
+  const iSentAmount = col("sent_amount");
+  const iSentCurrency = col("sent_currency");
+  const iFeeAmount = col("fee_amount");
+  const iFeeCurrency = col("fee_currency");
+  const iDescription = col("description");
+  const iAddress = col("address");
+  const iTxHash = col("transaction_hash");
+  const iExternalId = col("external_id");
+
+  const trades: FinaryTrade[] = [];
+  const withdrawals: FinaryWithdrawal[] = [];
+  let skipped = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i], sep);
+    const type = (iType !== -1 ? cols[iType] : "").toLowerCase().trim();
+    const dateRaw = iDate !== -1 ? cols[iDate] : "";
+    const executedAt = Date.parse(dateRaw.replace(/GMT$/i, "Z").replace(/UTC$/i, "Z").trim());
+    if (isNaN(executedAt)) { skipped++; continue; }
+
+    const externalId = (iExternalId !== -1 && cols[iExternalId]) ? cols[iExternalId] : `row-${i}`;
+    const feeAmount = iFeeAmount !== -1 ? (parseFloat(cols[iFeeAmount].replace(",", ".")) || 0) : 0;
+    const feeCurrency = iFeeCurrency !== -1 ? cols[iFeeCurrency].toUpperCase() || undefined : undefined;
+
+    if (type === "trade") {
+      const receivedAmount = parseFloat((iReceivedAmount !== -1 ? cols[iReceivedAmount] : "").replace(",", ".")) || 0;
+      const receivedCurrency = (iReceivedCurrency !== -1 ? cols[iReceivedCurrency] : "").toUpperCase();
+      const sentAmount = parseFloat((iSentAmount !== -1 ? cols[iSentAmount] : "").replace(",", ".")) || 0;
+      const sentCurrency = (iSentCurrency !== -1 ? cols[iSentCurrency] : "").toUpperCase();
+      const description = (iDescription !== -1 ? cols[iDescription] : "").trim();
+      if (!receivedCurrency || !sentCurrency || receivedAmount === 0) { skipped++; continue; }
+      trades.push({ externalId, executedAt, receivedAmount, receivedCurrency, sentAmount, sentCurrency, feeAmount: feeAmount > 0 ? feeAmount : undefined, feeCurrency, description });
+    } else if (type === "withdrawal") {
+      const sentAmount = parseFloat((iSentAmount !== -1 ? cols[iSentAmount] : "").replace(",", ".")) || 0;
+      const sentCurrency = (iSentCurrency !== -1 ? cols[iSentCurrency] : "").toUpperCase();
+      if (!sentCurrency || sentAmount === 0) { skipped++; continue; }
+      const address = iAddress !== -1 ? cols[iAddress] || undefined : undefined;
+      const txHash = iTxHash !== -1 ? cols[iTxHash] || undefined : undefined;
+      withdrawals.push({ externalId, executedAt, sentAmount, sentCurrency, feeAmount: feeAmount > 0 ? feeAmount : undefined, feeCurrency, address, txHash });
+    } else {
+      skipped++;
+    }
+  }
+
+  return { trades, withdrawals, skipped };
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
 type ConnectProviderDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -31,8 +185,9 @@ type ProviderConfig = {
   description: string;
   iconUrl: string;
   disabled?: boolean;
+  fileImport?: boolean;
   fields: Array<{
-    name: "apiKey" | "apiSecret" | "address";
+    name: "apiKey" | "apiSecret" | "address" | "passphrase";
     label: string;
     placeholder: string;
     helper?: string;
@@ -45,7 +200,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "binance",
     label: "Binance (API)",
     description: "Connexion par clé API avec permissions lecture seule.",
-    iconUrl: "",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
     fields: [
       {
         name: "apiKey",
@@ -66,7 +221,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "kaspa",
     label: "Kaspa (wallet)",
     description: "Connexion par adresse publique Kaspa.",
-    iconUrl: "",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
     fields: [
       {
         name: "address",
@@ -80,7 +235,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "ethereum",
     label: "Ethereum (wallet)",
     description: "Connexion par adresse publique Ethereum.",
-    iconUrl: "",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
     fields: [
       {
         name: "address" as const,
@@ -94,7 +249,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "solana",
     label: "Solana (wallet)",
     description: "Connexion par adresse publique Solana.",
-    iconUrl: "",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
     fields: [
       {
         name: "address" as const,
@@ -108,7 +263,7 @@ const providerConfigs: ProviderConfig[] = [
     value: "bitcoin",
     label: "Bitcoin (wallet)",
     description: "Connexion par adresse publique Bitcoin.",
-    iconUrl: "",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
     fields: [
       {
         name: "address" as const,
@@ -119,12 +274,48 @@ const providerConfigs: ProviderConfig[] = [
     ],
   },
   {
-    value: "kucoin",
-    label: "KuCoin (bientôt)",
-    description: "Support en cours de préparation.",
-    iconUrl: "",
-    disabled: true,
+    value: "bitstack",
+    label: "Bitstack (CSV)",
+    description: "Importez votre historique via un export CSV.",
+    iconUrl: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
+    fileImport: true,
     fields: [],
+  },
+  {
+    value: "finary",
+    label: "Finary (CSV)",
+    description: "Importez votre historique via un export CSV Finary.",
+    iconUrl: "",
+    fileImport: true,
+    fields: [],
+  },
+  {
+    value: "kucoin",
+    label: "KuCoin (API)",
+    description: "Connexion par clé API avec passphrase.",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
+    fields: [
+      {
+        name: "apiKey",
+        label: "Clé API",
+        placeholder: "Ex: aBcD1234...",
+        helper: "Depuis KuCoin > Gestion API > Créer une clé (lecture seule).",
+      },
+      {
+        name: "apiSecret",
+        label: "API Secret",
+        placeholder: "Ex: zYxW9876...",
+        helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
+        secret: true,
+      },
+      {
+        name: "passphrase",
+        label: "Passphrase",
+        placeholder: "Votre passphrase KuCoin",
+        helper: "La passphrase que vous avez définie lors de la création de la clé API.",
+        secret: true,
+      },
+    ],
   },
 ];
 
@@ -139,6 +330,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
+  const [passphrase, setPassphrase] = useState("");
   const [address, setAddress] = useState("");
   const [readOnly, setReadOnly] = useState(true);
   const [label, setLabel] = useState("");
@@ -147,12 +339,23 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
 
+  // CSV import state (shared UI, per-provider data)
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [csvFileName, setCsvFileName] = useState<string | null>(null);
+  const [csvParsed, setCsvParsed] = useState<{ trades: BitstackTrade[]; deposits: BitstackDeposit[]; skipped: number } | null>(null);
+  const [finaryParsed, setFinaryParsed] = useState<{ trades: FinaryTrade[]; withdrawals: FinaryWithdrawal[]; skipped: number } | null>(null);
+  const [csvImportResult, setCsvImportResult] = useState<{ tradesInserted: number; depositsInserted: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
   const upsertIntegration = useMutation(api.integrations.upsert);
+  const ingestBitstackCsv = useMutation(api.bitstack.ingestCsv);
+  const ingestFinaryCsv = useMutation(api.finary.ingestCsv);
 
   useEffect(() => {
     if (!open) {
       setApiKey("");
       setApiSecret("");
+      setPassphrase("");
       setAddress("");
       setReadOnly(true);
       setLabel("");
@@ -160,10 +363,69 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       setError(null);
       setCompleted(false);
       setProvider(providerConfigs[0]);
+      setCsvFileName(null);
+      setCsvParsed(null);
+      setFinaryParsed(null);
+      setCsvImportResult(null);
+      if (fileRef.current) fileRef.current.value = "";
     }
   }, [open]);
 
   const maskedProviderLabel = useMemo(() => provider.label.replace(/\(.*\)/, "").trim(), [provider.label]);
+
+  function loadCsvFile(file: File) {
+    setCsvFileName(file.name);
+    setCsvParsed(null);
+    setFinaryParsed(null);
+    setError(null);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string;
+        if (provider.value === "finary") {
+          const result = parseFinaryCsv(text);
+          if (result.trades.length === 0 && result.withdrawals.length === 0) {
+            setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Finary CSV.");
+          } else {
+            setFinaryParsed(result);
+          }
+        } else {
+          const result = parseBitstackCsv(text);
+          if (result.trades.length === 0 && result.deposits.length === 0) {
+            setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Bitstack CSV.");
+          } else {
+            setCsvParsed(result);
+          }
+        }
+      } catch {
+        setError("Impossible de lire le fichier CSV.");
+      }
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    loadCsvFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave() {
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) loadCsvFile(file);
+  }
+
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -174,7 +436,34 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     setError(null);
 
     try {
+      if (provider.value === "finary" && finaryParsed) {
+        const result = await ingestFinaryCsv({
+          trades: finaryParsed.trades,
+          withdrawals: finaryParsed.withdrawals,
+          displayName: label.trim() || "Finary",
+        });
+        setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.withdrawalsInserted });
+        setCompleted(true);
+        setTimeout(() => { onOpenChange(false); }, 1500);
+        return;
+      }
+
+      if (provider.fileImport && csvParsed) {
+        const result = await ingestBitstackCsv({
+          trades: csvParsed.trades,
+          deposits: csvParsed.deposits,
+          displayName: label.trim() || "Bitstack",
+        });
+        setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.depositsInserted });
+        setCompleted(true);
+        setTimeout(() => {
+          onOpenChange(false);
+        }, 1500);
+        return;
+      }
+
       const usesAddress = provider.fields.some((f) => f.name === "address");
+      const hasPassphrase = provider.fields.some((f) => f.name === "passphrase");
       const finalApiKey = usesAddress ? address : apiKey;
       const finalApiSecret = usesAddress ? undefined : apiSecret;
 
@@ -182,6 +471,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         provider: provider.value,
         apiKey: finalApiKey,
         apiSecret: finalApiSecret,
+        passphrase: hasPassphrase ? passphrase : undefined,
         readOnly,
         displayName: label ? label.trim() : undefined,
       });
@@ -208,13 +498,15 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         </DialogHeader>
 
         {/* Rassurance sécurité */}
-        <div className="flex items-start gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
-          <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
-          <span className="leading-snug">
-            Accès <span className="font-semibold">lecture seule</span> — aucun ordre ne peut être passé.
-            Vos clés sont chiffrées immédiatement côté serveur.
-          </span>
-        </div>
+        {!provider.fileImport && (
+          <div className="flex items-start gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+            <span className="leading-snug">
+              Accès <span className="font-semibold">lecture seule</span> — aucun ordre ne peut être passé.
+              Vos clés sont chiffrées immédiatement côté serveur.
+            </span>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="space-y-1.5">
@@ -236,14 +528,18 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 {providerConfigs.map((config) => (
                   <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
                     <div className="flex items-center gap-2.5">
-                      <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative">
-                        <Image
-                          src={config.iconUrl}
-                          alt=""
-                          fill
-                          sizes="24px"
-                          className="object-cover"
-                        />
+                      <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
+                        {config.iconUrl ? (
+                          <Image
+                            src={config.iconUrl}
+                            alt=""
+                            fill
+                            sizes="24px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <FileText className="size-3.5 text-muted-foreground" />
+                        )}
                       </div>
                       <div className="flex flex-col gap-0.5 text-left">
                         <span className="text-sm">{config.label}</span>
@@ -272,47 +568,122 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 </p>
               </div>
 
-              {provider.fields.map((field) => {
-                const value =
-                  field.name === "apiKey" ? apiKey : field.name === "apiSecret" ? apiSecret : address;
-                const setValue =
-                  field.name === "apiKey"
-                    ? setApiKey
-                    : field.name === "apiSecret"
-                    ? setApiSecret
-                    : setAddress;
-                const isSecret = field.secret === true;
-                const inputType = isSecret && !showSecret ? "password" : "text";
-                return (
-                  <div className="space-y-1.5" key={field.name}>
-                    <Label htmlFor={field.name} className="text-sm">{field.label}</Label>
-                    <div className="relative">
-                      <Input
-                        id={field.name}
-                        type={inputType}
-                        placeholder={field.placeholder}
-                        autoComplete="off"
-                        spellCheck={false}
-                        value={value}
-                        onChange={(event) => setValue(event.target.value)}
-                        className={cn("h-9 text-sm font-mono", isSecret && "pr-10")}
-                        required
-                      />
-                      {isSecret && value && (
-                        <button
-                          type="button"
-                          onClick={() => setShowSecret((v) => !v)}
-                          aria-label={showSecret ? "Masquer le secret" : "Afficher le secret"}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-                        >
-                          {showSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-                        </button>
-                      )}
+              {provider.fileImport ? (
+                <div className="space-y-3">
+                  <label
+                    htmlFor="csv-connect"
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-6 cursor-pointer transition-colors",
+                      isDragging
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 bg-muted/30 hover:border-border hover:bg-muted/50"
+                    )}
+                  >
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted">
+                      {csvFileName ? <FileText className="size-4 text-muted-foreground" /> : <Upload className="size-4 text-muted-foreground" />}
                     </div>
-                    {field.helper ? <p className="text-[11px] text-muted-foreground leading-tight">{field.helper}</p> : null}
-                  </div>
-                );
-              })}
+                    {csvFileName ? (
+                      <p className="text-sm font-medium text-foreground">{csvFileName}</p>
+                    ) : (
+                      <div className="text-center">
+                        <p className="text-sm font-medium">Sélectionner un export CSV {maskedProviderLabel}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {provider.value === "finary"
+                            ? "Finary → Compte → Exporter l'historique"
+                            : "Paramètres Bitstack → Exporter l'historique"}
+                        </p>
+                      </div>
+                    )}
+                    <input
+                      id="csv-connect"
+                      ref={fileRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="sr-only"
+                      onChange={handleCsvFile}
+                    />
+                  </label>
+
+                  {csvParsed && !completed && (
+                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                      <p className="font-medium text-foreground">Aperçu</p>
+                      <p className="text-muted-foreground">{csvParsed.trades.length} achat{csvParsed.trades.length > 1 ? "s" : ""} par carte</p>
+                      <p className="text-muted-foreground">{csvParsed.deposits.length} dépôt{csvParsed.deposits.length > 1 ? "s" : ""} fiat</p>
+                      {csvParsed.skipped > 0 && <p className="text-amber-600 dark:text-amber-500">{csvParsed.skipped} ligne{csvParsed.skipped > 1 ? "s" : ""} ignorée{csvParsed.skipped > 1 ? "s" : ""}</p>}
+                    </div>
+                  )}
+
+                  {finaryParsed && !completed && (
+                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                      <p className="font-medium text-foreground">Aperçu</p>
+                      {finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length} achat{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 1 ? "s" : ""} crypto</p>
+                      )}
+                      {finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length} swap{finaryParsed.trades.filter(t => t.description.toLowerCase() === "swap").length > 1 ? "s" : ""}</p>
+                      )}
+                      {finaryParsed.withdrawals.length > 0 && (
+                        <p className="text-muted-foreground">{finaryParsed.withdrawals.length} retrait{finaryParsed.withdrawals.length > 1 ? "s" : ""}</p>
+                      )}
+                      {finaryParsed.skipped > 0 && <p className="text-amber-600 dark:text-amber-500">{finaryParsed.skipped} ligne{finaryParsed.skipped > 1 ? "s" : ""} ignorée{finaryParsed.skipped > 1 ? "s" : ""}</p>}
+                    </div>
+                  )}
+
+                  {completed && csvImportResult && (
+                    <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                      <p className="font-semibold flex items-center gap-1.5"><Check className="size-3.5" />Import réussi</p>
+                      <p>{csvImportResult.tradesInserted} transaction{csvImportResult.tradesInserted > 1 ? "s" : ""} · {csvImportResult.depositsInserted} autre{csvImportResult.depositsInserted > 1 ? "s" : ""} ajouté{csvImportResult.tradesInserted + csvImportResult.depositsInserted > 1 ? "s" : ""}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                provider.fields.map((field) => {
+                  const value =
+                    field.name === "apiKey" ? apiKey
+                    : field.name === "apiSecret" ? apiSecret
+                    : field.name === "passphrase" ? passphrase
+                    : address;
+                  const setValue =
+                    field.name === "apiKey" ? setApiKey
+                    : field.name === "apiSecret" ? setApiSecret
+                    : field.name === "passphrase" ? setPassphrase
+                    : setAddress;
+                  const isSecret = field.secret === true;
+                  const inputType = isSecret && !showSecret ? "password" : "text";
+                  return (
+                    <div className="space-y-1.5" key={field.name}>
+                      <Label htmlFor={field.name} className="text-sm">{field.label}</Label>
+                      <div className="relative">
+                        <Input
+                          id={field.name}
+                          type={inputType}
+                          placeholder={field.placeholder}
+                          autoComplete="off"
+                          spellCheck={false}
+                          value={value}
+                          onChange={(event) => setValue(event.target.value)}
+                          className={cn("h-9 text-sm font-mono", isSecret && "pr-10")}
+                          required
+                        />
+                        {isSecret && value && (
+                          <button
+                            type="button"
+                            onClick={() => setShowSecret((v) => !v)}
+                            aria-label={showSecret ? "Masquer le secret" : "Afficher le secret"}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
+                          >
+                            {showSecret ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                          </button>
+                        )}
+                      </div>
+                      {field.helper ? <p className="text-[11px] text-muted-foreground leading-tight">{field.helper}</p> : null}
+                    </div>
+                  );
+                })
+              )}
             </div>
           ) : (
             <div className="rounded-xl border border-dashed border-border bg-muted/40 p-6 text-sm text-muted-foreground text-center">
@@ -337,7 +708,17 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               disabled={
                 submitting ||
                 provider.disabled ||
-                (provider.fields.some((f) => f.name === "address") ? !address : !apiKey || !apiSecret)
+                (provider.value === "finary"
+                  ? !finaryParsed
+                  : provider.fileImport
+                  ? !csvParsed
+                  : provider.fields.some((f) => {
+                      if (f.name === "address") return !address;
+                      if (f.name === "apiKey") return !apiKey;
+                      if (f.name === "apiSecret") return !apiSecret;
+                      if (f.name === "passphrase") return !passphrase;
+                      return false;
+                    }))
               }
               className="h-9 min-w-[140px] text-sm cursor-pointer"
             >
@@ -349,10 +730,10 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               ) : completed ? (
                 <span className="flex items-center gap-1.5">
                   <Check className="size-3.5" />
-                  Ajouté
+                  {provider.fileImport ? "Importé" : "Ajouté"}
                 </span>
               ) : (
-                "Connecter"
+                provider.fileImport ? "Importer" : "Connecter"
               )}
             </Button>
           </DialogFooter>
