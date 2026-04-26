@@ -102,6 +102,26 @@ export const syncBitcoinWallet = action({
 
         let reachedKnown = false;
 
+        const deposits: Array<{
+          depositId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          insertTime: number;
+          txId: string;
+        }> = [];
+        const withdrawals: Array<{
+          withdrawId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          applyTime: number;
+          txId: string;
+          fee: number;
+        }> = [];
+
         for (const tx of txs) {
           if (previousCursor?.lastTxId && tx.txid === previousCursor.lastTxId) {
             reachedKnown = true;
@@ -133,8 +153,7 @@ export const syncBitcoinWallet = action({
             const netSentSats = sentSats - receivedSats;
             if (netSentSats > 0) {
               const amountBtc = netSentSats / SATS_PER_BTC;
-              await ctx.runMutation(api.kaspa.insertWithdrawal, {
-                integrationId: args.integrationId,
+              withdrawals.push({
                 withdrawId: `${tx.txid}-btc-out`,
                 coin: "BTC",
                 amount: amountBtc,
@@ -147,8 +166,7 @@ export const syncBitcoinWallet = action({
             }
           } else if (receivedSats > 0) {
             const amountBtc = receivedSats / SATS_PER_BTC;
-            await ctx.runMutation(api.kaspa.insertDeposit, {
-              integrationId: args.integrationId,
+            deposits.push({
               depositId: `${tx.txid}-btc-in`,
               coin: "BTC",
               amount: amountBtc,
@@ -158,6 +176,14 @@ export const syncBitcoinWallet = action({
               txId: tx.txid,
             });
           }
+        }
+
+        if (deposits.length > 0 || withdrawals.length > 0) {
+          await ctx.runMutation(api.blockchainSync.bulkInsertTransactions, {
+            integrationId: args.integrationId,
+            deposits,
+            withdrawals,
+          });
         }
 
         if (reachedKnown || txs.length < PAGE_SIZE) {

@@ -6,6 +6,7 @@ import {
   AreaChart,
   CartesianGrid,
   Line,
+  LineChart,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -16,6 +17,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 
 const PROVIDER_ICONS: Record<string, string> = {
   binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
@@ -62,7 +64,16 @@ type ChartPeriod = typeof CHART_PERIODS[number];
 
 const monthLabelFormatter = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" });
 
-function aggregateByPeriod(series: HistoryPoint[], period: ChartPeriod): HistoryPoint[] {
+type HoldingsPoint = {
+  timestamp: number;
+  label: string;
+  valueUsd: number;
+  profitPercent: number;
+  btcPercent: number;
+  netInvestedUsd: number;
+};
+
+function aggregateHoldingsByPeriod(series: HoldingsPoint[], period: ChartPeriod): HoldingsPoint[] {
   if (!series.length) return [];
   if (period === "ALL" || period === "1D") return series;
 
@@ -76,7 +87,8 @@ function aggregateByPeriod(series: HistoryPoint[], period: ChartPeriod): History
     return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
   };
 
-  const buckets = new Map<string, HistoryPoint>();
+  // Keep the last point of each bucket (closest to bucket end = freshest value)
+  const buckets = new Map<string, HoldingsPoint>();
   for (const point of series) {
     buckets.set(bucketKey(point.timestamp), point);
   }
@@ -105,6 +117,7 @@ export function DashboardNewLayout({
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
+  const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
 
   const filteredTokens = useMemo(() => {
     if (!hideZeroBalance) return portfolioTokens;
@@ -148,7 +161,7 @@ export function DashboardNewLayout({
   const unrealizedPnl = hasCurrentPrices ? totalCurrentValue - totalCostBasis : null;
 
   // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
-  function makeXTick(series: typeof historySeries) {
+  function makeXTick(series: { timestamp: number }[]) {
     return function XTick({ x, y, payload, index }: { x: number; y: number; payload: { value: string }; index: number }) {
       const point = series[index];
       if (!point) return <g />;
@@ -196,51 +209,79 @@ export function DashboardNewLayout({
     };
   }
 
+  // Snapshots = source of truth when available; falls back to client-computed history.
+  const dayLabelFormatter = useMemo(
+    () => new Intl.DateTimeFormat("fr-FR", { month: "short", day: "numeric", timeZone: "UTC" }),
+    []
+  );
+
+  const holdingsSeries = useMemo<HoldingsPoint[]>(() => {
+    if (portfolioSnapshots.length > 0) {
+      return portfolioSnapshots.map((s) => ({
+        timestamp: s.dayUtc,
+        label: dayLabelFormatter.format(new Date(s.dayUtc)),
+        valueUsd: s.valueUsd,
+        profitPercent: s.profitPercent,
+        btcPercent: s.btcPercent,
+        netInvestedUsd: s.netInvestedUsd,
+      }));
+    }
+    // Fallback: pre-snapshot data (cash-flow only, no historical prices)
+    return historySeries.map((p) => ({
+      timestamp: p.timestamp,
+      label: p.label,
+      valueUsd: p.netInvestedUsd,
+      profitPercent: 0,
+      btcPercent: 0,
+      netInvestedUsd: p.netInvestedUsd,
+    }));
+  }, [portfolioSnapshots, historySeries, dayLabelFormatter]);
+
   const periodPointCounts = useMemo(() => {
     const result = {} as Record<ChartPeriod, number>;
     for (const p of CHART_PERIODS) {
-      result[p] = aggregateByPeriod(historySeries, p).length;
+      result[p] = aggregateHoldingsByPeriod(holdingsSeries, p).length;
     }
     return result;
-  }, [historySeries]);
+  }, [holdingsSeries]);
 
-  const filteredHistory = useMemo(() => {
-    return aggregateByPeriod(historySeries, activePeriod);
-  }, [historySeries, activePeriod]);
+  const filteredHoldings = useMemo(
+    () => aggregateHoldingsByPeriod(holdingsSeries, activePeriod),
+    [holdingsSeries, activePeriod]
+  );
 
   const chartIsPositive = useMemo(() => {
-    if (filteredHistory.length === 0) return true;
-    return filteredHistory[filteredHistory.length - 1].profitUsd >= 0;
-  }, [filteredHistory]);
+    if (filteredHoldings.length === 0) return true;
+    return filteredHoldings[filteredHoldings.length - 1].profitPercent >= 0;
+  }, [filteredHoldings]);
 
-  // Portfolio value series with embedded buy/sell markers
-  const portfolioValueSeries = useMemo(() => {
-    // Build a set of day-keys with stablecoin↔crypto trades only.
-    // Green = stablecoin → crypto (BUY on a non-stable token vs stable)
-    // Red   = crypto → stablecoin (SELL on a non-stable token vs stable)
-    // Crypto↔crypto swaps produce no marker.
-    const buyDays = new Set<number>();
-    const sellDays = new Set<number>();
+  const buySellDays = useMemo(() => {
+    const buys = new Set<number>();
+    const sells = new Set<number>();
     for (const token of portfolioTokens) {
-      if (USD_STABLECOINS.has(token.symbol)) continue; // avoid double-counting the stable side
+      if (USD_STABLECOINS.has(token.symbol)) continue;
       for (const event of token.events) {
         if (event.type !== "BUY" && event.type !== "SELL") continue;
         if (!event.vsStablecoin) continue;
         const d = new Date(event.timestamp);
         const dayTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-        if (event.type === "BUY") buyDays.add(dayTs);
-        else sellDays.add(dayTs);
+        if (event.type === "BUY") buys.add(dayTs);
+        else sells.add(dayTs);
       }
     }
+    return { buys, sells };
+  }, [portfolioTokens]);
 
-    return filteredHistory.map(p => ({
-      ...p,
-      portfolioValue: p.netInvestedUsd,
-      // null = no marker, number = marker at this y position
-      buyMarker: buyDays.has(p.timestamp) ? p.netInvestedUsd : null,
-      sellMarker: sellDays.has(p.timestamp) ? p.netInvestedUsd : null,
-    }));
-  }, [filteredHistory, portfolioTokens]);
+  const holdingsWithMarkers = useMemo(
+    () =>
+      filteredHoldings.map((p) => ({
+        ...p,
+        buyMarker: buySellDays.buys.has(p.timestamp) ? p.valueUsd : null,
+        sellMarker: buySellDays.sells.has(p.timestamp) ? p.valueUsd : null,
+      })),
+    [filteredHoldings, buySellDays]
+  );
+
 
   return (
     <div className="space-y-5">
@@ -356,87 +397,15 @@ export function DashboardNewLayout({
       {/* ── Charts Row ── */}
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-4">
 
-        {/* Performance chart */}
-        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="mb-5 pb-4 border-b border-border/40">
-            <h2 className="text-sm font-bold tracking-tight text-foreground">Performance du portefeuille</h2>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">Profit cumulé (USD)</p>
-          </div>
-
-          <div className="h-[260px] w-full">
-            {filteredHistory.length >= 2 ? (
-              <ChartContainer
-                config={{ profitUsd: { label: "Profit USD", color: chartIsPositive ? "var(--positive)" : "var(--negative)" } }}
-                className="h-full w-full"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={filteredHistory} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
-                    <defs>
-                      <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0.2} />
-                        <stop offset="95%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
-                    <XAxis
-                      dataKey="label"
-                      tickLine={false}
-                      axisLine={false}
-                      height={46}
-                      tick={makeXTick(filteredHistory)}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      stroke="var(--muted-foreground)"
-                      tickLine={false}
-                      axisLine={false}
-                      width={62}
-                      tickFormatter={(v) => formatAxisValue(v)}
-                      style={{ fontSize: "11px" }}
-                      tick={{ fill: "var(--muted-foreground)" }}
-                    />
-                    <ChartTooltip
-                      content={({ active, payload, label }) =>
-                        <ChartTooltipContent active={active} payload={payload} label={label} />
-                      }
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="profitUsd"
-                      stroke={chartIsPositive ? "var(--positive)" : "var(--negative)"}
-                      strokeWidth={2}
-                      fill="url(#chartGrad)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </ChartContainer>
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                <p className="text-sm">
-                  {historySeries.length === 0
-                    ? "Aucune donnée à afficher."
-                    : "Pas assez de points pour cette agrégation."}
-                </p>
-                {historySeries.length === 0 ? (
-                  <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
-                    Connecter une plateforme →
-                  </button>
-                ) : (
-                  <button onClick={() => setActivePeriod("ALL")} className="text-xs text-primary hover:underline cursor-pointer">
-                    Voir toutes les données →
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Portfolio value chart with buy/sell markers */}
+        {/* Avoirs — portfolio market value over time */}
         <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
           <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/40">
             <div>
-              <h2 className="text-sm font-bold tracking-tight text-foreground">Valeur investie</h2>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">Montant du portefeuille (USD)</p>
+              <h2 className="text-sm font-bold tracking-tight text-foreground">Avoirs</h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
+                Valeur de marché (USD)
+                {snapshotsComputing && " · calcul en cours…"}
+              </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
               <span className="flex items-center gap-1.5">
@@ -451,17 +420,17 @@ export function DashboardNewLayout({
           </div>
 
           <div className="h-[260px] w-full">
-            {portfolioValueSeries.length >= 2 ? (
+            {holdingsWithMarkers.length >= 2 ? (
               <ChartContainer
-                config={{ portfolioValue: { label: "Montant USD", color: "var(--primary)" } }}
+                config={{ valueUsd: { label: "Valeur USD", color: chartIsPositive ? "var(--positive)" : "var(--negative)" } }}
                 className="h-full w-full"
               >
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={portfolioValueSeries} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                  <AreaChart data={holdingsWithMarkers} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
                     <defs>
-                      <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.18} />
-                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
+                      <linearGradient id="holdingsGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0.2} />
+                        <stop offset="95%" stopColor={chartIsPositive ? "var(--positive)" : "var(--negative)"} stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
@@ -470,7 +439,7 @@ export function DashboardNewLayout({
                       tickLine={false}
                       axisLine={false}
                       height={46}
-                      tick={makeXTick(portfolioValueSeries)}
+                      tick={makeXTick(holdingsWithMarkers)}
                       interval="preserveStartEnd"
                     />
                     <YAxis
@@ -489,14 +458,13 @@ export function DashboardNewLayout({
                     />
                     <Area
                       type="monotone"
-                      dataKey="portfolioValue"
-                      stroke="var(--primary)"
+                      dataKey="valueUsd"
+                      stroke={chartIsPositive ? "var(--positive)" : "var(--negative)"}
                       strokeWidth={2}
-                      fill="url(#portfolioGrad)"
+                      fill="url(#holdingsGrad)"
                       dot={false}
-                      activeDot={{ r: 4, fill: "var(--primary)" }}
+                      activeDot={{ r: 4 }}
                     />
-                    {/* Buy markers — green dots */}
                     <Line
                       type="monotone"
                       dataKey="buyMarker"
@@ -509,7 +477,7 @@ export function DashboardNewLayout({
                             key={props.key}
                             cx={props.cx}
                             cy={props.cy}
-                            r={6}
+                            r={5}
                             fill="var(--positive)"
                             stroke="white"
                             strokeWidth={1.5}
@@ -521,7 +489,6 @@ export function DashboardNewLayout({
                       isAnimationActive={false}
                       connectNulls={false}
                     />
-                    {/* Sell markers — red dots */}
                     <Line
                       type="monotone"
                       dataKey="sellMarker"
@@ -534,7 +501,7 @@ export function DashboardNewLayout({
                             key={props.key}
                             cx={props.cx}
                             cy={props.cy}
-                            r={6}
+                            r={5}
                             fill="var(--negative)"
                             stroke="white"
                             strokeWidth={1.5}
@@ -552,19 +519,116 @@ export function DashboardNewLayout({
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
                 <p className="text-sm">
-                  {historySeries.length === 0
-                    ? "Aucune donnée à afficher."
+                  {holdingsSeries.length === 0
+                    ? snapshotsComputing
+                      ? "Calcul de l'historique en cours…"
+                      : "Aucune donnée à afficher."
                     : "Pas assez de points pour cette agrégation."}
                 </p>
-                {historySeries.length === 0 ? (
+                {holdingsSeries.length === 0 && !snapshotsComputing ? (
                   <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
                     Connecter une plateforme →
                   </button>
-                ) : (
+                ) : holdingsSeries.length > 0 ? (
                   <button onClick={() => setActivePeriod("ALL")} className="text-xs text-primary hover:underline cursor-pointer">
                     Voir toutes les données →
                   </button>
-                )}
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Performance — portfolio profit% vs BTC trend% */}
+        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
+          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/40">
+            <div>
+              <h2 className="text-sm font-bold tracking-tight text-foreground">Performance</h2>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">% depuis le début</p>
+            </div>
+            <div className="flex items-center gap-3 text-[10px] font-bold">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#3B82F6" }} />
+                <span className="text-muted-foreground">Profit total</span>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#F59E0B" }} />
+                <span className="text-muted-foreground">BTC</span>
+              </span>
+            </div>
+          </div>
+
+          <div className="h-[260px] w-full">
+            {filteredHoldings.length >= 2 ? (
+              <ChartContainer
+                config={{
+                  profitPercent: { label: "Profit %", color: "#3B82F6" },
+                  btcPercent: { label: "BTC %", color: "#F59E0B" },
+                }}
+                className="h-full w-full"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={filteredHoldings} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                    <XAxis
+                      dataKey="label"
+                      tickLine={false}
+                      axisLine={false}
+                      height={46}
+                      tick={makeXTick(filteredHoldings)}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      stroke="var(--muted-foreground)"
+                      tickLine={false}
+                      axisLine={false}
+                      width={62}
+                      tickFormatter={(v) => `${v.toFixed(0)}%`}
+                      style={{ fontSize: "11px" }}
+                      tick={{ fill: "var(--muted-foreground)" }}
+                    />
+                    <ChartTooltip
+                      content={({ active, payload, label }) =>
+                        <ChartTooltipContent active={active} payload={payload} label={label} />
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="profitPercent"
+                      stroke="#3B82F6"
+                      strokeWidth={2}
+                      dot={false}
+                      name="Profit total"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="btcPercent"
+                      stroke="#F59E0B"
+                      strokeWidth={2}
+                      dot={false}
+                      name="BTC"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartContainer>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                <p className="text-sm">
+                  {holdingsSeries.length === 0
+                    ? snapshotsComputing
+                      ? "Calcul de l'historique en cours…"
+                      : "Aucune donnée à afficher."
+                    : "Pas assez de points pour cette agrégation."}
+                </p>
+                {holdingsSeries.length === 0 && !snapshotsComputing ? (
+                  <button onClick={onOpenIntegrations} className="text-xs text-primary hover:underline cursor-pointer">
+                    Connecter une plateforme →
+                  </button>
+                ) : holdingsSeries.length > 0 ? (
+                  <button onClick={() => setActivePeriod("ALL")} className="text-xs text-primary hover:underline cursor-pointer">
+                    Voir toutes les données →
+                  </button>
+                ) : null}
               </div>
             )}
           </div>

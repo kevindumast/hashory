@@ -1,4 +1,4 @@
-import { action, mutation } from "./_generated/server";
+import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
@@ -23,78 +23,6 @@ interface KaspaTransaction {
 interface SyncCursor {
   lastBlockTime: number;
 }
-
-export const insertDeposit = mutation({
-  args: {
-    integrationId: v.id("integrations"),
-    depositId: v.string(),
-    coin: v.string(),
-    amount: v.number(),
-    network: v.string(),
-    status: v.string(),
-    insertTime: v.number(),
-    txId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("deposits")
-      .withIndex("by_integration_deposit", (q) =>
-        q.eq("integrationId", args.integrationId).eq("depositId", args.depositId)
-      )
-      .first();
-
-    if (existing) return;
-
-    await ctx.db.insert("deposits", {
-      integrationId: args.integrationId,
-      depositId: args.depositId,
-      coin: args.coin,
-      amount: args.amount,
-      network: args.network,
-      status: args.status,
-      insertTime: args.insertTime,
-      txId: args.txId,
-      createdAt: Date.now(),
-    });
-  },
-});
-
-export const insertWithdrawal = mutation({
-  args: {
-    integrationId: v.id("integrations"),
-    withdrawId: v.string(),
-    coin: v.string(),
-    amount: v.number(),
-    network: v.string(),
-    status: v.string(),
-    applyTime: v.number(),
-    txId: v.string(),
-    fee: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("withdrawals")
-      .withIndex("by_integration_withdraw", (q) =>
-        q.eq("integrationId", args.integrationId).eq("withdrawId", args.withdrawId)
-      )
-      .first();
-
-    if (existing) return;
-
-    await ctx.db.insert("withdrawals", {
-      integrationId: args.integrationId,
-      withdrawId: args.withdrawId,
-      coin: args.coin,
-      amount: args.amount,
-      network: args.network,
-      status: args.status,
-      applyTime: args.applyTime,
-      txId: args.txId,
-      fee: args.fee,
-      createdAt: Date.now(),
-    });
-  },
-});
 
 export const syncKaspaWallet = action({
   args: {
@@ -157,6 +85,26 @@ export const syncKaspaWallet = action({
 
         let reachedKnown = false;
 
+        const deposits: Array<{
+          depositId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          insertTime: number;
+          txId: string;
+        }> = [];
+        const withdrawals: Array<{
+          withdrawId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          applyTime: number;
+          txId: string;
+          fee: number;
+        }> = [];
+
         for (const tx of transactions) {
           if (!tx.is_accepted) continue;
 
@@ -188,8 +136,7 @@ export const syncKaspaWallet = action({
 
           if (hasWalletInputs && externalSompi > BigInt(0)) {
             const amountKas = Number(externalSompi) / SOMPI_PER_KAS;
-            await ctx.runMutation(api.kaspa.insertWithdrawal, {
-              integrationId: args.integrationId,
+            withdrawals.push({
               withdrawId: `${tx.transaction_id}-out`,
               coin: "KAS",
               amount: amountKas,
@@ -201,8 +148,7 @@ export const syncKaspaWallet = action({
             });
           } else if (!hasWalletInputs && receivedSompi > BigInt(0)) {
             const amountKas = Number(receivedSompi) / SOMPI_PER_KAS;
-            await ctx.runMutation(api.kaspa.insertDeposit, {
-              integrationId: args.integrationId,
+            deposits.push({
               depositId: `${tx.transaction_id}-in`,
               coin: "KAS",
               amount: amountKas,
@@ -212,6 +158,14 @@ export const syncKaspaWallet = action({
               txId: tx.transaction_id,
             });
           }
+        }
+
+        if (deposits.length > 0 || withdrawals.length > 0) {
+          await ctx.runMutation(api.blockchainSync.bulkInsertTransactions, {
+            integrationId: args.integrationId,
+            deposits,
+            withdrawals,
+          });
         }
 
         if (reachedKnown || transactions.length < BATCH_SIZE) {
