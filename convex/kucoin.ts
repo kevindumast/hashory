@@ -15,6 +15,12 @@ const DELAY_MS = 300;
 const DATASET_FILLS = "kucoin_fills";
 const DATASET_DEPOSITS = "kucoin_deposits";
 const DATASET_WITHDRAWALS = "kucoin_withdrawals";
+const DATASET_CONVERTS = "kucoin_converts";
+
+const PREFERRED_QUOTES = new Set([
+  "USDT", "USDC", "USD", "DAI", "FDUSD", "TUSD", "BUSD",
+  "EUR", "GBP", "BTC", "ETH", "KCS",
+]);
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
@@ -117,6 +123,19 @@ type KucoinDeposit = {
   remark?: string;
   createdAt: number;
   updatedAt: number;
+};
+
+type KucoinConvertOrder = {
+  clientOrderId?: string;
+  orderId: string | number;
+  price: string;
+  fromCurrency: string;
+  toCurrency: string;
+  fromCurrencySize: string;
+  toCurrencySize: string;
+  accountType?: string;
+  orderTime: number;
+  status: string;
 };
 
 type KucoinWithdrawal = {
@@ -278,6 +297,209 @@ async function syncFills(
   await ctx.runMutation(api.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_FILLS,
+    scope: "all",
+    cursor: { latestTs: newLatestTs, oldestTs: newOldestTs },
+  });
+
+  return { fetched: totalFetched, inserted: totalInserted };
+}
+
+// ─── Converts (Fast Trade) ────────────────────────────────────────────────────
+
+function resolveConvertSymbol(fromAsset: string, toAsset: string) {
+  const from = fromAsset.toUpperCase();
+  const to = toAsset.toUpperCase();
+
+  // If the user paid with a quote currency, they're BUYing the other side.
+  if (PREFERRED_QUOTES.has(from) && !PREFERRED_QUOTES.has(to)) {
+    return { symbol: `${to}${from}`, side: "BUY" as const };
+  }
+  if (PREFERRED_QUOTES.has(to) && !PREFERRED_QUOTES.has(from)) {
+    return { symbol: `${from}${to}`, side: "SELL" as const };
+  }
+  // Both quotes (e.g. USDT→USDC) or both bases: default to BUY of the destination.
+  return { symbol: `${to}${from}`, side: "BUY" as const };
+}
+
+async function syncConverts(
+  ctx: ActionCtx,
+  opts: { integrationId: Id<"integrations">; apiKey: string; apiSecret: string; passphrase: string }
+) {
+  const { integrationId, apiKey, apiSecret, passphrase } = opts;
+
+  const syncState = await ctx.runQuery(api.integrations.getSyncState, {
+    integrationId,
+    dataset: DATASET_CONVERTS,
+    scope: "all",
+  });
+  const cursor = syncState?.cursor as { oldestTs?: number; latestTs?: number } | null;
+  const now = Date.now();
+  const DEFAULT_LOOKBACK = 3 * 365 * 24 * 60 * 60 * 1000;
+
+  const latestSeen = cursor?.latestTs ?? now;
+  const oldestSeen = cursor?.oldestTs ?? now;
+
+  const windows: Array<{ start: number; end: number }> = [];
+
+  if (cursor) {
+    let t = latestSeen;
+    while (t < now) {
+      windows.push({ start: t, end: Math.min(t + WEEK_MS, now) });
+      t += WEEK_MS;
+    }
+  }
+
+  {
+    const floor = now - DEFAULT_LOOKBACK;
+    let t = oldestSeen - WEEK_MS;
+    while (t > floor) {
+      windows.push({ start: Math.max(t, floor), end: t + WEEK_MS });
+      t -= WEEK_MS;
+    }
+    if (t + WEEK_MS > floor) {
+      windows.push({ start: floor, end: Math.max(t + WEEK_MS, floor + 1) });
+    }
+  }
+
+  type TradeBatchItem = {
+    providerTradeId: string;
+    providerOrderId?: string;
+    tradeType: "CONVERT";
+    symbol: string;
+    side: "BUY" | "SELL";
+    quantity: number;
+    price: number;
+    quoteQuantity?: number;
+    isMaker: boolean;
+    executedAt: number;
+    fromAsset?: string;
+    fromAmount?: number;
+    toAsset?: string;
+    toAmount?: number;
+    raw?: unknown;
+  };
+
+  type ConvertBatchItem = {
+    providerTradeId: string;
+    orderStatus: string;
+    fromAsset: string;
+    fromAmount: number;
+    toAsset: string;
+    toAmount: number;
+    price: number;
+    inversePrice?: number;
+    executedAt: number;
+    raw?: unknown;
+  };
+
+  let totalFetched = 0;
+  let totalInserted = 0;
+  let newLatestTs = latestSeen;
+  let newOldestTs = oldestSeen;
+
+  for (const win of windows) {
+    let page = 1;
+    let totalPages = 1;
+    const tradesBatch: TradeBatchItem[] = [];
+    const convertsBatch: ConvertBatchItem[] = [];
+
+    do {
+      const data = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/convert/order/history", {
+        startAt: win.start,
+        endAt: win.end,
+        pageSize: PAGE_SIZE,
+        currentPage: page,
+      })) as KucoinPage<KucoinConvertOrder>;
+
+      totalPages = data.totalPage ?? 1;
+      const items = data.items ?? [];
+      totalFetched += items.length;
+
+      for (const item of items) {
+        const status = String(item.status ?? "").toUpperCase();
+        if (status !== "SUCCESS") continue;
+
+        const fromAsset = (item.fromCurrency ?? "").toUpperCase();
+        const toAsset = (item.toCurrency ?? "").toUpperCase();
+        const fromAmount = parseFloat(item.fromCurrencySize);
+        const toAmount = parseFloat(item.toCurrencySize);
+        const orderTime = Number(item.orderTime);
+
+        if (!fromAsset || !toAsset) continue;
+        if (!Number.isFinite(fromAmount) || fromAmount <= 0) continue;
+        if (!Number.isFinite(toAmount) || toAmount <= 0) continue;
+        if (!Number.isFinite(orderTime) || orderTime <= 0) continue;
+
+        if (orderTime > newLatestTs) newLatestTs = orderTime;
+        if (orderTime < newOldestTs) newOldestTs = orderTime;
+
+        const { symbol, side } = resolveConvertSymbol(fromAsset, toAsset);
+        const quantity = side === "BUY" ? toAmount : fromAmount;
+        const quoteQuantity = side === "BUY" ? fromAmount : toAmount;
+        if (quantity <= 0) continue;
+        const price = quoteQuantity / quantity;
+        if (!Number.isFinite(price) || price <= 0) continue;
+
+        const providerTradeId = `kucoin-convert:${item.orderId}`;
+
+        tradesBatch.push({
+          providerTradeId,
+          providerOrderId: String(item.orderId),
+          tradeType: "CONVERT",
+          symbol,
+          side,
+          quantity,
+          price,
+          quoteQuantity,
+          isMaker: false,
+          executedAt: orderTime,
+          fromAsset,
+          fromAmount,
+          toAsset,
+          toAmount,
+          raw: item,
+        });
+
+        const inversePrice = quoteQuantity > 0 ? quantity / quoteQuantity : undefined;
+        convertsBatch.push({
+          providerTradeId,
+          orderStatus: status,
+          fromAsset,
+          fromAmount,
+          toAsset,
+          toAmount,
+          price,
+          inversePrice,
+          executedAt: orderTime,
+          raw: item,
+        });
+      }
+
+      if (page >= totalPages) break;
+      page++;
+      await sleep(DELAY_MS);
+    } while (true);
+
+    if (tradesBatch.length > 0) {
+      const result = await ctx.runMutation(api.trades.ingestBatch, {
+        integrationId,
+        trades: tradesBatch,
+      });
+      totalInserted += result.inserted;
+    }
+    if (convertsBatch.length > 0) {
+      await ctx.runMutation(api.convertTrades.ingestBatch, {
+        integrationId,
+        trades: convertsBatch,
+      });
+    }
+
+    await sleep(DELAY_MS);
+  }
+
+  await ctx.runMutation(api.integrations.updateSyncState, {
+    integrationId,
+    dataset: DATASET_CONVERTS,
     scope: "all",
     cursor: { latestTs: newLatestTs, oldestTs: newOldestTs },
   });
@@ -493,6 +715,8 @@ export const syncAccount = action({
       const withdrawals = await syncWithdrawals(ctx, creds);
       await sleep(DELAY_MS);
       const fills = await syncFills(ctx, creds);
+      await sleep(DELAY_MS);
+      const converts = await syncConverts(ctx, creds);
 
       const candidates = [deposits.earliest, withdrawals.earliest].filter(
         (val): val is number => val !== null
@@ -510,7 +734,7 @@ export const syncAccount = action({
         syncStatus: "synced",
       });
 
-      return { deposits, withdrawals, fills, accountCreatedAt };
+      return { deposits, withdrawals, fills, converts, accountCreatedAt };
     } catch (error) {
       await ctx.runMutation(api.integrations.updateSyncStatus, {
         integrationId: args.integrationId,

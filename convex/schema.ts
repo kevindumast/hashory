@@ -208,6 +208,35 @@ export default defineSchema({
     network: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_coin", ["coin"]),
+  tokenPriceHistory: defineTable({
+    symbol: v.string(),
+    dayUtc: v.number(),
+    closeUsd: v.number(),
+    source: v.union(v.literal("binance"), v.literal("coingecko"), v.literal("manual")),
+    updatedAt: v.number(),
+  })
+    .index("by_symbol_day", ["symbol", "dayUtc"])
+    .index("by_symbol", ["symbol"]),
+  portfolioSnapshots: defineTable({
+    clerkId: v.string(),
+    dayUtc: v.number(),
+    valueUsd: v.number(),
+    costBasisUsd: v.number(),
+    realizedPnlUsd: v.number(),
+    netInvestedUsd: v.number(),
+    profitPercent: v.number(),
+    btcPercent: v.number(),
+    computedAt: v.number(),
+  })
+    .index("by_user_day", ["clerkId", "dayUtc"])
+    .index("by_user", ["clerkId"]),
+  portfolioSnapshotState: defineTable({
+    clerkId: v.string(),
+    earliestEventDay: v.optional(v.number()),
+    lastComputedDay: v.optional(v.number()),
+    lastTradeAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_user", ["clerkId"]),
   spotTradesSyncQueue: defineTable({
     integrationId: v.id("integrations"),
     symbols: v.array(v.string()),

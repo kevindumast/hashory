@@ -151,10 +151,18 @@ export const listByUser = query({
       integrations.map((integration) => [integration._id, integration])
     );
 
-    const trades = await ctx.db.query("trades").collect();
+    const tradesPerIntegration = await Promise.all(
+      integrations.map((integration) => {
+        const cursor = ctx.db
+          .query("trades")
+          .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+          .order("desc");
+        return args.limit ? cursor.take(args.limit) : cursor.collect();
+      })
+    );
 
-    const filtered = trades
-      .filter((trade) => integrationMap.has(trade.integrationId))
+    const filtered = tradesPerIntegration
+      .flat()
       .sort((a, b) => b.createdAt - a.createdAt);
 
     const limited = args.limit ? filtered.slice(0, args.limit) : filtered;

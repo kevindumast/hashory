@@ -106,6 +106,26 @@ export const syncSolanaWallet = action({
 
         let reachedKnown = false;
 
+        const deposits: Array<{
+          depositId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          insertTime: number;
+          txId: string;
+        }> = [];
+        const withdrawals: Array<{
+          withdrawId: string;
+          coin: string;
+          amount: number;
+          network: string;
+          status: string;
+          applyTime: number;
+          txId: string;
+          fee: number;
+        }> = [];
+
         for (const tx of txs) {
           if (previousCursor?.lastSignature && tx.signature === previousCursor.lastSignature) {
             reachedKnown = true;
@@ -120,8 +140,7 @@ export const syncSolanaWallet = action({
             if (amount <= 0) continue;
 
             if (transfer.toUserAccount === walletAddress && transfer.fromUserAccount !== walletAddress) {
-              await ctx.runMutation(api.kaspa.insertDeposit, {
-                integrationId: args.integrationId,
+              deposits.push({
                 depositId: `${tx.signature}-sol-${transfer.fromUserAccount.slice(0, 8)}-in`,
                 coin: "SOL",
                 amount,
@@ -131,8 +150,7 @@ export const syncSolanaWallet = action({
                 txId: tx.signature,
               });
             } else if (transfer.fromUserAccount === walletAddress && transfer.toUserAccount !== walletAddress) {
-              await ctx.runMutation(api.kaspa.insertWithdrawal, {
-                integrationId: args.integrationId,
+              withdrawals.push({
                 withdrawId: `${tx.signature}-sol-${transfer.toUserAccount.slice(0, 8)}-out`,
                 coin: "SOL",
                 amount,
@@ -151,8 +169,7 @@ export const syncSolanaWallet = action({
             const symbol = transfer.mint.slice(0, 8);
 
             if (transfer.toUserAccount === walletAddress && transfer.fromUserAccount !== walletAddress) {
-              await ctx.runMutation(api.kaspa.insertDeposit, {
-                integrationId: args.integrationId,
+              deposits.push({
                 depositId: `${tx.signature}-spl-${transfer.mint.slice(0, 8)}-in`,
                 coin: symbol,
                 amount,
@@ -162,8 +179,7 @@ export const syncSolanaWallet = action({
                 txId: tx.signature,
               });
             } else if (transfer.fromUserAccount === walletAddress && transfer.toUserAccount !== walletAddress) {
-              await ctx.runMutation(api.kaspa.insertWithdrawal, {
-                integrationId: args.integrationId,
+              withdrawals.push({
                 withdrawId: `${tx.signature}-spl-${transfer.mint.slice(0, 8)}-out`,
                 coin: symbol,
                 amount,
@@ -175,6 +191,14 @@ export const syncSolanaWallet = action({
               });
             }
           }
+        }
+
+        if (deposits.length > 0 || withdrawals.length > 0) {
+          await ctx.runMutation(api.blockchainSync.bulkInsertTransactions, {
+            integrationId: args.integrationId,
+            deposits,
+            withdrawals,
+          });
         }
 
         if (reachedKnown || txs.length < PAGE_SIZE) {

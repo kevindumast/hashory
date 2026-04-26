@@ -79,6 +79,7 @@ export const listByIntegration = query({
 export const listByUser = query({
   args: {
     clerkId: v.string(),
+    limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -95,32 +96,43 @@ export const listByUser = query({
       integrations.map((i) => [i._id, i])
     );
 
-    const allOrders = await ctx.db.query("orders").collect();
+    const ordersPerIntegration = await Promise.all(
+      integrations.map((integration) => {
+        const cursor = ctx.db
+          .query("orders")
+          .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+          .order("desc");
+        return args.limit ? cursor.take(args.limit) : cursor.collect();
+      })
+    );
 
-    return allOrders
-      .filter((o) => integrationMap.has(o.integrationId))
-      .sort((a, b) => b.executedAt - a.executedAt)
-      .map((order) => {
-        const integration = integrationMap.get(order.integrationId)!;
-        return {
-          _id: order._id,
-          integrationId: order.integrationId,
-          provider: integration.provider,
-          providerDisplayName: integration.displayName ?? integration.provider,
-          providerOrderId: order.providerOrderId,
-          symbol: order.symbol,
-          side: order.side,
-          orderType: order.orderType,
-          status: order.status,
-          quantity: order.quantity,
-          price: order.price,
-          quoteQuantity: order.quoteQuantity,
-          executedAt: order.executedAt,
-          fromAsset: order.fromAsset,
-          fromAmount: order.fromAmount,
-          toAsset: order.toAsset,
-          toAmount: order.toAmount,
-        };
-      });
+    const sorted = ordersPerIntegration
+      .flat()
+      .sort((a, b) => b.executedAt - a.executedAt);
+
+    const limited = args.limit ? sorted.slice(0, args.limit) : sorted;
+
+    return limited.map((order) => {
+      const integration = integrationMap.get(order.integrationId)!;
+      return {
+        _id: order._id,
+        integrationId: order.integrationId,
+        provider: integration.provider,
+        providerDisplayName: integration.displayName ?? integration.provider,
+        providerOrderId: order.providerOrderId,
+        symbol: order.symbol,
+        side: order.side,
+        orderType: order.orderType,
+        status: order.status,
+        quantity: order.quantity,
+        price: order.price,
+        quoteQuantity: order.quoteQuantity,
+        executedAt: order.executedAt,
+        fromAsset: order.fromAsset,
+        fromAmount: order.fromAmount,
+        toAsset: order.toAsset,
+        toAmount: order.toAmount,
+      };
+    });
   },
 });

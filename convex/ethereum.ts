@@ -133,6 +133,26 @@ async function syncNativeEth(
 
     const txs = Array.isArray(data.result) ? data.result : [];
 
+    const deposits: Array<{
+      depositId: string;
+      coin: string;
+      amount: number;
+      network: string;
+      status: string;
+      insertTime: number;
+      txId: string;
+    }> = [];
+    const withdrawals: Array<{
+      withdrawId: string;
+      coin: string;
+      amount: number;
+      network: string;
+      status: string;
+      applyTime: number;
+      txId: string;
+      fee: number;
+    }> = [];
+
     for (const tx of txs) {
       const blockNumber = parseInt(tx.blockNumber, 10);
       if (blockNumber > newMaxBlock) newMaxBlock = blockNumber;
@@ -148,8 +168,7 @@ async function syncNativeEth(
       const to = tx.to.toLowerCase();
 
       if (to === address && from !== address) {
-        await ctx.runMutation(api.kaspa.insertDeposit, {
-          integrationId,
+        deposits.push({
           depositId: `${tx.hash}-eth-in`,
           coin: "ETH",
           amount: amountEth,
@@ -160,8 +179,7 @@ async function syncNativeEth(
         });
       } else if (from === address) {
         const gasFee = Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
-        await ctx.runMutation(api.kaspa.insertWithdrawal, {
-          integrationId,
+        withdrawals.push({
           withdrawId: `${tx.hash}-eth-out`,
           coin: "ETH",
           amount: amountEth,
@@ -172,6 +190,14 @@ async function syncNativeEth(
           fee: gasFee,
         });
       }
+    }
+
+    if (deposits.length > 0 || withdrawals.length > 0) {
+      await ctx.runMutation(api.blockchainSync.bulkInsertTransactions, {
+        integrationId,
+        deposits,
+        withdrawals,
+      });
     }
 
     if (txs.length < PAGE_SIZE || page >= MAX_PAGES) {
@@ -229,6 +255,26 @@ async function syncErc20(
 
     const txs = Array.isArray(data.result) ? data.result : [];
 
+    const deposits: Array<{
+      depositId: string;
+      coin: string;
+      amount: number;
+      network: string;
+      status: string;
+      insertTime: number;
+      txId: string;
+    }> = [];
+    const withdrawals: Array<{
+      withdrawId: string;
+      coin: string;
+      amount: number;
+      network: string;
+      status: string;
+      applyTime: number;
+      txId: string;
+      fee: number;
+    }> = [];
+
     for (const tx of txs) {
       const blockNumber = parseInt(tx.blockNumber, 10);
       if (blockNumber > newMaxBlock) newMaxBlock = blockNumber;
@@ -247,8 +293,7 @@ async function syncErc20(
       const symbol = tx.tokenSymbol || contract.slice(0, 8);
 
       if (to === address && from !== address) {
-        await ctx.runMutation(api.kaspa.insertDeposit, {
-          integrationId,
+        deposits.push({
           depositId: `${tx.hash}-${contract}-in`,
           coin: symbol,
           amount,
@@ -258,8 +303,7 @@ async function syncErc20(
           txId: tx.hash,
         });
       } else if (from === address) {
-        await ctx.runMutation(api.kaspa.insertWithdrawal, {
-          integrationId,
+        withdrawals.push({
           withdrawId: `${tx.hash}-${contract}-out`,
           coin: symbol,
           amount,
@@ -270,6 +314,14 @@ async function syncErc20(
           fee: 0,
         });
       }
+    }
+
+    if (deposits.length > 0 || withdrawals.length > 0) {
+      await ctx.runMutation(api.blockchainSync.bulkInsertTransactions, {
+        integrationId,
+        deposits,
+        withdrawals,
+      });
     }
 
     if (txs.length < PAGE_SIZE || page >= MAX_PAGES) {

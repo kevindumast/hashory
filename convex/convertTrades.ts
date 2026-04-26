@@ -61,6 +61,7 @@ export const ingestBatch = mutation({
 export const listByUser = query({
   args: {
     clerkId: v.string(),
+    limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -71,14 +72,20 @@ export const listByUser = query({
 
     if (integrations.length === 0) return [];
 
-    const integrationMap = new Map(
-      integrations.map((i) => [i._id, i])
+    const tradesPerIntegration = await Promise.all(
+      integrations.map((integration) => {
+        const cursor = ctx.db
+          .query("convertTrades")
+          .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+          .order("desc");
+        return args.limit ? cursor.take(args.limit) : cursor.collect();
+      })
     );
 
-    const allTrades = await ctx.db.query("convertTrades").collect();
-
-    return allTrades
-      .filter((t) => integrationMap.has(t.integrationId))
+    const sorted = tradesPerIntegration
+      .flat()
       .sort((a, b) => b.executedAt - a.executedAt);
+
+    return args.limit ? sorted.slice(0, args.limit) : sorted;
   },
 });
