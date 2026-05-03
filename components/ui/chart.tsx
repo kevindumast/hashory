@@ -67,12 +67,13 @@ type ChartTooltipContentProps = React.HTMLAttributes<HTMLDivElement> & {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload?: any[]
   label?: string | number
+  formatter?: (value: number, name: string) => React.ReactNode
 }
 
 const ChartTooltipContent = React.forwardRef<
   HTMLDivElement,
   ChartTooltipContentProps
->(({ active, payload, label, className }, ref) => {
+>(({ active, payload, label, className, formatter }, ref) => {
   const { config } = useChart()
 
   if (active && payload && payload.length) {
@@ -117,7 +118,7 @@ const ChartTooltipContent = React.forwardRef<
                   {itemConfig?.label || key}
                 </span>
                 <span className="font-mono font-medium text-foreground">
-                  {value}
+                  {formatter ? formatter(value, key) : value}
                 </span>
               </div>
             </div>

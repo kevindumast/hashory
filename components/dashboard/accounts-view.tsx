@@ -39,6 +39,7 @@ import {
 import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-dialog"
 import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
 import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
+import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 import { useAction, useMutation } from "convex/react"
@@ -80,6 +81,8 @@ export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
   const [isBitstackImportOpen, setIsBitstackImportOpen] = React.useState(false)
   const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
+  const [isKucoinImportOpen, setIsKucoinImportOpen] = React.useState(false)
+  const [kucoinImportIntegrationId, setKucoinImportIntegrationId] = React.useState<string | null>(null)
   const [refreshToken, setRefreshToken] = React.useState(0)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
@@ -89,6 +92,7 @@ export function AccountsView() {
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
   const syncKucoin = useAction(api.kucoin.syncAccount)
+  const syncKucoinConverts = useAction(api.kucoin.syncConvertsOnly)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
@@ -195,6 +199,22 @@ export function AccountsView() {
       console.error("Failed to sync fiat:", error)
     }
   }, [handleRefresh, syncFiatOnly])
+
+  const handleSyncKucoinConverts = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      return
+    }
+
+    try {
+      await syncKucoinConverts({ integrationId: accountId })
+      console.log("✓ KuCoin converts sync completed")
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      handleRefresh()
+    } catch (error) {
+      console.error("Failed to sync KuCoin converts:", error)
+    }
+  }, [handleRefresh, syncKucoinConverts])
 
   const handleSyncDustOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -534,6 +554,24 @@ export function AccountsView() {
                           >
                             <span className="text-sm">Sync Order History</span>
                           </DropdownMenuItem>
+                          {account.platformId === "kucoin" && (
+                          <DropdownMenuItem
+                            onClick={() => handleSyncKucoinConverts(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer"
+                          >
+                            <span className="text-sm">Sync Converts</span>
+                          </DropdownMenuItem>
+                          )}
+                          {account.platformId === "kucoin" && (
+                          <DropdownMenuItem
+                            onClick={() => { setKucoinImportIntegrationId(account.id); setIsKucoinImportOpen(true); }}
+                            className="cursor-pointer flex items-center justify-between"
+                          >
+                            <span className="text-sm">Importer fichiers CSV</span>
+                            <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
+                          </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem className="cursor-pointer">
                             <span className="text-sm">Mettre à jour l&apos;API</span>
                           </DropdownMenuItem>
@@ -578,6 +616,14 @@ export function AccountsView() {
         onOpenChange={setIsFinaryImportOpen}
         onSuccess={handleRefresh}
       />
+      {kucoinImportIntegrationId && (
+        <KucoinImportDialog
+          open={isKucoinImportOpen}
+          onOpenChange={setIsKucoinImportOpen}
+          integrationId={kucoinImportIntegrationId as import("@/convex/_generated/dataModel").Id<"integrations">}
+          onSuccess={handleRefresh}
+        />
+      )}
     </div>
   )
 }

@@ -244,6 +244,7 @@ async function syncFills(
 
       totalPages = data.totalPage ?? 1;
       const items = data.items ?? [];
+      if (items.length > 0) console.log(`[syncFills] fenêtre ${new Date(win.start).toISOString().slice(0,10)} items=${items.length}`);
       totalFetched += items.length;
 
       for (const item of items) {
@@ -334,7 +335,9 @@ async function syncConverts(
   });
   const cursor = syncState?.cursor as { oldestTs?: number; latestTs?: number } | null;
   const now = Date.now();
-  const DEFAULT_LOOKBACK = 3 * 365 * 24 * 60 * 60 * 1000;
+  const DEFAULT_LOOKBACK = 365 * 24 * 60 * 60 * 1000;
+
+  console.log("[syncConverts] cursor:", JSON.stringify(cursor));
 
   const latestSeen = cursor?.latestTs ?? now;
   const oldestSeen = cursor?.oldestTs ?? now;
@@ -360,6 +363,8 @@ async function syncConverts(
       windows.push({ start: floor, end: Math.max(t + WEEK_MS, floor + 1) });
     }
   }
+
+  console.log(`[syncConverts] ${windows.length} fenêtres à parcourir`);
 
   type TradeBatchItem = {
     providerTradeId: string;
@@ -404,12 +409,41 @@ async function syncConverts(
     const convertsBatch: ConvertBatchItem[] = [];
 
     do {
-      const data = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/convert/order/history", {
-        startAt: win.start,
-        endAt: win.end,
-        pageSize: PAGE_SIZE,
-        currentPage: page,
-      })) as KucoinPage<KucoinConvertOrder>;
+      let data: KucoinPage<KucoinConvertOrder>;
+      try {
+        console.log(`[syncConverts] fenêtre ${new Date(win.start).toISOString()} → ${new Date(win.end).toISOString()} page ${page}`);
+        data = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/convert/order/history", {
+          startAt: win.start,
+          endAt: win.end,
+          pageSize: 100,
+          currentPage: page,
+        })) as KucoinPage<KucoinConvertOrder>;
+        console.log(`[syncConverts] réponse: totalPage=${data.totalPage} items=${data.items?.length ?? 0}`);
+      } catch (err) {
+        // KuCoin "Convert" permission not granted on this API key — skip silently
+        if (err instanceof Error && err.message.includes("102425")) {
+          console.log("[syncConverts] limite 1 an atteinte, arrêt du lookback");
+          break;
+        }
+        if (err instanceof Error && err.message.includes("400007")) {
+          console.log("[syncConverts] permission Convert manquante (400007), tentative via /api/v1/fills tradeType=CONVERT");
+          // Fallback: converts are regular orders, try via fills endpoint
+          try {
+            const fallback = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/accounts/ledgers", {
+              bizType: "CONVERT",
+              startAt: win.start,
+              endAt: win.end,
+              pageSize: 10,
+              currentPage: 1,
+            })) as KucoinPage<unknown>;
+            console.log(`[syncConverts] fallback ledger réponse: totalPage=${fallback.totalPage} items=${fallback.items?.length ?? 0} firstItem=${JSON.stringify(fallback.items?.[0])}`);
+          } catch (fallbackErr) {
+            console.log("[syncConverts] fallback ledger aussi échoué:", fallbackErr instanceof Error ? fallbackErr.message : fallbackErr);
+          }
+          return { fetched: 0, inserted: 0 };
+        }
+        throw err;
+      }
 
       totalPages = data.totalPage ?? 1;
       const items = data.items ?? [];
@@ -504,6 +538,7 @@ async function syncConverts(
     cursor: { latestTs: newLatestTs, oldestTs: newOldestTs },
   });
 
+  console.log(`[syncConverts] terminé: fetched=${totalFetched} inserted=${totalInserted}`);
   return { fetched: totalFetched, inserted: totalInserted };
 }
 
@@ -538,7 +573,7 @@ async function syncDeposits(
       const data = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/deposits", {
         startAt: fromTs,
         endAt: toTs,
-        pageSize: PAGE_SIZE,
+        pageSize: 100,
         currentPage: page,
       })) as KucoinPage<KucoinDeposit>;
 
@@ -622,7 +657,7 @@ async function syncWithdrawals(
       const data = (await kucoinGet(apiKey, apiSecret, passphrase, "/api/v1/withdrawals", {
         startAt: fromTs,
         endAt: toTs,
-        pageSize: PAGE_SIZE,
+        pageSize: 100,
         currentPage: page,
       })) as KucoinPage<KucoinWithdrawal>;
 
@@ -735,6 +770,58 @@ export const syncAccount = action({
       });
 
       return { deposits, withdrawals, fills, converts, accountCreatedAt };
+    } catch (error) {
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "error",
+      });
+      throw error;
+    }
+  },
+});
+
+export const syncConvertsOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const integration = (await ctx.runQuery(api.integrations.getById, {
+      integrationId: args.integrationId,
+    })) as {
+      provider: string;
+      clerkUserId: string;
+      encryptedCredentials: { apiKey: string; apiSecret: string; passphrase?: string };
+    } | null;
+
+    if (!integration) throw new Error("Intégration introuvable.");
+    if (integration.provider !== "kucoin") throw new Error("Cette intégration n'est pas de type KuCoin.");
+
+    const { apiKey, apiSecret, passphrase: encPassphrase } = integration.encryptedCredentials;
+    if (!encPassphrase) throw new Error("Passphrase manquante pour cette intégration KuCoin.");
+
+    const decryptedKey = decryptSecret(apiKey);
+    const decryptedSecret = decryptSecret(apiSecret);
+    const decryptedPassphrase = decryptSecret(encPassphrase);
+
+    await ctx.runMutation(api.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+
+    try {
+      const converts = await syncConverts(ctx, {
+        integrationId: args.integrationId,
+        apiKey: decryptedKey,
+        apiSecret: decryptedSecret,
+        passphrase: decryptedPassphrase,
+      });
+
+      await ctx.runMutation(api.integrations.updateSyncStatus, {
+        integrationId: args.integrationId,
+        syncStatus: "synced",
+      });
+
+      return converts;
     } catch (error) {
       await ctx.runMutation(api.integrations.updateSyncStatus, {
         integrationId: args.integrationId,

@@ -18,6 +18,12 @@ import {
 } from "@/components/ui/chart";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
+import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
+
+type ChartFilter =
+  | { type: "all" }
+  | { type: "token"; symbol: string }
+  | { type: "platform"; provider: string };
 
 const PROVIDER_ICONS: Record<string, string> = {
   binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
@@ -50,7 +56,7 @@ function formatAxisValue(v: number): string {
 }
 import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
-import { TrendingUp, LoaderCircle, RefreshCw, ChevronRight } from "lucide-react";
+import { TrendingUp, LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
 
 type DashboardNewLayoutProps = {
   profitSummary: ProfitSummary;
@@ -114,6 +120,9 @@ export function DashboardNewLayout({
   const [sortColumn, setSortColumn] = useState<"symbol" | "qty" | "avgPrice" | "current" | "value" | "pnlTotal" | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [hideZeroBalance, setHideZeroBalance] = useState(true);
+  const [showMarkers, setShowMarkers] = useState(false);
+  const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
+  const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
@@ -221,12 +230,11 @@ export function DashboardNewLayout({
         timestamp: s.dayUtc,
         label: dayLabelFormatter.format(new Date(s.dayUtc)),
         valueUsd: s.valueUsd,
-        profitPercent: s.profitPercent,
+        profitPercent: s.netInvestedUsd > 0 ? ((s.valueUsd - s.netInvestedUsd) / s.netInvestedUsd) * 100 : 0,
         btcPercent: s.btcPercent,
         netInvestedUsd: s.netInvestedUsd,
       }));
     }
-    // Fallback: pre-snapshot data (cash-flow only, no historical prices)
     return historySeries.map((p) => ({
       timestamp: p.timestamp,
       label: p.label,
@@ -252,7 +260,16 @@ export function DashboardNewLayout({
 
   const chartIsPositive = useMemo(() => {
     if (filteredHoldings.length === 0) return true;
-    return filteredHoldings[filteredHoldings.length - 1].profitPercent >= 0;
+    return filteredHoldings[filteredHoldings.length - 1].valueUsd >= filteredHoldings[0].valueUsd;
+  }, [filteredHoldings]);
+
+  const profitGradientOffset = useMemo(() => {
+    if (filteredHoldings.length === 0) return 0;
+    const max = Math.max(...filteredHoldings.map((p) => p.profitPercent));
+    const min = Math.min(...filteredHoldings.map((p) => p.profitPercent));
+    if (max <= 0) return 0;
+    if (min >= 0) return 1;
+    return max / (max - min);
   }, [filteredHoldings]);
 
   const buySellDays = useMemo(() => {
@@ -260,9 +277,11 @@ export function DashboardNewLayout({
     const sells = new Set<number>();
     for (const token of portfolioTokens) {
       if (USD_STABLECOINS.has(token.symbol)) continue;
+      if (chartFilter.type === "token" && token.symbol !== chartFilter.symbol) continue;
       for (const event of token.events) {
         if (event.type !== "BUY" && event.type !== "SELL") continue;
         if (!event.vsStablecoin) continue;
+        if (chartFilter.type === "platform" && event.provider !== chartFilter.provider) continue;
         const d = new Date(event.timestamp);
         const dayTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         if (event.type === "BUY") buys.add(dayTs);
@@ -270,7 +289,7 @@ export function DashboardNewLayout({
       }
     }
     return { buys, sells };
-  }, [portfolioTokens]);
+  }, [portfolioTokens, chartFilter]);
 
   const holdingsWithMarkers = useMemo(
     () =>
@@ -359,9 +378,31 @@ export function DashboardNewLayout({
         </div>
       </section>
 
-      {/* ── Period selector ── */}
-      <div className="flex items-center justify-between">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Période</p>
+      {/* ── Period selector + filter pill ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Période</p>
+          {chartFilter.type !== "all" && (
+            <button
+              onClick={() => setChartFilter({ type: "all" })}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+              title="Cliquez pour afficher tous les marqueurs"
+            >
+              <span className="uppercase tracking-wide opacity-70">Marqueurs</span>
+              <span>
+                {chartFilter.type === "token"
+                  ? chartFilter.symbol
+                  : (() => {
+                      const ev = portfolioTokens
+                        .flatMap((t) => t.events)
+                        .find((e) => e.provider === chartFilter.provider);
+                      return ev?.providerDisplayName ?? chartFilter.provider;
+                    })()}
+              </span>
+              <X className="w-3 h-3" />
+            </button>
+          )}
+        </div>
         <div className="flex gap-1.5">
           {CHART_PERIODS.map((p) => {
             const count = periodPointCounts[p] ?? 0;
@@ -408,6 +449,16 @@ export function DashboardNewLayout({
               </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
+              <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showMarkers}
+                  onChange={(e) => setShowMarkers(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                Marqueurs
+              </label>
+              <div className="w-px h-4 bg-border/40" />
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[var(--positive)]" />
                 <span className="text-muted-foreground">Achat</span>
@@ -453,7 +504,12 @@ export function DashboardNewLayout({
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
-                        <ChartTooltipContent active={active} payload={payload} label={label} />
+                        <ChartTooltipContent
+                          active={active}
+                          payload={payload}
+                          label={label}
+                          formatter={(value) => currencyFormatter.format(Number(value))}
+                        />
                       }
                     />
                     <Area
@@ -465,54 +521,58 @@ export function DashboardNewLayout({
                       dot={false}
                       activeDot={{ r: 4 }}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="buyMarker"
-                      stroke="none"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      dot={(props: any) => {
-                        if (props.payload?.buyMarker == null) return <g key={props.key} />;
-                        return (
-                          <circle
-                            key={props.key}
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={5}
-                            fill="var(--positive)"
-                            stroke="white"
-                            strokeWidth={1.5}
-                          />
-                        );
-                      }}
-                      activeDot={false}
-                      legendType="none"
-                      isAnimationActive={false}
-                      connectNulls={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="sellMarker"
-                      stroke="none"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      dot={(props: any) => {
-                        if (props.payload?.sellMarker == null) return <g key={props.key} />;
-                        return (
-                          <circle
-                            key={props.key}
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={5}
-                            fill="var(--negative)"
-                            stroke="white"
-                            strokeWidth={1.5}
-                          />
-                        );
-                      }}
-                      activeDot={false}
-                      legendType="none"
-                      isAnimationActive={false}
-                      connectNulls={false}
-                    />
+                    {showMarkers && (
+                      <Line
+                        type="monotone"
+                        dataKey="buyMarker"
+                        stroke="none"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        dot={(props: any) => {
+                          if (props.payload?.buyMarker == null) return <g key={props.key} />;
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={5}
+                              fill="var(--positive)"
+                              stroke="white"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        }}
+                        activeDot={false}
+                        legendType="none"
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    )}
+                    {showMarkers && (
+                      <Line
+                        type="monotone"
+                        dataKey="sellMarker"
+                        stroke="none"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        dot={(props: any) => {
+                          if (props.payload?.sellMarker == null) return <g key={props.key} />;
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={5}
+                              fill="var(--negative)"
+                              stroke="white"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        }}
+                        activeDot={false}
+                        legendType="none"
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartContainer>
@@ -548,7 +608,10 @@ export function DashboardNewLayout({
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#3B82F6" }} />
+                <span
+                  className="w-2.5 h-2.5 rounded-full"
+                  style={{ background: "linear-gradient(180deg, var(--positive) 0%, var(--positive) 50%, var(--negative) 50%, var(--negative) 100%)" }}
+                />
                 <span className="text-muted-foreground">Profit total</span>
               </span>
               <span className="flex items-center gap-1.5">
@@ -569,6 +632,12 @@ export function DashboardNewLayout({
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={filteredHoldings} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="profitColorGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset={profitGradientOffset} stopColor="var(--positive)" stopOpacity={1} />
+                        <stop offset={profitGradientOffset} stopColor="var(--negative)" stopOpacity={1} />
+                      </linearGradient>
+                    </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
                       dataKey="label"
@@ -589,13 +658,21 @@ export function DashboardNewLayout({
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
-                        <ChartTooltipContent active={active} payload={payload} label={label} />
+                        <ChartTooltipContent
+                          active={active}
+                          payload={payload}
+                          label={label}
+                          formatter={(value) => {
+                            const n = Number(value);
+                            return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+                          }}
+                        />
                       }
                     />
                     <Line
                       type="monotone"
                       dataKey="profitPercent"
-                      stroke="#3B82F6"
+                      stroke="url(#profitColorGradient)"
                       strokeWidth={2}
                       dot={false}
                       name="Profit total"
@@ -759,10 +836,46 @@ export function DashboardNewLayout({
                     <tbody className="text-xs font-medium">
                       {sorted.map(({ token, currentPrice, currentValue, unrealized, totalPnl }) => {
                         const realized = token.realizedPnlAvco;
+                        const isFiltered = chartFilter.type === "token" && chartFilter.symbol === token.symbol;
+                        const isExpanded = expandedTokens.has(token.symbol);
+                        const toggleExpand = (e: React.MouseEvent) => {
+                          e.stopPropagation();
+                          setExpandedTokens((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(token.symbol)) next.delete(token.symbol);
+                            else next.add(token.symbol);
+                            return next;
+                          });
+                        };
                         return (
-                          <tr key={token.symbol} className="border-t border-border/50 hover:bg-muted/20 transition-colors">
-                            <td className="px-4 py-3">
+                          <Fragment key={token.symbol}>
+                          <tr
+                            onClick={() =>
+                              setChartFilter(
+                                isFiltered
+                                  ? { type: "all" }
+                                  : { type: "token", symbol: token.symbol }
+                              )
+                            }
+                            className={`border-t border-border/50 transition-colors cursor-pointer ${
+                              isFiltered
+                                ? "bg-primary/10 hover:bg-primary/15"
+                                : "hover:bg-muted/20"
+                            }`}
+                            title={isFiltered ? "Cliquez pour afficher tous les marqueurs" : `N'afficher que les marqueurs de ${token.symbol}`}
+                          >
+                            <td className={`px-4 py-3 ${isFiltered ? "border-l-2 border-primary" : ""}`}>
                               <div className="flex items-center gap-2.5">
+                                <button
+                                  type="button"
+                                  onClick={toggleExpand}
+                                  className="flex items-center justify-center w-5 h-5 rounded hover:bg-muted/40 transition-colors cursor-pointer"
+                                  title={isExpanded ? "Masquer l'historique" : `Voir l'historique de ${token.symbol}`}
+                                >
+                                  <ChevronRight
+                                    className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                  />
+                                </button>
                                 <div className="w-7 h-7 shrink-0 relative">
                                   {getCmcIconUrl(token.symbol) ? (
                                     <img
@@ -836,6 +949,14 @@ export function DashboardNewLayout({
                                 : currencyFormatter.format(realized)}
                             </td>
                           </tr>
+                          {isExpanded && (
+                            <tr className="bg-muted/10 border-t border-border/30">
+                              <td colSpan={9} className="px-4 py-4">
+                                <TokenHistoryChart symbol={token.symbol} events={token.events} />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -1047,7 +1168,9 @@ export function DashboardNewLayout({
                 <tbody className="text-xs font-medium">
                   {stats.map((s) => {
                     const isExpanded = expandedPlatforms.has(s.provider);
-                    const toggle = () => {
+                    const isFiltered = chartFilter.type === "platform" && chartFilter.provider === s.provider;
+                    const toggle = (e: React.MouseEvent) => {
+                      e.stopPropagation();
                       setExpandedPlatforms((prev) => {
                         const next = new Set(prev);
                         if (next.has(s.provider)) next.delete(s.provider);
@@ -1055,17 +1178,34 @@ export function DashboardNewLayout({
                         return next;
                       });
                     };
+                    const onRowClick = () => {
+                      setChartFilter(
+                        isFiltered
+                          ? { type: "all" }
+                          : { type: "platform", provider: s.provider }
+                      );
+                    };
                     return (
                     <Fragment key={s.provider}>
                     <tr
-                      onClick={toggle}
-                      className="border-t border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
+                      onClick={onRowClick}
+                      className={`border-t border-border/50 transition-colors cursor-pointer ${
+                        isFiltered ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-muted/20"
+                      }`}
+                      title={isFiltered ? "Cliquez pour afficher tous les marqueurs" : `N'afficher que les marqueurs de ${s.providerDisplayName}`}
                     >
-                      <td className="px-4 py-3">
+                      <td className={`px-4 py-3 ${isFiltered ? "border-l-2 border-primary" : ""}`}>
                         <div className="flex items-center gap-2.5">
-                          <ChevronRight
-                            className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
-                          />
+                          <button
+                            type="button"
+                            onClick={toggle}
+                            className="flex items-center justify-center w-5 h-5 rounded hover:bg-muted/40 transition-colors cursor-pointer"
+                            title={isExpanded ? "Réduire le détail" : "Voir le détail des jetons"}
+                          >
+                            <ChevronRight
+                              className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                            />
+                          </button>
                           <ProviderAvatar provider={s.provider} name={s.providerDisplayName} />
                           <div>
                             <div className="font-bold text-foreground text-xs">{s.providerDisplayName}</div>

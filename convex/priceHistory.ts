@@ -50,6 +50,30 @@ export const getRange = query({
   },
 });
 
+export const getRangeMulti = query({
+  args: {
+    symbols: v.array(v.string()),
+    fromDay: v.number(),
+    toDay: v.number(),
+  },
+  handler: async (ctx, { symbols, fromDay, toDay }) => {
+    const result: Record<string, { dayUtc: number; closeUsd: number }[]> = {};
+    for (const symbol of symbols) {
+      const upper = symbol.toUpperCase();
+      const rows = await ctx.db
+        .query("tokenPriceHistory")
+        .withIndex("by_symbol_day", (q) =>
+          q.eq("symbol", upper).gte("dayUtc", fromDay).lte("dayUtc", toDay)
+        )
+        .collect();
+      result[upper] = rows
+        .map((r) => ({ dayUtc: r.dayUtc, closeUsd: r.closeUsd }))
+        .sort((a, b) => a.dayUtc - b.dayUtc);
+    }
+    return result;
+  },
+});
+
 // ─── Internal helpers ─────────────────────────────────────────────────
 
 export const getLatestDay = internalQuery({

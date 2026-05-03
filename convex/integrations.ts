@@ -11,14 +11,14 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
-    const userId = await optionalUserId(ctx);
-    if (!userId) {
+    const clerkUserId = await optionalUserId(ctx);
+    if (!clerkUserId) {
       return [];
     }
 
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", userId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkUserId))
       .order("desc")
       .collect();
 
@@ -101,7 +101,7 @@ export const upsert = mutation({
     displayName: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireUserId(ctx);
+    const clerkUserId = await requireUserId(ctx);
 
     if (!SUPPORTED_PROVIDERS.includes(args.provider)) {
       throw new Error(`Unsupported provider: ${args.provider}`);
@@ -117,7 +117,7 @@ export const upsert = mutation({
 
     const existingForProvider = await ctx.db
       .query("integrations")
-      .withIndex("by_user_provider", (q) => q.eq("clerkUserId", userId).eq("provider", args.provider))
+      .withIndex("by_user_provider", (q) => q.eq("clerkUserId", clerkUserId).eq("provider", args.provider))
       .collect();
 
     const existing = existingForProvider.find((integration) => {
@@ -139,7 +139,7 @@ export const upsert = mutation({
     }
 
     await ctx.db.insert("integrations", {
-      clerkUserId: userId,
+      clerkUserId: clerkUserId,
       provider: args.provider,
       displayName: args.displayName,
       readOnly: args.readOnly,
