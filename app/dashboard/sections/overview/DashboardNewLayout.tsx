@@ -171,7 +171,8 @@ export function DashboardNewLayout({
 
   // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
   function makeXTick(series: { timestamp: number }[]) {
-    return function XTick({ x, y, payload, index }: { x: number; y: number; payload: { value: string }; index: number }) {
+    return function XTick(props: { x?: string | number; y?: string | number; payload?: { value: string | number }; index?: number }) {
+      const { x = 0, y = 0, payload, index = 0 } = props;
       const point = series[index];
       if (!point) return <g />;
       const year = new Date(point.timestamp).getUTCFullYear();
@@ -186,7 +187,7 @@ export function DashboardNewLayout({
             fill="var(--muted-foreground)"
             fontSize={11}
           >
-            {payload.value}
+            {payload?.value}
           </text>
 
           {/* Year boundary */}
