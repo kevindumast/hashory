@@ -65,7 +65,7 @@ const ChartTooltip = RechartsPrimitive.Tooltip
 type ChartTooltipContentProps = React.HTMLAttributes<HTMLDivElement> & {
   active?: boolean
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload?: any[]
+  payload?: readonly any[]
   label?: string | number
   formatter?: (value: number, name: string) => React.ReactNode
 }
