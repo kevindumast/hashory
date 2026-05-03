@@ -237,6 +237,18 @@ export default defineSchema({
     lastTradeAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_user", ["clerkId"]),
+  internalTransfers: defineTable({
+    integrationId: v.id("integrations"),
+    transferId: v.string(),
+    account: v.string(),
+    coin: v.string(),
+    amount: v.number(),
+    fee: v.optional(v.number()),
+    executedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_transfer", ["integrationId", "transferId"]),
   spotTradesSyncQueue: defineTable({
     integrationId: v.id("integrations"),
     symbols: v.array(v.string()),

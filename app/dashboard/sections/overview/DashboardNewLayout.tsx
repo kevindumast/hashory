@@ -114,6 +114,7 @@ export function DashboardNewLayout({
   const [sortColumn, setSortColumn] = useState<"symbol" | "qty" | "avgPrice" | "current" | "value" | "pnlTotal" | null>(null);
   const [sortAsc, setSortAsc] = useState(true);
   const [hideZeroBalance, setHideZeroBalance] = useState(true);
+  const [showMarkers, setShowMarkers] = useState(false);
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
   const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
@@ -221,7 +222,7 @@ export function DashboardNewLayout({
         timestamp: s.dayUtc,
         label: dayLabelFormatter.format(new Date(s.dayUtc)),
         valueUsd: s.valueUsd,
-        profitPercent: s.profitPercent,
+        profitPercent: s.netInvestedUsd > 0 ? ((s.valueUsd - s.netInvestedUsd) / s.netInvestedUsd) * 100 : 0,
         btcPercent: s.btcPercent,
         netInvestedUsd: s.netInvestedUsd,
       }));
@@ -252,7 +253,7 @@ export function DashboardNewLayout({
 
   const chartIsPositive = useMemo(() => {
     if (filteredHoldings.length === 0) return true;
-    return filteredHoldings[filteredHoldings.length - 1].profitPercent >= 0;
+    return filteredHoldings[filteredHoldings.length - 1].valueUsd >= filteredHoldings[0].valueUsd;
   }, [filteredHoldings]);
 
   const buySellDays = useMemo(() => {
@@ -408,6 +409,16 @@ export function DashboardNewLayout({
               </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
+              <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
+                <input
+                  type="checkbox"
+                  checked={showMarkers}
+                  onChange={(e) => setShowMarkers(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded"
+                />
+                Marqueurs
+              </label>
+              <div className="w-px h-4 bg-border/40" />
               <span className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-[var(--positive)]" />
                 <span className="text-muted-foreground">Achat</span>
@@ -465,54 +476,58 @@ export function DashboardNewLayout({
                       dot={false}
                       activeDot={{ r: 4 }}
                     />
-                    <Line
-                      type="monotone"
-                      dataKey="buyMarker"
-                      stroke="none"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      dot={(props: any) => {
-                        if (props.payload?.buyMarker == null) return <g key={props.key} />;
-                        return (
-                          <circle
-                            key={props.key}
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={5}
-                            fill="var(--positive)"
-                            stroke="white"
-                            strokeWidth={1.5}
-                          />
-                        );
-                      }}
-                      activeDot={false}
-                      legendType="none"
-                      isAnimationActive={false}
-                      connectNulls={false}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="sellMarker"
-                      stroke="none"
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      dot={(props: any) => {
-                        if (props.payload?.sellMarker == null) return <g key={props.key} />;
-                        return (
-                          <circle
-                            key={props.key}
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={5}
-                            fill="var(--negative)"
-                            stroke="white"
-                            strokeWidth={1.5}
-                          />
-                        );
-                      }}
-                      activeDot={false}
-                      legendType="none"
-                      isAnimationActive={false}
-                      connectNulls={false}
-                    />
+                    {showMarkers && (
+                      <Line
+                        type="monotone"
+                        dataKey="buyMarker"
+                        stroke="none"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        dot={(props: any) => {
+                          if (props.payload?.buyMarker == null) return <g key={props.key} />;
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={5}
+                              fill="var(--positive)"
+                              stroke="white"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        }}
+                        activeDot={false}
+                        legendType="none"
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    )}
+                    {showMarkers && (
+                      <Line
+                        type="monotone"
+                        dataKey="sellMarker"
+                        stroke="none"
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        dot={(props: any) => {
+                          if (props.payload?.sellMarker == null) return <g key={props.key} />;
+                          return (
+                            <circle
+                              key={props.key}
+                              cx={props.cx}
+                              cy={props.cy}
+                              r={5}
+                              fill="var(--negative)"
+                              stroke="white"
+                              strokeWidth={1.5}
+                            />
+                          );
+                        }}
+                        activeDot={false}
+                        legendType="none"
+                        isAnimationActive={false}
+                        connectNulls={false}
+                      />
+                    )}
                   </AreaChart>
                 </ResponsiveContainer>
               </ChartContainer>

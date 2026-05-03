@@ -3,7 +3,7 @@ import { Space_Grotesk, Sora } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { SiteHeader } from "@/components/site-header";
-import { ThemeProvider } from "@/components/theme-provider";
+import { RootLayoutClient } from "./layout-client";
 
 const display = Space_Grotesk({
   variable: "--font-display",
@@ -59,17 +59,12 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${display.variable} ${body.variable} min-h-screen bg-background font-sans`}
       >
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="dark"
-          enableSystem={false}
-          disableTransitionOnChange
-        >
+        <RootLayoutClient>
           <Providers>
             <SiteHeader />
             {children}
           </Providers>
-        </ThemeProvider>
+        </RootLayoutClient>
       </body>
     </html>
   );
