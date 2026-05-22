@@ -33,12 +33,24 @@ const dayLabelFormatter = new Intl.DateTimeFormat("fr-FR", {
   day: "numeric",
 });
 
+const parseAmount = (value: string | number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return 0;
+  }
+  if (typeof value === "number") {
+    return value;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export type TradeRecord = {
   _id: Id<"trades">;
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
-  tradeType?: "SPOT" | "CONVERT" | "FIAT";
+  providerOrderId?: string;
+  tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
   symbol: string;
   side: "BUY" | "SELL";
   quantity: number;
@@ -112,9 +124,27 @@ export type WithdrawalRecord = {
   txId: string | null;
 };
 
+export type BalanceRecord = {
+  _id: Id<"balances">;
+  integrationId: Id<"integrations">;
+  provider: string;
+  providerDisplayName: string;
+  asset: string;
+  name: string;
+  free: string;
+  locked: string;
+  freeze: string;
+  withdrawing: string;
+  totalPosition: string;
+  btcValuation: string;
+  depositAddress?: string;
+  updatedAt: number;
+};
+
 export type TransactionEntry =
   | {
       type: "trade";
+      tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
       id: string;
       integrationId: Id<"integrations">;
       provider: string;
@@ -171,6 +201,8 @@ export type TokenTimelineEvent = {
   provider: string;
   providerDisplayName: string;
   integrationId: Id<"integrations">;
+  /** Whether the counter-asset of this trade is a USD stablecoin. Only set for BUY/SELL. */
+  vsStablecoin?: boolean;
 };
 
 export type PortfolioToken = {
@@ -185,6 +217,10 @@ export type PortfolioToken = {
   buyValueUsd: number;
   sellValueUsd: number;
   netProfitUsd: number;
+  /** Prix d'achat moyen pondéré AVCO (même calcul que Binance "Prix garanti") */
+  avgCostBasis: number;
+  /** PnL réalisé calculé avec AVCO */
+  realizedPnlAvco: number;
   averageBuyPrice?: number;
   averageSellPrice?: number;
   lastActivityAt: number;
@@ -240,6 +276,52 @@ const QUOTE_ASSETS = [
   "BRL",
 ];
 
+/** Stablecoins dont on connaît la valeur ≈ 1 USD */
+export const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USD"]);
+
+/**
+ * Calcule le prix d'achat moyen pondéré (AVCO) et le PnL réalisé.
+ * Identique à la méthode "Prix garanti" de Binance.
+ */
+function computeAvco(sortedEvents: TokenTimelineEvent[], baseSymbol: string): {
+  avgCostBasis: number;
+  realizedPnlAvco: number;
+} {
+  let avgCost = 0;
+  let holdingQty = 0;
+  let realizedPnl = 0;
+  const upperSymbol = baseSymbol.toUpperCase();
+
+  for (const event of sortedEvents) {
+    // Fee paid in the base asset reduces the effective quantity
+    const feeInBase =
+      event.fee && event.feeAsset?.toUpperCase() === upperSymbol
+        ? event.fee
+        : 0;
+
+    if (event.type === "BUY" && event.valueUsd) {
+      const effectiveQty = event.quantity - feeInBase;
+      const newQty = holdingQty + effectiveQty;
+      avgCost = newQty > 0
+        ? (holdingQty * avgCost + event.valueUsd) / newQty
+        : 0;
+      holdingQty = newQty;
+    } else if (event.type === "SELL") {
+      const saleProceeds = event.valueUsd ?? event.quantity * (event.price ?? avgCost);
+      const costOfSold = event.quantity * avgCost;
+      realizedPnl += saleProceeds - costOfSold;
+      holdingQty = Math.max(0, holdingQty - event.quantity - feeInBase);
+    } else if (event.type === "DEPOSIT") {
+      // Dépôt externe : augmente la quantité sans changer le coût moyen
+      holdingQty += event.quantity;
+    } else if (event.type === "WITHDRAWAL") {
+      holdingQty = Math.max(0, holdingQty - event.quantity);
+    }
+  }
+
+  return { avgCostBasis: avgCost, realizedPnlAvco: realizedPnl };
+}
+
 function extractBaseAsset(symbol: string) {
   const upper = symbol.toUpperCase();
   for (const quote of QUOTE_ASSETS) {
@@ -260,6 +342,13 @@ export function useDashboardMetrics(refreshToken: number) {
       : "skip"
   );
 
+  const orders = useQuery(
+    api.orders.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id, refreshToken }
+      : "skip"
+  );
+
   const deposits = useQuery(
     api.deposits.listByUser,
     isConvexConfigured && isLoaded && user
@@ -271,6 +360,20 @@ export function useDashboardMetrics(refreshToken: number) {
     api.withdrawals.listByUser,
     isConvexConfigured && isLoaded && user
       ? { clerkId: user.id, limit: 1000, refreshToken }
+      : "skip"
+  );
+
+  const fiatTransactions = useQuery(
+    api.fiatTransactions.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id }
+      : "skip"
+  );
+
+  const balances = useQuery(
+    api.balances.listByUser,
+    isConvexConfigured && isLoaded && user
+      ? { clerkId: user.id, refreshToken }
       : "skip"
   );
 
@@ -288,6 +391,83 @@ export function useDashboardMetrics(refreshToken: number) {
     return [...trades].sort((a, b) => b.executedAt - a.executedAt);
   }, [trades]);
 
+  // Orders non représentés dans la table trades (ex: TAKE_PROFIT_LIMIT SNX qui
+  // a liquidé le stock mais n'apparaissait pas via /myTrades du symbole).
+  // Dédup par volume agrégé : pour chaque (intégration, symbole, side), on ne
+  // crée un trade synthétique que pour le delta entre volume orders et volume
+  // trades. Nécessaire car providerOrderId n'est historiquement pas renseigné
+  // dans la table trades.
+  const ordersAsTrades = useMemo<TradeRecord[]>(() => {
+    if (!Array.isArray(orders)) {
+      return [];
+    }
+    const keyOf = (integrationId: Id<"integrations">, symbol: string, side: string) =>
+      `${integrationId}|${symbol.toUpperCase()}|${side}`;
+
+    const tradeQtyByKey = new Map<string, number>();
+    for (const trade of tradesList) {
+      if (trade.tradeType && trade.tradeType !== "SPOT") continue;
+      const k = keyOf(trade.integrationId, trade.symbol, trade.side);
+      tradeQtyByKey.set(k, (tradeQtyByKey.get(k) ?? 0) + trade.quantity);
+    }
+
+    type OrderItem = (typeof orders extends readonly (infer U)[] ? U : never);
+    const ordersByKey = new Map<string, OrderItem[]>();
+    for (const order of orders) {
+      if (order.quantity <= 0 || order.quoteQuantity <= 0) continue;
+      const status = order.status?.toUpperCase() ?? "";
+      if (status !== "FILLED" && status !== "PARTIALLY_FILLED") continue;
+      const k = keyOf(order.integrationId, order.symbol, order.side);
+      const arr = ordersByKey.get(k) ?? [];
+      arr.push(order);
+      ordersByKey.set(k, arr);
+    }
+
+    const synthetic: TradeRecord[] = [];
+    for (const [k, list] of ordersByKey) {
+      const orderQty = list.reduce((s, o) => s + o.quantity, 0);
+      const covered = tradeQtyByKey.get(k) ?? 0;
+      const delta = orderQty - covered;
+      // tolérance 0.1% pour absorber les arrondis de Binance
+      if (delta <= orderQty * 0.001) continue;
+
+      const orderQuoteSum = list.reduce((s, o) => s + o.quoteQuantity, 0);
+      const avgPrice = orderQty > 0 ? orderQuoteSum / orderQty : 0;
+      const deltaQuote = delta * avgPrice;
+      const latest = list.reduce((a, b) => (b.executedAt > a.executedAt ? b : a));
+
+      synthetic.push({
+        _id: latest._id as unknown as Id<"trades">,
+        integrationId: latest.integrationId,
+        provider: latest.provider,
+        providerDisplayName: latest.providerDisplayName,
+        providerOrderId: latest.providerOrderId,
+        tradeType: "SPOT",
+        symbol: latest.symbol,
+        side: latest.side,
+        quantity: delta,
+        price: avgPrice,
+        quoteQuantity: deltaQuote,
+        fee: undefined,
+        feeAsset: undefined,
+        isMaker: false,
+        executedAt: latest.executedAt,
+        fromAsset: latest.fromAsset,
+        fromAmount: latest.side === "BUY" ? deltaQuote : delta,
+        toAsset: latest.toAsset,
+        toAmount: latest.side === "BUY" ? delta : deltaQuote,
+        createdAt: latest.executedAt,
+      });
+    }
+
+    return synthetic;
+  }, [orders, tradesList]);
+
+  const portfolioTradesList = useMemo<TradeRecord[]>(
+    () => [...tradesList, ...ordersAsTrades].sort((a, b) => b.executedAt - a.executedAt),
+    [tradesList, ordersAsTrades]
+  );
+
   const depositList = useMemo<DepositRecord[]>(() => {
     if (!Array.isArray(deposits)) {
       return [];
@@ -301,6 +481,13 @@ export function useDashboardMetrics(refreshToken: number) {
     }
     return [...withdrawals].sort((a, b) => b.applyTime - a.applyTime);
   }, [withdrawals]);
+
+  const fiatList = useMemo(() => {
+    if (!Array.isArray(fiatTransactions)) return [];
+    return fiatTransactions;
+  }, [fiatTransactions]);
+
+  const balanceList: BalanceRecord[] = Array.isArray(balances) ? balances : [];
 
   const syncScopeList = useMemo<SyncScopeRecord[]>(() => {
     if (!Array.isArray(syncScopes)) {
@@ -321,8 +508,9 @@ export function useDashboardMetrics(refreshToken: number) {
     tradesList.forEach((trade) => assets.add(extractBaseAsset(trade.symbol)));
     depositList.forEach((deposit) => assets.add(deposit.coin.toUpperCase()));
     withdrawalList.forEach((withdrawal) => assets.add(withdrawal.coin.toUpperCase()));
+    balanceList.forEach((balance) => assets.add(balance.asset.toUpperCase()));
     return assets;
-  }, [depositList, tradesList, withdrawalList]);
+  }, [balanceList, depositList, tradesList, withdrawalList]);
 
   const uniqueAssets = trackedAssets.size;
   const lastTradeAt = tradesList[0]?.executedAt ?? null;
@@ -475,8 +663,9 @@ export function useDashboardMetrics(refreshToken: number) {
   }, [syncScopeList, tradesList]);
 
   const transactions = useMemo<TransactionEntry[]>(() => {
-    const entries: TransactionEntry[] = tradesList.map((trade) => ({
+    const entries: TransactionEntry[] = portfolioTradesList.map((trade) => ({
       type: "trade",
+      tradeType: trade.tradeType,
       id: trade._id,
       integrationId: trade.integrationId,
       provider: trade.provider,
@@ -527,6 +716,73 @@ export function useDashboardMetrics(refreshToken: number) {
       });
     });
 
+    fiatList.forEach((fiat) => {
+      const status = (fiat.status ?? "").toUpperCase();
+      if (status.includes("FAIL")) {
+        return;
+      }
+      const hasCrypto = fiat.cryptoCurrency && fiat.cryptoAmount && fiat.cryptoAmount > 0;
+
+      if (hasCrypto) {
+        // Échange fiat → crypto (ex: Apple Pay EUR → USDC)
+        const isBuy = fiat.txType === "0";
+        const cryptoCurrency = fiat.cryptoCurrency!;
+        const cryptoAmount = fiat.cryptoAmount!;
+        const symbol = `${cryptoCurrency}${fiat.fiatCurrency.toUpperCase()}`;
+        const price = fiat.fiatAmount > 0 ? fiat.fiatAmount / cryptoAmount : 0;
+        entries.push({
+          type: "trade",
+          tradeType: "FIAT",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          symbol,
+          baseAsset: cryptoCurrency,
+          side: isBuy ? "BUY" : "SELL",
+          quantity: cryptoAmount,
+          price,
+          quoteQuantity: fiat.fiatAmount,
+          fee: fiat.fee ?? undefined,
+          feeAsset: fiat.fiatCurrency.toUpperCase(),
+          executedAt: fiat.updateTime,
+        });
+      } else if (fiat.txType === "0") {
+        // Dépôt fiat pur (virement bancaire EUR)
+        entries.push({
+          type: "deposit",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          baseAsset: fiat.fiatCurrency.toUpperCase(),
+          amount: fiat.fiatAmount,
+          network: fiat.method ?? null,
+          status: fiat.status,
+          timestamp: fiat.updateTime,
+          txId: null,
+          direction: "IN",
+        });
+      } else {
+        // Retrait fiat pur
+        entries.push({
+          type: "withdrawal",
+          id: fiat._id,
+          integrationId: fiat.integrationId,
+          provider: fiat.provider,
+          providerDisplayName: fiat.providerDisplayName,
+          baseAsset: fiat.fiatCurrency.toUpperCase(),
+          amount: fiat.fiatAmount,
+          network: fiat.method ?? null,
+          status: fiat.status,
+          timestamp: fiat.updateTime,
+          txId: null,
+          fee: fiat.fee ?? 0,
+          direction: "OUT",
+        });
+      }
+    });
+
     return entries.sort((a, b) => {
       const getTime = (entry: TransactionEntry) => {
         if (entry.type === "trade") {
@@ -536,9 +792,16 @@ export function useDashboardMetrics(refreshToken: number) {
       };
       return getTime(b) - getTime(a);
     });
-  }, [depositList, tradesList, withdrawalList]);
+  }, [depositList, fiatList, portfolioTradesList, withdrawalList]);
 
   const portfolioTokens = useMemo<PortfolioToken[]>(() => {
+    const balanceTotals = new Map<string, number>();
+    balanceList.forEach((balance) => {
+      const symbol = balance.asset.toUpperCase();
+      const total = balance.totalPosition ?? balance.free ?? "0";
+      balanceTotals.set(symbol, parseAmount(total));
+    });
+
     const map = new Map<string, {
       symbol: string;
       currentQuantity: number;
@@ -579,15 +842,32 @@ export function useDashboardMetrics(refreshToken: number) {
       return map.get(upper)!;
     };
 
-    tradesList.forEach((trade) => {
+    balanceTotals.forEach((_, symbol) => {
+      ensureEntry(symbol);
+    });
+
+    portfolioTradesList.forEach((trade) => {
       // Handle CONVERT trades specially
       if (trade.tradeType === "CONVERT") {
+        // Valeur USD de la conversion :
+        // - Si fromAsset est un stablecoin (ex: USDT→TAO), on sait que fromAmount = USD dépensé
+        // - Si toAsset est un stablecoin (ex: TAO→USDT), on sait que toAmount = USD reçu
+        // - Sinon on estime avec quoteQuantity ou price×qty
+        const fromIsStable = USD_STABLECOINS.has((trade.fromAsset ?? "").toUpperCase());
+        const toIsStable   = USD_STABLECOINS.has((trade.toAsset ?? "").toUpperCase());
+        const convertValueUsd =
+          fromIsStable ? (trade.fromAmount ?? 0)
+          : toIsStable ? (trade.toAmount ?? 0)
+          : (trade.quoteQuantity ?? trade.price * (trade.toAmount ?? trade.quantity));
+
         // Process fromAsset (sale)
         if (trade.fromAsset && trade.fromAmount !== undefined) {
           const fromEntry = ensureEntry(trade.fromAsset);
           fromEntry.convertQuantity -= trade.fromAmount;
           fromEntry.currentQuantity -= trade.fromAmount;
           fromEntry.sellQuantity += trade.fromAmount;
+          fromEntry.sellValueUsd += convertValueUsd;
+          fromEntry.realizedUsd += convertValueUsd;
           fromEntry.lastActivityAt = Math.max(fromEntry.lastActivityAt, trade.executedAt);
 
           fromEntry.events.push({
@@ -595,13 +875,14 @@ export function useDashboardMetrics(refreshToken: number) {
             type: "SELL",
             timestamp: trade.executedAt,
             quantity: trade.fromAmount,
-            price: trade.price,
-            valueUsd: trade.quoteQuantity ?? 0,
+            price: fromIsStable ? 1 : (trade.toAmount ? convertValueUsd / trade.fromAmount : trade.price),
+            valueUsd: convertValueUsd,
             fee: trade.fee,
             feeAsset: trade.feeAsset,
             provider: trade.provider,
             providerDisplayName: trade.providerDisplayName,
             integrationId: trade.integrationId,
+            vsStablecoin: toIsStable,
           });
         }
 
@@ -611,6 +892,8 @@ export function useDashboardMetrics(refreshToken: number) {
           toEntry.convertQuantity += trade.toAmount;
           toEntry.currentQuantity += trade.toAmount;
           toEntry.buyQuantity += trade.toAmount;
+          toEntry.buyValueUsd += convertValueUsd;   // ← bug corrigé
+          toEntry.investedUsd += convertValueUsd;   // ← bug corrigé
           toEntry.lastActivityAt = Math.max(toEntry.lastActivityAt, trade.executedAt);
 
           toEntry.events.push({
@@ -618,13 +901,14 @@ export function useDashboardMetrics(refreshToken: number) {
             type: "BUY",
             timestamp: trade.executedAt,
             quantity: trade.toAmount,
-            price: trade.price,
-            valueUsd: trade.quoteQuantity ?? 0,
+            price: toIsStable ? 1 : (trade.toAmount > 0 ? convertValueUsd / trade.toAmount : trade.price),
+            valueUsd: convertValueUsd,
             fee: trade.fee,
             feeAsset: trade.feeAsset,
             provider: trade.provider,
             providerDisplayName: trade.providerDisplayName,
             integrationId: trade.integrationId,
+            vsStablecoin: fromIsStable,
           });
         }
       } else {
@@ -632,6 +916,8 @@ export function useDashboardMetrics(refreshToken: number) {
         const baseAsset = extractBaseAsset(trade.symbol);
         const entry = ensureEntry(baseAsset);
         const valueUsd = trade.quoteQuantity ?? trade.price * trade.quantity;
+        const quoteAsset = trade.symbol.toUpperCase().slice(baseAsset.length);
+        const quoteIsStable = USD_STABLECOINS.has(quoteAsset);
 
         entry.events.push({
           id: trade._id,
@@ -645,21 +931,32 @@ export function useDashboardMetrics(refreshToken: number) {
           provider: trade.provider,
           providerDisplayName: trade.providerDisplayName,
           integrationId: trade.integrationId,
+          vsStablecoin: quoteIsStable,
         });
 
         entry.tradeSymbols.add(trade.symbol.toUpperCase());
         entry.lastActivityAt = Math.max(entry.lastActivityAt, trade.executedAt);
 
+        // Binance qty is BEFORE fee deduction. When the fee is paid in the
+        // received asset we must subtract it to match the real wallet balance.
+        const feeInBase =
+          trade.fee && trade.feeAsset?.toUpperCase() === baseAsset
+            ? trade.fee
+            : 0;
+
         if (trade.side === "BUY") {
           entry.buyQuantity += trade.quantity;
           entry.buyValueUsd += valueUsd;
           entry.investedUsd += valueUsd;
-          entry.currentQuantity += trade.quantity;
+          entry.currentQuantity += trade.quantity - feeInBase;
         } else {
           entry.sellQuantity += trade.quantity;
           entry.sellValueUsd += valueUsd;
           entry.realizedUsd += valueUsd;
           entry.currentQuantity -= trade.quantity;
+          // For SELL, fee is usually in quote asset, but if paid in base asset
+          // it means additional base was deducted
+          entry.currentQuantity -= feeInBase;
         }
       }
     });
@@ -696,8 +993,13 @@ export function useDashboardMetrics(refreshToken: number) {
       entry.lastActivityAt = Math.max(entry.lastActivityAt, withdrawal.applyTime);
     });
 
-    return Array.from(map.values())
+    const tokens = Array.from(map.values())
       .map((entry) => {
+        const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
+
+        // AVCO : prix d'achat moyen pondéré (même méthode que Binance "Prix garanti")
+        const { avgCostBasis, realizedPnlAvco } = computeAvco(sortedEvents, entry.symbol);
+
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
         const averageSellPrice =
@@ -733,8 +1035,6 @@ export function useDashboardMetrics(refreshToken: number) {
           return scored[0]?.symbol;
         })();
 
-        const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
-
         return {
           symbol: entry.symbol,
           currentQuantity: entry.currentQuantity,
@@ -747,6 +1047,8 @@ export function useDashboardMetrics(refreshToken: number) {
           buyValueUsd: entry.buyValueUsd,
           sellValueUsd: entry.sellValueUsd,
           netProfitUsd: entry.sellValueUsd - entry.buyValueUsd,
+          avgCostBasis,
+          realizedPnlAvco,
           averageBuyPrice,
           averageSellPrice,
           lastActivityAt: entry.lastActivityAt,
@@ -755,8 +1057,21 @@ export function useDashboardMetrics(refreshToken: number) {
           events: sortedEvents,
         };
       })
+      .map((entry) => {
+        // Toujours faire confiance à la balance Binance pour le stock réel.
+        // Les transactions servent au calcul du PRU et du PnL, mais il peut
+        // manquer des opérations (dust conversion, staking, distributions…)
+        // donc la balance API est la source de vérité pour la quantité détenue.
+        const actualQuantity = balanceTotals.get(entry.symbol);
+        if (actualQuantity !== undefined) {
+          return { ...entry, currentQuantity: actualQuantity };
+        }
+        return entry;
+      })
       .sort((a, b) => b.investedUsd - a.investedUsd);
-  }, [depositList, tradesList, withdrawalList]);
+
+    return tokens;
+  }, [balanceList, depositList, portfolioTradesList, withdrawalList]);
 
   const profitSummary = useMemo<ProfitSummary>(() => {
     if (portfolioTokens.length === 0) {
@@ -887,7 +1202,10 @@ export function useDashboardMetrics(refreshToken: number) {
     isConvexConfigured &&
     isLoaded &&
     !!user &&
-    (trades === undefined || deposits === undefined || withdrawals === undefined);
+    (trades === undefined ||
+      deposits === undefined ||
+      withdrawals === undefined ||
+      balances === undefined);
 
   return {
     overviewCards,

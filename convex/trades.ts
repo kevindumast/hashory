@@ -7,7 +7,8 @@ export const ingestBatch = mutation({
     trades: v.array(
       v.object({
         providerTradeId: v.string(),
-        tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT")),
+        providerOrderId: v.optional(v.string()),
+        tradeType: v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST")),
         symbol: v.string(),
         side: v.union(v.literal("BUY"), v.literal("SELL")),
         quantity: v.number(),
@@ -44,6 +45,7 @@ export const ingestBatch = mutation({
       await ctx.db.insert("trades", {
         integrationId: args.integrationId,
         providerTradeId: trade.providerTradeId,
+        providerOrderId: trade.providerOrderId,
         portfolioId: undefined,
         tradeType: trade.tradeType,
         symbol: trade.symbol,
@@ -69,6 +71,66 @@ export const ingestBatch = mutation({
   },
 });
 
+const KNOWN_QUOTES = [
+  "USDT",
+  "USDC",
+  "BUSD",
+  "USD",
+  "FDUSD",
+  "TUSD",
+  "DAI",
+  "BTC",
+  "ETH",
+  "BNB",
+  "EUR",
+  "GBP",
+  "TRY",
+  "AUD",
+  "CAD",
+  "BRL",
+  "ARS",
+];
+
+function extractBaseAsset(symbol: string) {
+  const upper = symbol.toUpperCase();
+  for (const quote of KNOWN_QUOTES) {
+    if (upper.endsWith(quote)) {
+      const base = upper.slice(0, upper.length - quote.length);
+      if (base) {
+        return base;
+      }
+    }
+  }
+  return upper;
+}
+
+export const listAssetsByIntegration = query({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const trades = await ctx.db
+      .query("trades")
+      .withIndex("by_integration_trade", (q) => q.eq("integrationId", args.integrationId))
+      .collect();
+
+    const assets = new Set<string>();
+    for (const trade of trades) {
+      if (trade.symbol) {
+        assets.add(extractBaseAsset(trade.symbol));
+      }
+      if (trade.fromAsset) {
+        assets.add(trade.fromAsset.toUpperCase());
+      }
+      if (trade.toAsset) {
+        assets.add(trade.toAsset.toUpperCase());
+      }
+    }
+
+    return Array.from(assets);
+  },
+});
+
 export const listByUser = query({
   args: {
     clerkId: v.string(),
@@ -89,10 +151,18 @@ export const listByUser = query({
       integrations.map((integration) => [integration._id, integration])
     );
 
-    const trades = await ctx.db.query("trades").collect();
+    const tradesPerIntegration = await Promise.all(
+      integrations.map((integration) => {
+        const cursor = ctx.db
+          .query("trades")
+          .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+          .order("desc");
+        return args.limit ? cursor.take(args.limit) : cursor.collect();
+      })
+    );
 
-    const filtered = trades
-      .filter((trade) => integrationMap.has(trade.integrationId))
+    const filtered = tradesPerIntegration
+      .flat()
       .sort((a, b) => b.createdAt - a.createdAt);
 
     const limited = args.limit ? filtered.slice(0, args.limit) : filtered;
@@ -104,6 +174,7 @@ export const listByUser = query({
         integrationId: trade.integrationId,
         provider: integration.provider,
         providerDisplayName: integration.displayName ?? integration.provider,
+        providerOrderId: trade.providerOrderId,
         tradeType: trade.tradeType,
         symbol: trade.symbol,
         side: trade.side,

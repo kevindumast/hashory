@@ -100,6 +100,27 @@ export const listByUser = query({
   },
 });
 
+export const listAssetsByIntegration = query({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args) => {
+    const withdrawals = await ctx.db
+      .query("withdrawals")
+      .withIndex("by_integration", (q) => q.eq("integrationId", args.integrationId))
+      .collect();
+
+    const assets = new Set<string>();
+    for (const withdrawal of withdrawals) {
+      if (withdrawal.coin) {
+        assets.add(withdrawal.coin.toUpperCase());
+      }
+    }
+
+    return Array.from(assets);
+  },
+});
+
 export const insert = mutation({
   args: {
     integrationId: v.id("integrations"),

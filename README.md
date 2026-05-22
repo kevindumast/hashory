@@ -1,5 +1,73 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Architecture
+
+```mermaid
+flowchart LR
+    User([👤 Utilisateur])
+
+    subgraph Frontend["Frontend — Next.js 15 / React 19"]
+        Landing[Landing / Pricing]
+        Auth[Auth Clerk<br/>sign-in · sign-up]
+        Dashboard[Dashboard]
+        Overview[Overview<br/>Portfolio]
+        Transactions[Transactions]
+        Analytics[Analytics]
+        Integrations[Integrations]
+        TaxReport[Tax Report]
+    end
+
+    subgraph API["API Routes"]
+        Prices[/api/prices/]
+    end
+
+    subgraph Backend["Backend — Convex"]
+        Portfolios[(portfolios)]
+        Trades[(trades)]
+        Orders[(orders)]
+        Deposits[(deposits)]
+        Withdrawals[(withdrawals)]
+        Balances[(balances)]
+        Fiat[(fiatTransactions)]
+        Users[(users)]
+        AnalyticsDB[(analytics)]
+        AI[ai actions]
+        IntegrationsFn[integrations]
+    end
+
+    subgraph External["Services externes"]
+        Binance[🟡 Binance API]
+        Kaspa[🔵 Kaspa API]
+        CMC[CoinMarketCap]
+        Clerk[Clerk Auth]
+    end
+
+    User --> Landing
+    User --> Auth
+    Auth <--> Clerk
+    User --> Dashboard
+    Dashboard --> Overview
+    Dashboard --> Transactions
+    Dashboard --> Analytics
+    Dashboard --> Integrations
+    Dashboard --> TaxReport
+
+    Overview --> Prices
+    Prices --> CMC
+
+    Dashboard <--> Backend
+    Integrations --> IntegrationsFn
+    IntegrationsFn --> Binance
+    IntegrationsFn --> Kaspa
+    Binance --> Trades
+    Binance --> Orders
+    Binance --> Deposits
+    Binance --> Withdrawals
+    Binance --> Balances
+    Kaspa --> Trades
+    AI --> AnalyticsDB
+```
+
 ## Getting Started
 
 First, run the development server:
