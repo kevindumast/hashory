@@ -1,0 +1,2 @@
+- [Convex free tier optimization](feedback_convex_quota.md) — ULTRA IMPORTANT: every change must minimize Convex bandwidth/function calls to stay within the free tier monthly quotas
+- [Convex usage profile](project_convex_usage.md) — DB free tier (1GB bandwidth/mo, 1M function calls), EU region, bandwidth is the binding constraint not storage
