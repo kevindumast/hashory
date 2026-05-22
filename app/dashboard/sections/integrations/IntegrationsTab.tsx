@@ -15,11 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { LoaderCircle, Plug, RefreshCw, RotateCcw } from "lucide-react";
+import { LoaderCircle, Plug, RefreshCw, RotateCcw, FileUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { IntegrationRecord } from "@/hooks/dashboard/useIntegrations";
 import { api } from "@/convex/_generated/api";
 import { dateFormatter } from "@/hooks/dashboard/useDashboardMetrics";
+import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog";
+import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog";
 
 type IntegrationsTabProps = {
   integrations: IntegrationRecord[];
@@ -33,7 +35,10 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [selectedIntegration, setSelectedIntegration] = useState<IntegrationRecord | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const syncAccount = useAction(api.binance.syncAccount);
+  const [showBitstackImport, setShowBitstackImport] = useState(false);
+  const [showFinaryImport, setShowFinaryImport] = useState(false);
+  const syncBinance = useAction(api.binance.syncAccount);
+  const syncKucoin = useAction(api.kucoin.syncAccount);
   const resetCursors = useAction(api.resetCursors.resetAllCursors);
 
   const handleSync = async (integration: IntegrationRecord) => {
@@ -47,33 +52,48 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
     ]);
 
     try {
-      const result = await syncAccount({
-        integrationId: integration._id,
-      });
+      let finalLogs: string[];
 
-      const hasData =
-        (result.convertTrades?.inserted ?? 0) > 0 ||
-        (result.fiatOrders?.inserted ?? 0) > 0 ||
-        (result.deposits?.inserted ?? 0) > 0 ||
-        (result.withdrawals?.inserted ?? 0) > 0;
+      if (integration.provider === "kucoin") {
+        const result = await syncKucoin({ integrationId: integration._id });
+        const hasData =
+          (result.deposits?.inserted ?? 0) > 0 ||
+          (result.withdrawals?.inserted ?? 0) > 0 ||
+          (result.fills?.inserted ?? 0) > 0;
 
-      const finalLogs = [
-        ``,
-        `[${new Date().toLocaleTimeString()}] ${hasData ? '✓' : '✅'} Sync completed`,
-        `  - Convert trades: ${result.convertTrades?.inserted ?? 0} inserted / ${result.convertTrades?.fetched ?? 0} fetched`,
-        `  - Fiat orders: ${result.fiatOrders?.inserted ?? 0} inserted / ${result.fiatOrders?.fetched ?? 0} fetched`,
-        `  - Deposits: ${result.deposits?.inserted ?? 0} inserted / ${result.deposits?.fetched ?? 0} fetched`,
-        `  - Withdrawals: ${result.withdrawals?.inserted ?? 0} inserted / ${result.withdrawals?.fetched ?? 0} fetched`,
-        ``,
-        `📊 Spot trades sync: launched in background (this may take a while)`,
-      ];
-
-      if (hasData) {
-        finalLogs.push(``);
-        finalLogs.push(`  💡 More history available - Click "Sync" again to continue`);
+        finalLogs = [
+          ``,
+          `[${new Date().toLocaleTimeString()}] ${hasData ? '✓' : '✅'} Sync KuCoin completed`,
+          `  - Fills (spot): ${result.fills?.inserted ?? 0} inserted / ${result.fills?.fetched ?? 0} fetched`,
+          `  - Deposits: ${result.deposits?.inserted ?? 0} inserted / ${result.deposits?.fetched ?? 0} fetched`,
+          `  - Withdrawals: ${result.withdrawals?.inserted ?? 0} inserted / ${result.withdrawals?.fetched ?? 0} fetched`,
+          ``,
+          hasData
+            ? `  💡 More history available — click "Sync" again to continue`
+            : `  ✅ All data up to date`,
+        ];
       } else {
-        finalLogs.push(``);
-        finalLogs.push(`  ✅ Fast syncs completed - Check back for spot trades results`);
+        const result = await syncBinance({ integrationId: integration._id });
+        const hasData =
+          (result.convertTrades?.inserted ?? 0) > 0 ||
+          (result.fiatOrders?.inserted ?? 0) > 0 ||
+          (result.deposits?.inserted ?? 0) > 0 ||
+          (result.withdrawals?.inserted ?? 0) > 0;
+
+        finalLogs = [
+          ``,
+          `[${new Date().toLocaleTimeString()}] ${hasData ? '✓' : '✅'} Sync completed`,
+          `  - Convert trades: ${result.convertTrades?.inserted ?? 0} inserted / ${result.convertTrades?.fetched ?? 0} fetched`,
+          `  - Fiat orders: ${result.fiatOrders?.inserted ?? 0} inserted / ${result.fiatOrders?.fetched ?? 0} fetched`,
+          `  - Deposits: ${result.deposits?.inserted ?? 0} inserted / ${result.deposits?.fetched ?? 0} fetched`,
+          `  - Withdrawals: ${result.withdrawals?.inserted ?? 0} inserted / ${result.withdrawals?.fetched ?? 0} fetched`,
+          ``,
+          `📊 Spot trades sync: launched in background (this may take a while)`,
+          ``,
+          hasData
+            ? `  💡 More history available - Click "Sync" again to continue`
+            : `  ✅ Fast syncs completed - Check back for spot trades results`,
+        ];
       }
 
       setLogs((prev) => [...prev, ...finalLogs]);
@@ -127,10 +147,20 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
             <CardDescription>Connected platforms</CardDescription>
             <CardTitle className="text-lg">Active providers</CardTitle>
           </div>
-          <Button size="sm" className="inline-flex items-center gap-2" onClick={onOpenDialog}>
-            <Plug className="size-4" />
-            Add provider
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="inline-flex items-center gap-2" onClick={() => setShowBitstackImport(true)}>
+              <FileUp className="size-4" />
+              Import Bitstack CSV
+            </Button>
+            <Button size="sm" variant="outline" className="inline-flex items-center gap-2" onClick={() => setShowFinaryImport(true)}>
+              <FileUp className="size-4" />
+              Import Finary CSV
+            </Button>
+            <Button size="sm" className="inline-flex items-center gap-2" onClick={onOpenDialog}>
+              <Plug className="size-4" />
+              Add provider
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="rounded-xl border border-border/60">
           <Table>
@@ -159,7 +189,7 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
                       {integration.displayName ?? integration.provider}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {integration.provider === "binance" ? "Exchange" : integration.provider}
+                      {["binance", "kucoin"].includes(integration.provider) ? "Exchange" : integration.provider}
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -185,35 +215,59 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={syncingId === integration._id || resettingId === integration._id}
-                          onClick={() => handleSync(integration)}
-                          className="h-8 gap-2"
-                        >
-                          {syncingId === integration._id ? (
-                            <>
-                              <LoaderCircle className="size-3 animate-spin" />
-                              Syncing...
-                            </>
-                          ) : (
-                            <>
-                              <RefreshCw className="size-3" />
-                              Sync
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          disabled={syncingId === integration._id || resettingId === integration._id}
-                          onClick={() => handleResetRequest(integration)}
-                          className="h-8 gap-2 text-muted-foreground hover:text-destructive"
-                          title="Reset sync cursors"
-                        >
-                          <RotateCcw className="size-3" />
-                        </Button>
+                        {integration.provider === "bitstack" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowBitstackImport(true)}
+                            className="h-8 gap-2"
+                          >
+                            <FileUp className="size-3" />
+                            Import CSV
+                          </Button>
+                        ) : integration.provider === "finary" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowFinaryImport(true)}
+                            className="h-8 gap-2"
+                          >
+                            <FileUp className="size-3" />
+                            Import CSV
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={syncingId === integration._id || resettingId === integration._id}
+                              onClick={() => handleSync(integration)}
+                              className="h-8 gap-2"
+                            >
+                              {syncingId === integration._id ? (
+                                <>
+                                  <LoaderCircle className="size-3 animate-spin" />
+                                  Syncing...
+                                </>
+                              ) : (
+                                <>
+                                  <RefreshCw className="size-3" />
+                                  Sync
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={syncingId === integration._id || resettingId === integration._id}
+                              onClick={() => handleResetRequest(integration)}
+                              className="h-8 gap-2 text-muted-foreground hover:text-destructive"
+                              title="Reset sync cursors"
+                            >
+                              <RotateCcw className="size-3" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -289,6 +343,18 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
           </div>
         </CardContent>
       </Card>
+
+      <BitstackImportDialog
+        open={showBitstackImport}
+        onOpenChange={setShowBitstackImport}
+        onSuccess={onRefresh}
+      />
+
+      <FinaryImportDialog
+        open={showFinaryImport}
+        onOpenChange={setShowFinaryImport}
+        onSuccess={onRefresh}
+      />
 
       {/* Reset Confirmation Modal */}
       <Dialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>

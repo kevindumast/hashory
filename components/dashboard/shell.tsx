@@ -1,45 +1,62 @@
 "use client";
 
-import { ReactNode, useMemo, useState } from "react";
-import { DashboardSidebar } from "./sidebar";
+import { useState } from "react";
+import { Sidebar, MobileNav } from "./sidebar";
 import { DashboardTopbar } from "./topbar";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { ProviderDialogProvider } from "./provider-dialog-context";
 import { ConnectProviderDialog } from "./connect-provider-dialog";
+import { ProviderDialogProvider } from "./provider-dialog-context";
+import { cn } from "@/lib/utils";
 
-type DashboardShellProps = {
-  children: ReactNode;
-};
+interface DashboardShellProps {
+  children: React.ReactNode;
+}
 
 export function DashboardShell({ children }: DashboardShellProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [providerDialogOpen, setProviderDialogOpen] = useState(false);
-
-  const providerDialogValue = useMemo(
-    () => ({
-      open: providerDialogOpen,
-      setOpen: setProviderDialogOpen,
-      openDialog: () => setProviderDialogOpen(true),
-      closeDialog: () => setProviderDialogOpen(false),
-    }),
-    [providerDialogOpen]
-  );
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <ProviderDialogProvider value={providerDialogValue}>
-      <ConnectProviderDialog open={providerDialogOpen} onOpenChange={setProviderDialogOpen} />
-      <div className="flex min-h-screen bg-muted/20">
-        <DashboardSidebar isOpen={sidebarOpen} onOpenChange={setSidebarOpen} />
-        <div className="flex flex-1 flex-col">
-          <DashboardTopbar
-            onOpenSidebar={() => setSidebarOpen(true)}
-            onConnectProvider={() => setProviderDialogOpen(true)}
-          />
-          <ScrollArea className="flex-1">
-            <div className="mx-auto w-full max-w-6xl space-y-10 px-4 py-8">{children}</div>
-          </ScrollArea>
+    <ProviderDialogProvider
+      value={{
+        open: connectDialogOpen,
+        setOpen: setConnectDialogOpen,
+        openDialog: () => setConnectDialogOpen(true),
+        closeDialog: () => setConnectDialogOpen(false),
+      }}
+    >
+      <div className="flex h-screen overflow-hidden bg-background">
+
+        {/* Sidebar — scroll indépendant */}
+        <div className={cn(
+          "hidden md:block transition-all duration-300 ease-in-out shrink-0 overflow-hidden",
+          sidebarOpen ? "w-[220px]" : "w-0"
+        )}>
+          <div className="w-[220px] h-full overflow-y-auto scrollbar-none">
+            <Sidebar />
+          </div>
+        </div>
+
+        {/* Main column — l'unique container scrollable */}
+        <div className="flex flex-col flex-1 min-w-0 overflow-y-auto">
+
+          {/* Mobile nav sticky dans ce scroll container */}
+          <MobileNav />
+
+          {/* Topbar sticky — le contenu passe DESSOUS avec l'effet blur */}
+          <div className="hidden md:block sticky top-0 z-30">
+            <DashboardTopbar
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              onConnectProvider={() => setConnectDialogOpen(true)}
+            />
+          </div>
+
+          <main className="flex-1">
+            {children}
+          </main>
         </div>
       </div>
+
+      <ConnectProviderDialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen} />
     </ProviderDialogProvider>
   );
 }

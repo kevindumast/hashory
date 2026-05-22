@@ -19,8 +19,9 @@ export default defineSchema({
   trades: defineTable({
     integrationId: v.id("integrations"),
     providerTradeId: v.string(),
+    providerOrderId: v.optional(v.string()), // Binance orderId for deduplication with orders table
     portfolioId: v.optional(v.id("portfolios")),
-    tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"))),
+    tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST"))),
     symbol: v.string(),
     side: v.union(v.literal("BUY"), v.literal("SELL")),
     quantity: v.number(),
@@ -35,6 +36,45 @@ export default defineSchema({
     fromAmount: v.optional(v.number()),
     toAsset: v.optional(v.string()),
     toAmount: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_trade", ["integrationId", "providerTradeId"])
+    .index("by_integration_order", ["integrationId", "providerOrderId"]),
+  orders: defineTable({
+    integrationId: v.id("integrations"),
+    providerOrderId: v.string(), // Binance orderId
+    symbol: v.string(),
+    side: v.union(v.literal("BUY"), v.literal("SELL")),
+    orderType: v.string(), // LIMIT, MARKET, TAKE_PROFIT_LIMIT, STOP_LOSS_LIMIT, etc.
+    status: v.string(), // FILLED, PARTIALLY_FILLED, CANCELED, etc.
+    quantity: v.number(), // executedQty
+    price: v.number(), // average execution price
+    quoteQuantity: v.number(), // cummulativeQuoteQty
+    executedAt: v.number(), // updateTime (when filled)
+    fromAsset: v.optional(v.string()),
+    fromAmount: v.optional(v.number()),
+    toAsset: v.optional(v.string()),
+    toAmount: v.optional(v.number()),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_order", ["integrationId", "providerOrderId"]),
+  convertTrades: defineTable({
+    integrationId: v.id("integrations"),
+    providerTradeId: v.string(), // convert:{orderId}
+    orderStatus: v.string(), // SUCCESS, PROCESS, FAIL
+    fromAsset: v.string(),
+    fromAmount: v.number(),
+    toAsset: v.string(),
+    toAmount: v.number(),
+    price: v.number(),
+    inversePrice: v.optional(v.number()),
+    fee: v.optional(v.number()),
+    feeAsset: v.optional(v.string()),
+    executedAt: v.number(),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })
@@ -66,11 +106,13 @@ export default defineSchema({
     encryptedCredentials: v.object({
       apiKey: v.string(),
       apiSecret: v.string(),
+      passphrase: v.optional(v.string()),
     }),
     scopes: v.optional(v.array(v.string())),
     createdAt: v.number(),
     updatedAt: v.number(),
     lastSyncedAt: v.optional(v.number()),
+    syncStatus: v.optional(v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error"))),
     accountCreatedAt: v.optional(v.number()),
   })
     .index("by_user", ["clerkUserId"])
@@ -117,6 +159,96 @@ export default defineSchema({
   })
     .index("by_integration", ["integrationId"])
     .index("by_integration_withdraw", ["integrationId", "withdrawId"]),
+  fiatTransactions: defineTable({
+    integrationId: v.id("integrations"),
+    orderId: v.string(),
+    source: v.union(v.literal("fiat_orders"), v.literal("fiat_payments")),
+    txType: v.union(v.literal("0"), v.literal("1")),
+    fiatCurrency: v.string(),
+    fiatAmount: v.number(),
+    cryptoCurrency: v.optional(v.string()),
+    cryptoAmount: v.optional(v.number()),
+    price: v.optional(v.number()),
+    fee: v.optional(v.number()),
+    method: v.optional(v.string()),
+    status: v.string(),
+    createTime: v.number(),
+    updateTime: v.number(),
+    raw: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_order", ["integrationId", "orderId"]),
+  cmcTokenMap: defineTable({
+    symbol: v.string(),
+    cmcId: v.optional(v.number()),
+    iconUrl: v.optional(v.string()),
+    name: v.string(),
+    slug: v.string(),
+    updatedAt: v.optional(v.number()),
+  }).index("by_symbol", ["symbol"]),
+  balances: defineTable({
+    integrationId: v.id("integrations"),
+    asset: v.string(),
+    name: v.string(),
+    free: v.string(),
+    locked: v.string(),
+    freeze: v.string(),
+    withdrawing: v.string(),
+    totalPosition: v.string(),
+    btcValuation: v.string(),
+    depositAddress: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_asset", ["integrationId", "asset"]),
+  binanceDepositAddresses: defineTable({
+    coin: v.string(),
+    address: v.string(),
+    network: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_coin", ["coin"]),
+  tokenPriceHistory: defineTable({
+    symbol: v.string(),
+    dayUtc: v.number(),
+    closeUsd: v.number(),
+    source: v.union(v.literal("binance"), v.literal("coingecko"), v.literal("manual")),
+    updatedAt: v.number(),
+  })
+    .index("by_symbol_day", ["symbol", "dayUtc"])
+    .index("by_symbol", ["symbol"]),
+  portfolioSnapshots: defineTable({
+    clerkId: v.string(),
+    dayUtc: v.number(),
+    valueUsd: v.number(),
+    costBasisUsd: v.number(),
+    realizedPnlUsd: v.number(),
+    netInvestedUsd: v.number(),
+    profitPercent: v.number(),
+    btcPercent: v.number(),
+    computedAt: v.number(),
+  })
+    .index("by_user_day", ["clerkId", "dayUtc"])
+    .index("by_user", ["clerkId"]),
+  portfolioSnapshotState: defineTable({
+    clerkId: v.string(),
+    earliestEventDay: v.optional(v.number()),
+    lastComputedDay: v.optional(v.number()),
+    lastTradeAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_user", ["clerkId"]),
+  internalTransfers: defineTable({
+    integrationId: v.id("integrations"),
+    transferId: v.string(),
+    account: v.string(),
+    coin: v.string(),
+    amount: v.number(),
+    fee: v.optional(v.number()),
+    executedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_integration", ["integrationId"])
+    .index("by_integration_transfer", ["integrationId", "transferId"]),
   spotTradesSyncQueue: defineTable({
     integrationId: v.id("integrations"),
     symbols: v.array(v.string()),

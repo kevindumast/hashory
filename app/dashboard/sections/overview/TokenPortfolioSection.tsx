@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import {
   Area,
   CartesianGrid,
@@ -19,14 +20,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -47,56 +40,13 @@ import {
 } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
 import { LoaderCircle, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, ChevronUp } from "lucide-react";
+import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
+import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 
 const EARLIEST_BINANCE_TIMESTAMP = Date.UTC(2017, 0, 1);
 const FALLBACK_QUOTES = ["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "USD", "BTC", "ETH", "BNB"];
 
-// Mapping of common symbols to CoinMarketCap IDs
-// Add more as needed - format: symbol -> CMC ID
-const CMC_ID_MAP: Record<string, number> = {
-  "BTC": 1,
-  "ETH": 1027,
-  "USDT": 825,
-  "BNB": 1839,
-  "XRP": 52,
-  "SOL": 5426,
-  "ADA": 2010,
-  "DOGE": 74,
-  "MATIC": 3890,
-  "DOT": 6636,
-  "LINK": 1975,
-  "AVAX": 5805,
-  "ATOM": 3794,
-  "THETA": 2416,
-  "FIL": 2280,
-  "INJ": 7226,
-  "ANKR": 3897,
-  "TAO": 2620,
-  "ONDO": 21564,
-  "AEVO": 28145,
-  "FET": 14855,
-  "GRT": 4943,
-  "STRK": 21575,
-  "RENDER": 7848,
-  "KAS": 12727,
-  "MORPHO": 34104,
-};
-
-function getCryptoIconUrl(symbol: string): string {
-  const upperSymbol = symbol.toUpperCase();
-  const cmcId = CMC_ID_MAP[upperSymbol];
-
-  // Priority order:
-  // 1. CoinMarketCap CDN (highest quality, 64x64)
-  if (cmcId) {
-    return `https://s2.coinmarketcap.com/static/img/coins/64x64/${cmcId}.png`;
-  }
-
-  // 2. Cryptoicons.co CDN as fallback
-  return `https://cryptoicons.co/${upperSymbol.toLowerCase()}.svg`;
-
-  // Note: Local icons at /crypto-icons/{symbol}.svg available as last resort if needed
-}
+// getCryptoIconUrl is now provided by useCmcTokenMap hook
 
 function buildPriceSymbolCandidates(token: PortfolioToken): string[] {
   const candidates = new Set<string>();
@@ -195,7 +145,13 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
+  const { currentPrices } = useCurrentPrices(tokens);
+  const tokenSymbols = useMemo(() => tokens.map((t) => t.symbol), [tokens]);
+  const { getCmcIconUrl } = useCmcTokenMap(tokenSymbols);
+
+  const getCryptoIconUrl = (symbol: string): string | null => {
+    return getCmcIconUrl(symbol);
+  };
 
   const handleSort = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -212,50 +168,6 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
     }
   };
 
-  useEffect(() => {
-    // Fetch current prices from Binance
-    const fetchPrices = async () => {
-      const prices: Record<string, number> = {};
-
-      for (const token of tokens) {
-        // tradeSymbols are already full pairs like "ETHUSDT", so use directly
-        const pairs = token.tradeSymbols.length > 0
-          ? token.tradeSymbols
-          : [token.primarySymbol ? `${token.primarySymbol}USDT` : `${token.symbol}USDT`];
-
-        let found = false;
-        for (const pair of pairs) {
-          try {
-            const response = await fetch(
-              `https://api.binance.com/api/v3/ticker/price?symbol=${pair.toUpperCase()}`,
-              { signal: AbortSignal.timeout(5000) }
-            );
-            if (response.ok) {
-              const data = (await response.json()) as { symbol: string; price: string };
-              prices[token.symbol] = parseFloat(data.price);
-              found = true;
-              break;
-            }
-          } catch (error) {
-            console.debug(`Failed to fetch price for ${pair}:`, error);
-          }
-        }
-
-        if (!found) {
-          console.warn(`Could not fetch price for token ${token.symbol}`);
-        }
-      }
-
-      setCurrentPrices(prices);
-    };
-
-    if (tokens.length > 0) {
-      fetchPrices();
-      // Refresh prices every 30 seconds
-      const interval = setInterval(fetchPrices, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [tokens]);
 
   const orderedTokens = useMemo(
     () => {
@@ -635,7 +547,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -652,7 +564,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -669,7 +581,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -686,7 +598,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -703,7 +615,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               <ArrowDown className="h-3 w-3" />
                             )
                           ) : (
-                            <ArrowUpDown className="h-3 w-3 opacity-30" />
+                            <ArrowUpDown className="h-3 w-3 opacity-50" />
                           )}
                         </button>
                       </th>
@@ -722,7 +634,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                         <>
                           <tr
                             key={token.symbol}
-                            className="border-b border-border/30 transition-colors hover:bg-muted/40"
+                            className="border-b border-border/60 transition-colors hover:bg-muted/40"
                           >
                             <td className="px-4 py-3 text-center">
                               <button
@@ -739,25 +651,14 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-3">
                                 <div className="relative h-8 w-8 flex-shrink-0">
-                                  <img
-                                    src={getCryptoIconUrl(token.symbol)}
-                                    alt={token.symbol}
-                                    className="h-8 w-8 rounded-full object-cover"
-                                    onError={(e) => {
-                                      // Try local fallback first
-                                      if (!e.currentTarget.src.includes("/crypto-icons/")) {
-                                        e.currentTarget.src = `/crypto-icons/${token.symbol.toLowerCase()}.svg`;
-                                        return;
-                                      }
-                                      // Final fallback to letter if all sources fail
-                                      e.currentTarget.style.display = "none";
-                                      e.currentTarget.parentElement?.classList.add("flex", "items-center", "justify-center", "bg-muted", "rounded-full");
-                                      const fallback = document.createElement("span");
-                                      fallback.className = "text-xs font-semibold uppercase text-foreground";
-                                      fallback.textContent = token.symbol.charAt(0);
-                                      e.currentTarget.parentElement?.appendChild(fallback);
-                                    }}
-                                  />
+                                  {getCryptoIconUrl(token.symbol) ? (
+                                    <Image
+                                      src={getCryptoIconUrl(token.symbol)!}
+                                      alt={token.symbol}
+                                      fill
+                                      className="rounded-full object-cover"
+                                    />
+                                  ) : null}
                                 </div>
                                 <div className="flex flex-col gap-0.5">
                                   <span className="font-semibold uppercase tracking-wide text-foreground">
@@ -804,7 +705,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             </td>
                           </tr>
                           {isExpanded && (
-                            <tr className="border-b border-border/30 bg-muted/20">
+                            <tr className="border-b border-border/60 bg-muted/20">
                               <td colSpan={7} className="px-4 py-4">
                                 <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                                   <div className="flex flex-col gap-1">
@@ -930,7 +831,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               </linearGradient>
                             </defs>
                             <CartesianGrid
-                              stroke="hsl(var(--border))"
+                              stroke="var(--border)"
                               opacity={0.2}
                               vertical={false}
                               strokeDasharray="4 4"
@@ -964,12 +865,12 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               tickLine={false}
                               axisLine={false}
                               width={72}
-                              stroke="hsl(var(--muted-foreground) / 0.8)"
+                              stroke="var(--muted-foreground)"
                               tickFormatter={(value) => priceFormatter.format(Number(value))}
                             />
                             <RechartsTooltip
                               cursor={{
-                                stroke: "hsl(var(--border))",
+                                stroke: "var(--border)",
                                 strokeDasharray: "3 3",
                               }}
                               content={<PriceTooltip />}
