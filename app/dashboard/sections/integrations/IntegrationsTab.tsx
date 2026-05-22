@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useAction } from "convex/react";
 import {
   Card,
@@ -13,7 +13,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoaderCircle, Plug, RefreshCw, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -277,7 +277,7 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
           ) : (
             <div className="rounded-md border border-border/60 bg-muted/30 p-6 text-center">
               <p className="text-sm text-muted-foreground">
-                No activity yet. Click "Sync" to start synchronizing data.
+                No activity yet. Click &quot;Sync&quot; to start synchronizing data.
               </p>
             </div>
           )}
@@ -311,7 +311,7 @@ export function IntegrationsTab({ integrations, onOpenDialog, onRefresh }: Integ
               ⚠️ This will cause the next synchronization to reimport all historical data from the beginning.
             </p>
             <p className="text-xs text-muted-foreground">
-              Use this if you're experiencing sync issues or want to force a complete re-import.
+              Use this if you&apos;re experiencing sync issues or want to force a complete re-import.
             </p>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">

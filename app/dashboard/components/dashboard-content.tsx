@@ -55,8 +55,8 @@ export function DashboardContent({ userName }: DashboardContentProps) {
     setRefreshError(null);
 
     try {
-      let totalTradeInserted = 0;
-      let totalTradeFetched = 0;
+      const totalTradeInserted = 0;
+      const totalTradeFetched = 0;
       let totalDepositInserted = 0;
       let totalDepositFetched = 0;
       let totalWithdrawalInserted = 0;
