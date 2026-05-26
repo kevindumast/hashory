@@ -1,7 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { optionalUserId } from "./auth";
 
-export const ingestBatch = mutation({
+export const ingestBatch = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     orders: v.array(
@@ -35,9 +36,7 @@ export const ingestBatch = mutation({
         )
         .first();
 
-      if (existing) {
-        continue;
-      }
+      if (existing) continue;
 
       await ctx.db.insert("orders", {
         integrationId: args.integrationId,
@@ -78,23 +77,22 @@ export const listByIntegration = query({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
 
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
     if (integrations.length === 0) return [];
 
-    const integrationMap = new Map(
-      integrations.map((i) => [i._id, i])
-    );
+    const integrationMap = new Map(integrations.map((i) => [i._id, i]));
 
     const ordersPerIntegration = await Promise.all(
       integrations.map((integration) => {
@@ -106,10 +104,7 @@ export const listByUser = query({
       })
     );
 
-    const sorted = ordersPerIntegration
-      .flat()
-      .sort((a, b) => b.executedAt - a.executedAt);
-
+    const sorted = ordersPerIntegration.flat().sort((a, b) => b.executedAt - a.executedAt);
     const limited = args.limit ? sorted.slice(0, args.limit) : sorted;
 
     return limited.map((order) => {

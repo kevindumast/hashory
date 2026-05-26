@@ -1,6 +1,7 @@
 import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { optionalUserId } from "./auth";
 
 // ─── Query: toutes les balances d'une intégration ───────────────────────────
 
@@ -16,15 +17,16 @@ export const getByIntegration = query({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
 
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
     if (integrations.length === 0) {

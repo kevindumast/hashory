@@ -41,10 +41,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.agent
-.agents
-.claude
+.vercel/
+.agent/
+.agents/
+.claude/
 memory/
 test-binance-api.ts
 /skills

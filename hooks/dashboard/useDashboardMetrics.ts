@@ -338,49 +338,49 @@ export function useDashboardMetrics(refreshToken: number) {
   const trades = useQuery(
     api.trades.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, limit: 1000, refreshToken }
+      ? { limit: 1000, refreshToken }
       : "skip"
   );
 
   const orders = useQuery(
     api.orders.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, refreshToken }
+      ? { refreshToken }
       : "skip"
   );
 
   const deposits = useQuery(
     api.deposits.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, limit: 1000, refreshToken }
+      ? { limit: 1000, refreshToken }
       : "skip"
   );
 
   const withdrawals = useQuery(
     api.withdrawals.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, limit: 1000, refreshToken }
+      ? { limit: 1000, refreshToken }
       : "skip"
   );
 
   const fiatTransactions = useQuery(
     api.fiatTransactions.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id }
+      ? {}
       : "skip"
   );
 
   const balances = useQuery(
     api.balances.listByUser,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, refreshToken }
+      ? { refreshToken }
       : "skip"
   );
 
   const syncScopes = useQuery(
     api.integrations.listSyncScopes,
     isConvexConfigured && isLoaded && user
-      ? { clerkId: user.id, dataset: DATASET_SPOT_TRADES, refreshToken }
+      ? { dataset: DATASET_SPOT_TRADES, refreshToken }
       : "skip"
   );
 

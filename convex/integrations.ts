@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
@@ -48,26 +48,25 @@ export const list = query({
   },
 });
 
+// Public: retourne les scopes de sync de l'utilisateur authentifié
 export const listSyncScopes = query({
   args: {
-    clerkId: v.string(),
     dataset: v.optional(v.string()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
+    const clerkUserId = await optionalUserId(ctx);
+    if (!clerkUserId) return [];
 
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkUserId))
       .collect();
 
-    if (integrations.length === 0) {
-      return [];
-    }
+    if (integrations.length === 0) return [];
 
     const scopes = [];
-
     for (const integration of integrations) {
       const states = await ctx.db
         .query("integrationSyncStates")
@@ -75,9 +74,7 @@ export const listSyncScopes = query({
         .collect();
 
       for (const state of states) {
-        if (args.dataset && state.dataset !== args.dataset) {
-          continue;
-        }
+        if (args.dataset && state.dataset !== args.dataset) continue;
         scopes.push({
           integrationId: integration._id,
           dataset: state.dataset,
@@ -86,7 +83,41 @@ export const listSyncScopes = query({
         });
       }
     }
+    return scopes;
+  },
+});
 
+// Interne: même chose mais accepte clerkId explicite (pour les actions serveur planifiées)
+export const listSyncScopesInternal = internalQuery({
+  args: {
+    clerkId: v.string(),
+    dataset: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .collect();
+
+    if (integrations.length === 0) return [];
+
+    const scopes = [];
+    for (const integration of integrations) {
+      const states = await ctx.db
+        .query("integrationSyncStates")
+        .withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", integration._id))
+        .collect();
+
+      for (const state of states) {
+        if (args.dataset && state.dataset !== args.dataset) continue;
+        scopes.push({
+          integrationId: integration._id,
+          dataset: state.dataset,
+          scope: state.scope,
+          updatedAt: state.updatedAt,
+        });
+      }
+    }
     return scopes;
   },
 });
@@ -154,11 +185,24 @@ export const upsert = mutation({
   },
 });
 
+// Public: retourne l'intégration sans les credentials (vérifie la propriété)
 export const getById = query({
   args: { integrationId: v.id("integrations") },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = await ctx.db.get(args.integrationId);
-    return integration ?? null;
+    if (!integration || integration.clerkUserId !== clerkUserId) return null;
+    // Ne jamais exposer les credentials chiffrés au client
+    const { encryptedCredentials: _creds, ...safe } = integration;
+    return safe;
+  },
+});
+
+// Interne: retourne l'intégration complète avec credentials (pour les actions serveur)
+export const getByIdInternal = internalQuery({
+  args: { integrationId: v.id("integrations") },
+  handler: async (ctx, args) => {
+    return (await ctx.db.get(args.integrationId)) ?? null;
   },
 });
 
@@ -169,6 +213,10 @@ export const getSyncState = query({
     scope: v.string(),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
+    const integration = await ctx.db.get(args.integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) return null;
+
     const record = await ctx.db
       .query("integrationSyncStates")
       .withIndex("by_integration_dataset_scope", (q) =>
@@ -176,25 +224,21 @@ export const getSyncState = query({
       )
       .first();
 
-    if (!record) {
-      return null;
-    }
+    if (!record) return null;
 
     let cursor: Record<string, unknown> | null = null;
     try {
       cursor = JSON.parse(record.cursor);
-    } catch (error) {
+    } catch {
       cursor = null;
     }
 
-    return {
-      ...record,
-      cursor,
-    };
+    return { ...record, cursor };
   },
 });
 
-export const updateSyncState = mutation({
+// Interne: mise à jour du curseur de sync (appelé depuis les actions serveur)
+export const updateSyncState = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     dataset: v.string(),
@@ -213,10 +257,7 @@ export const updateSyncState = mutation({
       .first();
 
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        cursor: cursorJson,
-        updatedAt: now,
-      });
+      await ctx.db.patch(existing._id, { cursor: cursorJson, updatedAt: now });
     } else {
       await ctx.db.insert("integrationSyncStates", {
         integrationId: args.integrationId,
@@ -227,11 +268,7 @@ export const updateSyncState = mutation({
       });
     }
 
-    await ctx.db.patch(args.integrationId, {
-      lastSyncedAt: now,
-      updatedAt: now,
-    });
-
+    await ctx.db.patch(args.integrationId, { lastSyncedAt: now, updatedAt: now });
     return { status: "ok", updatedAt: now };
   },
 });
@@ -241,15 +278,17 @@ export const purgeAllData = mutation({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
+    const integration = await ctx.db.get(args.integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
+    }
+
     const id = args.integrationId;
 
-    async function purgeTable(
-      queryFn: () => Promise<Array<{ _id: any }>>
-    ) {
+    async function purgeTable(queryFn: () => Promise<Array<{ _id: any }>>) {
       const rows = await queryFn();
-      for (const row of rows) {
-        await ctx.db.delete(row._id);
-      }
+      for (const row of rows) await ctx.db.delete(row._id);
       return rows.length;
     }
 
@@ -287,15 +326,17 @@ export const deleteIntegration = mutation({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
+    const integration = await ctx.db.get(args.integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
+    }
+
     const id = args.integrationId;
 
-    async function purgeTable(
-      queryFn: () => Promise<Array<{ _id: any }>>
-    ) {
+    async function purgeTable(queryFn: () => Promise<Array<{ _id: any }>>) {
       const rows = await queryFn();
-      for (const row of rows) {
-        await ctx.db.delete(row._id);
-      }
+      for (const row of rows) await ctx.db.delete(row._id);
       return rows.length;
     }
 
@@ -325,12 +366,12 @@ export const deleteIntegration = mutation({
     );
 
     await ctx.db.delete(id);
-
     return { deleted: true };
   },
 });
 
-export const deleteAllSyncStates = mutation({
+// Interne: suppression des curseurs (appelé depuis les actions serveur)
+export const deleteAllSyncStates = internalMutation({
   args: {
     integrationId: v.id("integrations"),
   },
@@ -345,26 +386,24 @@ export const deleteAllSyncStates = mutation({
       await ctx.db.delete(state._id);
       deleted++;
     }
-
     return { deleted };
   },
 });
 
-export const updateSyncStatus = mutation({
+// Interne: mise à jour du statut de sync (appelé depuis les actions serveur)
+export const updateSyncStatus = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     syncStatus: v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error")),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.integrationId, {
-      syncStatus: args.syncStatus,
-      updatedAt: Date.now(),
-    });
+    await ctx.db.patch(args.integrationId, { syncStatus: args.syncStatus, updatedAt: Date.now() });
     return { status: "ok" };
   },
 });
 
-export const updateMetadata = mutation({
+// Interne: mise à jour des métadonnées (appelé depuis les actions serveur)
+export const updateMetadata = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     accountCreatedAt: v.optional(v.number()),
@@ -372,15 +411,9 @@ export const updateMetadata = mutation({
   },
   handler: async (ctx, args) => {
     const payload: Record<string, unknown> = {};
-    if (args.accountCreatedAt !== undefined) {
-      payload.accountCreatedAt = args.accountCreatedAt;
-    }
-    if (args.lastSyncedAt !== undefined) {
-      payload.lastSyncedAt = args.lastSyncedAt;
-    }
-    if (Object.keys(payload).length === 0) {
-      return { status: "noop" };
-    }
+    if (args.accountCreatedAt !== undefined) payload.accountCreatedAt = args.accountCreatedAt;
+    if (args.lastSyncedAt !== undefined) payload.lastSyncedAt = args.lastSyncedAt;
+    if (Object.keys(payload).length === 0) return { status: "noop" };
     await ctx.db.patch(args.integrationId, payload);
     return { status: "ok" };
   },

@@ -1,7 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { optionalUserId } from "./auth";
 
-export const ingestBatch = mutation({
+export const ingestBatch = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     trades: v.array(
@@ -60,14 +61,17 @@ export const ingestBatch = mutation({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    void args.refreshToken;
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
+
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
     if (integrations.length === 0) return [];
@@ -82,10 +86,7 @@ export const listByUser = query({
       })
     );
 
-    const sorted = tradesPerIntegration
-      .flat()
-      .sort((a, b) => b.executedAt - a.executedAt);
-
+    const sorted = tradesPerIntegration.flat().sort((a, b) => b.executedAt - a.executedAt);
     return args.limit ? sorted.slice(0, args.limit) : sorted;
   },
 });
