@@ -35,7 +35,6 @@ export function ClerkUserSync() {
           (fallbackName.length > 0 ? fallbackName : undefined);
 
         await upsertUser({
-          clerkId: user.id,
           email: user.primaryEmailAddress?.emailAddress ?? undefined,
           displayName,
           avatarUrl: user.imageUrl ?? undefined,

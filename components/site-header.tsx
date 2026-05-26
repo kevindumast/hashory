@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { HashoryLogo } from "@/components/hashory-logo";
 
 const navLinks = [
   { href: "/#features", label: "Features" },
@@ -33,10 +34,8 @@ export function SiteHeader() {
             href="/"
             className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground sm:text-lg"
           >
-            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-primary/10 text-sm font-bold text-primary shadow-sm">
-              T
-            </span>
-            <span className="leading-none">Termenva</span>
+            <HashoryLogo size={32} />
+            <span className="leading-none">Hashory</span>
           </Link>
           <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground md:flex">
             {navLinks.map((link) => (

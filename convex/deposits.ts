@@ -1,8 +1,9 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
+import { optionalUserId } from "./auth";
 
-export const getByDepositId = query({
+export const getByDepositId = internalQuery({
   args: {
     integrationId: v.id("integrations"),
     depositId: v.string(),
@@ -20,23 +21,22 @@ export const getByDepositId = query({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
 
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
-    if (integrations.length === 0) {
-      return [];
-    }
+    if (integrations.length === 0) return [];
 
-    const integrationMap = new Map(integrations.map((integration) => [integration._id, integration]));
+    const integrationMap = new Map(integrations.map((i) => [i._id, i]));
     const records: Array<{
       _id: Id<"deposits">;
       integrationId: Id<"integrations">;
@@ -106,16 +106,13 @@ export const listAssetsByIntegration = query({
 
     const assets = new Set<string>();
     for (const deposit of deposits) {
-      if (deposit.coin) {
-        assets.add(deposit.coin.toUpperCase());
-      }
+      if (deposit.coin) assets.add(deposit.coin.toUpperCase());
     }
-
     return Array.from(assets);
   },
 });
 
-export const insert = mutation({
+export const insert = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     deposit: v.object({
@@ -141,9 +138,7 @@ export const insert = mutation({
       )
       .first();
 
-    if (existing) {
-      return existing._id;
-    }
+    if (existing) return existing._id;
 
     return await ctx.db.insert("deposits", {
       integrationId: args.integrationId,

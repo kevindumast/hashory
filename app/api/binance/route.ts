@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { fetchAccountSnapshot, fetchTradeHistory, FetchTradesOptions } from "@/lib/binance";
 
 type RequestPayload =
@@ -10,6 +11,11 @@ type RequestPayload =
     } & FetchTradesOptions);
 
 export async function POST(request: Request) {
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const apiKey = process.env.BINANCE_API_KEY;
   const apiSecret = process.env.BINANCE_API_SECRET;
 

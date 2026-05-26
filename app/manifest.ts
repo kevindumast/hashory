@@ -2,10 +2,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Termenva",
-    short_name: "Termenva",
+    name: "Hashory",
+    short_name: "Hashory",
     description:
-      "Predict. Optimize. Master your crypto portfolio with Termenva's real-time intelligence across devices.",
+      "Predict. Optimize. Master your crypto portfolio with Hashory's real-time intelligence across devices.",
     start_url: "/",
     display: "standalone",
     background_color: "#f7f8fb",
@@ -16,13 +16,13 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     icons: [
       {
-        src: "/icons/termenva-icon.svg",
+        src: "/icons/hashory-icon.svg",
         type: "image/svg+xml",
         sizes: "any",
         purpose: "any",
       },
       {
-        src: "/icons/termenva-icon-maskable.svg",
+        src: "/icons/hashory-icon-maskable.svg",
         type: "image/svg+xml",
         sizes: "any",
         purpose: "maskable",

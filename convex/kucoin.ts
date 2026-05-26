@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
 import Base64 from "crypto-js/enc-base64";
 import { decryptSecret } from "./utils/encryption";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 
@@ -285,7 +285,7 @@ async function syncFills(
     } while (true);
 
     if (batch.length > 0) {
-      const result = await ctx.runMutation(api.trades.ingestBatch, {
+      const result = await ctx.runMutation(internal.trades.ingestBatch, {
         integrationId,
         trades: batch,
       });
@@ -295,7 +295,7 @@ async function syncFills(
     await sleep(DELAY_MS);
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_FILLS,
     scope: "all",
@@ -515,14 +515,14 @@ async function syncConverts(
     } while (true);
 
     if (tradesBatch.length > 0) {
-      const result = await ctx.runMutation(api.trades.ingestBatch, {
+      const result = await ctx.runMutation(internal.trades.ingestBatch, {
         integrationId,
         trades: tradesBatch,
       });
       totalInserted += result.inserted;
     }
     if (convertsBatch.length > 0) {
-      await ctx.runMutation(api.convertTrades.ingestBatch, {
+      await ctx.runMutation(internal.convertTrades.ingestBatch, {
         integrationId,
         trades: convertsBatch,
       });
@@ -531,7 +531,7 @@ async function syncConverts(
     await sleep(DELAY_MS);
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_CONVERTS,
     scope: "all",
@@ -589,7 +589,7 @@ async function syncDeposits(
           ? `kucoin-${item.walletTxId}`
           : `kucoin-dep-${item.currency}-${item.createdAt}`;
 
-        await ctx.runMutation(api.deposits.insert, {
+        await ctx.runMutation(internal.deposits.insert, {
           integrationId,
           deposit: {
             depositId,
@@ -616,7 +616,7 @@ async function syncDeposits(
     await sleep(DELAY_MS);
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_DEPOSITS,
     scope: "all",
@@ -669,7 +669,7 @@ async function syncWithdrawals(
         if (item.createdAt > latestTs) latestTs = item.createdAt;
         if (earliest === null || item.createdAt < earliest) earliest = item.createdAt;
 
-        await ctx.runMutation(api.withdrawals.insert, {
+        await ctx.runMutation(internal.withdrawals.insert, {
           integrationId,
           withdrawal: {
             withdrawId: item.id,
@@ -697,7 +697,7 @@ async function syncWithdrawals(
     await sleep(DELAY_MS);
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_WITHDRAWALS,
     scope: "all",
@@ -714,7 +714,7 @@ export const syncAccount = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as {
       provider: string;
@@ -732,7 +732,7 @@ export const syncAccount = action({
     const decryptedSecret = decryptSecret(apiSecret);
     const decryptedPassphrase = decryptSecret(encPassphrase);
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -758,20 +758,20 @@ export const syncAccount = action({
       );
       const accountCreatedAt = candidates.length > 0 ? Math.min(...candidates) : null;
 
-      await ctx.runMutation(api.integrations.updateMetadata, {
+      await ctx.runMutation(internal.integrations.updateMetadata, {
         integrationId: args.integrationId,
         accountCreatedAt: accountCreatedAt ?? undefined,
         lastSyncedAt: Date.now(),
       });
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return { deposits, withdrawals, fills, converts, accountCreatedAt };
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -785,7 +785,7 @@ export const syncConvertsOnly = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as {
       provider: string;
@@ -803,7 +803,7 @@ export const syncConvertsOnly = action({
     const decryptedSecret = decryptSecret(apiSecret);
     const decryptedPassphrase = decryptSecret(encPassphrase);
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -816,14 +816,14 @@ export const syncConvertsOnly = action({
         passphrase: decryptedPassphrase,
       });
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return converts;
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });

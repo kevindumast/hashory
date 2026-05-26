@@ -1,13 +1,75 @@
 "use client";
 
+import { useMemo, useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { isConvexConfigured } from "@/convex/client";
+import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
 import { useIntegrations } from "@/hooks/dashboard/useIntegrations";
 import { SeasonalReturnsView } from "@/app/dashboard/sections/seasonal/SeasonalReturnsView";
 import { CalendarDays } from "lucide-react";
 
+const DAY_MS = 86_400_000;
+const QUOTE_ASSETS = ["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI","BTC","ETH","BNB","EUR","GBP","TRY","AUD","CAD","BRL","ARS"];
+const STABLECOINS = new Set(["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI"]);
+
+function extractBase(symbol: string): string {
+  const upper = symbol.toUpperCase();
+  for (const q of QUOTE_ASSETS) {
+    if (upper.endsWith(q)) { const b = upper.slice(0, upper.length - q.length); if (b) return b; }
+  }
+  return upper;
+}
+
 export function SeasonalPageClient() {
+  const [selectedIntegration, setSelectedIntegration] = useState<string>("all");
+
+  const { snapshots, isComputing } = usePortfolioSnapshots();
+  const { trades, isLoading } = useDashboardMetrics(0);
   const { integrations } = useIntegrations();
-  const { historySeries, trades, isLoading } = useDashboardMetrics(0);
+
+  // Detect DCA-only integrations (no sells)
+  const isDcaOnly = useMemo(() => {
+    if (selectedIntegration === "all") return false;
+    return !trades.some((t) => String(t.integrationId) === selectedIntegration && t.side === "SELL");
+  }, [selectedIntegration, trades]);
+
+  // Symbols held by selected DCA integration (non-stablecoin bases)
+  const dcaSymbols = useMemo(() => {
+    if (!isDcaOnly || selectedIntegration === "all") return [];
+    const syms = new Set<string>();
+    trades
+      .filter((t) => String(t.integrationId) === selectedIntegration)
+      .forEach((t) => {
+        const base = t.tradeType === "CONVERT" && t.toAsset
+          ? t.toAsset.toUpperCase()
+          : extractBase(t.symbol);
+        if (!STABLECOINS.has(base)) syms.add(base);
+      });
+    return Array.from(syms);
+  }, [isDcaOnly, selectedIntegration, trades]);
+
+  // Date range for price query
+  const { fromDay, toDay } = useMemo(() => {
+    if (!isDcaOnly || selectedIntegration === "all" || trades.length === 0) return { fromDay: 0, toDay: 0 };
+    const integTrades = trades.filter((t) => String(t.integrationId) === selectedIntegration);
+    if (integTrades.length === 0) return { fromDay: 0, toDay: 0 };
+    const minTs = Math.min(...integTrades.map((t) => t.executedAt));
+    return {
+      fromDay: Math.floor(minTs / DAY_MS) * DAY_MS,
+      toDay: Math.floor(Date.now() / DAY_MS) * DAY_MS,
+    };
+  }, [isDcaOnly, selectedIntegration, trades]);
+
+  const dcaPriceHistory = useQuery(
+    api.portfolioSnapshots.listSymbolPrices,
+    isConvexConfigured && isDcaOnly && dcaSymbols.length > 0 && fromDay > 0
+      ? { symbols: dcaSymbols, fromDay, toDay }
+      : "skip"
+  );
+
+  const loading = (isComputing && snapshots.length === 0) || isLoading;
 
   return (
     <div className="p-6 md:p-9 space-y-6">
@@ -23,15 +85,19 @@ export function SeasonalPageClient() {
         </div>
       </div>
 
-      {isLoading ? (
+      {loading ? (
         <div className="flex h-64 items-center justify-center text-muted-foreground text-sm">
           Chargement des données...
         </div>
       ) : (
         <SeasonalReturnsView
-          historySeries={historySeries}
+          snapshots={snapshots}
           integrations={integrations}
           allTrades={trades}
+          selectedIntegration={selectedIntegration}
+          onSelectIntegration={setSelectedIntegration}
+          isDcaOnly={isDcaOnly}
+          dcaPriceHistory={dcaPriceHistory ?? null}
         />
       )}
     </div>

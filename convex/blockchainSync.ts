@@ -1,5 +1,7 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { requireUserId } from "./auth";
+import { internal } from "./_generated/api";
 
 const depositInput = v.object({
   depositId: v.string(),
@@ -29,6 +31,14 @@ export const bulkInsertTransactions = mutation({
     withdrawals: v.array(withdrawalInput),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
+    const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
+      integrationId: args.integrationId,
+    });
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
+    }
+
     const now = Date.now();
     let depositsInserted = 0;
     let withdrawalsInserted = 0;
