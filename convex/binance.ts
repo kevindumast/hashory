@@ -1,4 +1,5 @@
 import { action } from "./_generated/server";
+import { requireUserId } from "./auth";
 import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
 import { decryptSecret } from "./utils/encryption";
@@ -400,12 +401,16 @@ export const getUserAssets = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
+    }
+    const clerkUserId = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
     }
     if (integration.provider !== "binance") {
       throw new Error("Cette intégration n'est pas de type Binance.");
@@ -493,19 +498,23 @@ export const syncAccount = action({
     ),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
+    const clerkUserId = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
+    }
     if (integration.provider !== "binance") {
       throw new Error("Cette intégration n'est pas de type Binance.");
     }
 
     // Mark as syncing in DB
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -598,7 +607,7 @@ export const syncAccount = action({
       integrationId: args.integrationId,
     });
 
-    await ctx.runMutation(api.integrations.updateMetadata, {
+    await ctx.runMutation(internal.integrations.updateMetadata, {
       integrationId: args.integrationId,
       accountCreatedAt: accountCreatedAt ?? undefined,
       lastSyncedAt: Date.now(),
@@ -615,7 +624,7 @@ export const syncAccount = action({
     };
 
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -632,12 +641,16 @@ export const syncSpotTradesOnly = action({
     startTime: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
+    }
+    const clerkUserIdSpot = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserIdSpot) {
+      throw new Error("Not authorized");
     }
 
     const { apiKey, apiSecret } = integration.encryptedCredentials;
@@ -656,14 +669,14 @@ export const syncSpotTradesOnly = action({
       console.log(`📊 Spot trades: ${trades.fetched} fetched, ${trades.inserted} inserted`);
 
       // Spot trades is the last step — mark sync as complete
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return trades;
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -678,19 +691,23 @@ export const syncFiatOrdersOnly = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
+    const clerkUserIdFiat = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserIdFiat) {
+      throw new Error("Not authorized");
+    }
 
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -718,14 +735,14 @@ export const syncFiatOrdersOnly = action({
       });
       console.log(`📲 Fiat (all types): ${result.fetched} fetched, ${result.inserted} inserted`);
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return result;
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -740,19 +757,23 @@ export const syncDustOnly = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
+    const clerkUserIdDust = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserIdDust) {
+      throw new Error("Not authorized");
+    }
 
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -765,14 +786,14 @@ export const syncDustOnly = action({
       });
       console.log(`🧹 Dust only: ${result.fetched} fetched, ${result.inserted} inserted`);
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return result;
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -788,19 +809,23 @@ export const syncOrdersOnly = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = (await ctx.runQuery(api.integrations.getById, {
+    const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as (IntegrationRecord & { encryptedCredentials: { apiKey: string; apiSecret: string } }) | null;
 
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
+    const clerkUserIdOrders = await requireUserId(ctx);
+    if (integration.clerkUserId !== clerkUserIdOrders) {
+      throw new Error("Not authorized");
+    }
 
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -844,7 +869,7 @@ export const syncOrdersOnly = action({
 
       // Also add symbols from spot_trades scopes and detected balances
       const clerkUserId = integration.clerkUserId;
-      const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(api.integrations.listSyncScopes, {
+      const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(internal.integrations.listSyncScopesInternal, {
         clerkId: clerkUserId,
         dataset: DATASET_SPOT_TRADES,
       });
@@ -949,7 +974,7 @@ export const syncOrdersOnly = action({
               };
             });
 
-            const result = await ctx.runMutation(api.orders.ingestBatch, {
+            const result = await ctx.runMutation(internal.orders.ingestBatch, {
               integrationId: args.integrationId,
               orders: formatted,
             });
@@ -967,14 +992,14 @@ export const syncOrdersOnly = action({
 
       console.log(`📋 Orders sync: ${totalFetched} fetched, ${totalInserted} inserted`);
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
 
       return { fetched: totalFetched, inserted: totalInserted };
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -1017,7 +1042,7 @@ async function detectSymbols(
 
   const balances = await fetchAccountBalances(params.apiKey, params.apiSecret);
 
-  const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(api.integrations.listSyncScopes, {
+  const existingScopes: Array<{ integrationId: Id<"integrations">; dataset: string; scope: string; updatedAt: number }> = await ctx.runQuery(internal.integrations.listSyncScopesInternal, {
     clerkId: params.clerkUserId,
     dataset: DATASET_SPOT_TRADES,
   });
@@ -1234,14 +1259,14 @@ async function backfillConvertTrades(
     fetched += normalized.length;
 
     const payload = normalized.map((trade) => trade.payload);
-    const result = await ctx.runMutation(api.trades.ingestBatch, {
+    const result = await ctx.runMutation(internal.trades.ingestBatch, {
       integrationId: params.integrationId,
       trades: payload,
     });
     inserted += result.inserted;
 
     // Also insert into dedicated convertTrades table
-    await ctx.runMutation(api.convertTrades.ingestBatch, {
+    await ctx.runMutation(internal.convertTrades.ingestBatch, {
       integrationId: params.integrationId,
       trades: normalized.map((n) => ({
         providerTradeId: n.payload.providerTradeId,
@@ -1338,13 +1363,13 @@ async function syncConvertTradesForward(
 
 
     const payload = normalized.map((trade) => trade.payload);
-    const result = await ctx.runMutation(api.trades.ingestBatch, {
+    const result = await ctx.runMutation(internal.trades.ingestBatch, {
       integrationId: params.integrationId,
       trades: payload,
     });
 
     // Also insert into dedicated convertTrades table
-    await ctx.runMutation(api.convertTrades.ingestBatch, {
+    await ctx.runMutation(internal.convertTrades.ingestBatch, {
       integrationId: params.integrationId,
       trades: normalized.map((n) => ({
         providerTradeId: n.payload.providerTradeId,
@@ -1546,7 +1571,7 @@ async function processFiatBatch(
     if (normalized.length > 0) {
       f += normalized.length;
       const payload = normalized.map((o) => o.payload);
-      const result = await ctx.runMutation(api.trades.ingestBatch, {
+      const result = await ctx.runMutation(internal.trades.ingestBatch, {
         integrationId: params.integrationId,
         trades: payload,
       });
@@ -1583,7 +1608,7 @@ async function processFiatBatch(
       console.log(`      orderId=${orderId} status="${record.status}" fiatAmount=${fiatAmount} fiatCurrency=${fiatCurrency}`);
 
       f += 1;
-      await ctx.runMutation(api.fiatTransactions.insert, {
+      await ctx.runMutation(internal.fiatTransactions.insert, {
         integrationId: params.integrationId,
         tx: {
           orderId,
@@ -1856,12 +1881,12 @@ async function backfillDeposits(
 
     let newInserts = 0;
     for (const deposit of normalized) {
-      const existing = await ctx.runQuery(api.deposits.getByDepositId, {
+      const existing = await ctx.runQuery(internal.deposits.getByDepositId, {
         integrationId: params.integrationId,
         depositId: deposit.id,
       });
       if (!existing) {
-        await ctx.runMutation(api.deposits.insert, {
+        await ctx.runMutation(internal.deposits.insert, {
           integrationId: params.integrationId,
           deposit: {
             depositId: deposit.id,
@@ -1963,12 +1988,12 @@ async function syncDepositsForward(
 
     let newInserts = 0;
     for (const deposit of normalized) {
-      const existing = await ctx.runQuery(api.deposits.getByDepositId, {
+      const existing = await ctx.runQuery(internal.deposits.getByDepositId, {
         integrationId: params.integrationId,
         depositId: deposit.id,
       });
       if (!existing) {
-        await ctx.runMutation(api.deposits.insert, {
+        await ctx.runMutation(internal.deposits.insert, {
           integrationId: params.integrationId,
           deposit: {
             depositId: deposit.id,
@@ -2151,12 +2176,12 @@ async function backfillWithdrawals(
 
     let newInserts = 0;
     for (const withdrawal of normalized) {
-      const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
+      const existing = await ctx.runQuery(internal.withdrawals.getByWithdrawId, {
         integrationId: params.integrationId,
         withdrawId: withdrawal.id,
       });
       if (!existing) {
-        await ctx.runMutation(api.withdrawals.insert, {
+        await ctx.runMutation(internal.withdrawals.insert, {
           integrationId: params.integrationId,
           withdrawal: {
             withdrawId: withdrawal.id,
@@ -2258,12 +2283,12 @@ async function syncWithdrawalsForward(
 
     let newInserts = 0;
     for (const withdrawal of normalized) {
-      const existing = await ctx.runQuery(api.withdrawals.getByWithdrawId, {
+      const existing = await ctx.runQuery(internal.withdrawals.getByWithdrawId, {
         integrationId: params.integrationId,
         withdrawId: withdrawal.id,
       });
       if (!existing) {
-        await ctx.runMutation(api.withdrawals.insert, {
+        await ctx.runMutation(internal.withdrawals.insert, {
           integrationId: params.integrationId,
           withdrawal: {
             withdrawId: withdrawal.id,
@@ -2607,7 +2632,7 @@ async function syncSymbolTrades(
       latestTrade = latestTrade === null ? trade.executedAt : Math.max(latestTrade, trade.executedAt);
     });
 
-    const result = await ctx.runMutation(api.trades.ingestBatch, {
+    const result = await ctx.runMutation(internal.trades.ingestBatch, {
       integrationId: params.integrationId,
       trades: formattedTrades,
     });
@@ -2632,7 +2657,7 @@ async function syncSymbolTrades(
     lastTradeTime = Date.now();
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId: params.integrationId,
     dataset: DATASET_SPOT_TRADES,
     scope,
@@ -2805,7 +2830,7 @@ async function syncDustConversions(
     return { fetched: 0, inserted: 0 };
   }
 
-  const result = await ctx.runMutation(api.trades.ingestBatch, {
+  const result = await ctx.runMutation(internal.trades.ingestBatch, {
     integrationId: params.integrationId,
     trades,
   });
@@ -2921,7 +2946,7 @@ async function loadConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations
 }
 
 async function saveConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: ConvertCursor) {
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_CONVERT_TRADES,
     scope: "default",
@@ -2957,7 +2982,7 @@ async function loadFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">)
 }
 
 async function saveFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: FiatCursor) {
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_FIAT_ORDERS,
     scope: "default",
@@ -2991,7 +3016,7 @@ async function loadDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations
 }
 
 async function saveDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: DepositCursor) {
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_DEPOSITS,
     scope: "default",
@@ -3025,7 +3050,7 @@ async function loadWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrati
 }
 
 async function saveWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrations">, cursor: WithdrawalCursor) {
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset: DATASET_WITHDRAWALS,
     scope: "default",

@@ -564,7 +564,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                   className="h-9 text-sm"
                 />
                 <p className="text-[11px] text-muted-foreground leading-tight">
-                  Visible uniquement dans Termenva pour distinguer vos connexions.
+                  Visible uniquement dans Hashory pour distinguer vos connexions.
                 </p>
               </div>
 
@@ -751,7 +751,7 @@ function ConnectProviderDialogPlaceholder({ open, onOpenChange }: ConnectProvide
           <DialogTitle>Intégrations indisponibles</DialogTitle>
           <DialogDescription>
             Configurez `NEXT_PUBLIC_CONVEX_URL` et déployez Convex pour activer la connexion des plateformes dans
-            Termenva.
+            Hashory.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm text-muted-foreground">

@@ -33,12 +33,12 @@ export function usePortfolioSnapshots(): {
 
   const snapshots = useQuery(
     api.portfolioSnapshots.listByUser,
-    isConvexConfigured && isLoaded && clerkId ? { clerkId } : "skip"
+    isConvexConfigured && isLoaded && clerkId ? {} : "skip"
   );
 
   const state = useQuery(
     api.portfolioSnapshots.getState,
-    isConvexConfigured && isLoaded && clerkId ? { clerkId } : "skip"
+    isConvexConfigured && isLoaded && clerkId ? {} : "skip"
   );
 
   const recompute = useAction(api.portfolioSnapshots.recomputeForUser);
@@ -56,7 +56,7 @@ export function usePortfolioSnapshots(): {
     lastTriggerRef.current = now;
 
     setIsComputing(true);
-    recompute({ clerkId })
+    recompute({})
       .catch((err) => console.error("[snapshots] recompute failed", err))
       .finally(() => setIsComputing(false));
   }, [clerkId, state, recompute]);

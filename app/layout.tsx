@@ -16,25 +16,25 @@ const body = Sora({
 });
 
 export const metadata: Metadata = {
-  title: "Termenva",
+  title: "Hashory",
   description:
-    "Predict. Optimize. Master your crypto portfolio with Termenva's real-time intelligence.",
-  applicationName: "Termenva",
+    "Predict. Optimize. Master your crypto portfolio with Hashory's real-time intelligence.",
+  applicationName: "Hashory",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
-      { url: "/icons/termenva-icon.svg", type: "image/svg+xml" },
+      { url: "/icons/hashory-icon.svg", type: "image/svg+xml" },
     ],
-    apple: "/icons/termenva-icon-maskable.svg",
-    shortcut: "/icons/termenva-icon.svg",
+    apple: "/icons/hashory-icon-maskable.svg",
+    shortcut: "/icons/hashory-icon.svg",
     other: [
-      { rel: "mask-icon", url: "/icons/termenva-icon-maskable.svg", color: "#2563eb" },
+      { rel: "mask-icon", url: "/icons/hashory-icon-maskable.svg", color: "#2563eb" },
     ],
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Termenva",
+    title: "Hashory",
   },
   formatDetection: {
     telephone: false,

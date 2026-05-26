@@ -1,6 +1,6 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 
 const MEMPOOL_API_BASE = "https://mempool.space/api";
@@ -39,7 +39,7 @@ export const syncBitcoinWallet = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = await ctx.runQuery(api.integrations.getById, {
+    const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
@@ -56,7 +56,7 @@ export const syncBitcoinWallet = action({
       throw new Error("Wallet address not found");
     }
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -193,19 +193,19 @@ export const syncBitcoinWallet = action({
         }
       }
 
-      await ctx.runMutation(api.integrations.updateSyncState, {
+      await ctx.runMutation(internal.integrations.updateSyncState, {
         integrationId: args.integrationId,
         dataset,
         scope,
         cursor: { lastTxId: newFirstTxId } as SyncCursor,
       });
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });

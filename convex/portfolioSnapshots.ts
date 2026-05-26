@@ -2,6 +2,7 @@ import { action, internalMutation, internalQuery, query } from "./_generated/ser
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
+import { optionalUserId, requireUserId } from "./auth";
 
 const DAY_MS = 86_400_000;
 
@@ -27,14 +28,43 @@ function extractBaseAsset(symbol: string): string {
   return upper;
 }
 
+// ─── Public query: price history for given symbols ────────────────────
+
+export const listSymbolPrices = query({
+  args: {
+    symbols: v.array(v.string()),
+    fromDay: v.number(),
+    toDay: v.number(),
+  },
+  handler: async (ctx, { symbols, fromDay, toDay }) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return {} as Record<string, { dayUtc: number; closeUsd: number }[]>;
+    const result: Record<string, { dayUtc: number; closeUsd: number }[]> = {};
+    for (const symbol of symbols) {
+      const upper = symbol.toUpperCase();
+      const rows = await ctx.db
+        .query("tokenPriceHistory")
+        .withIndex("by_symbol_day", (q) =>
+          q.eq("symbol", upper).gte("dayUtc", fromDay).lte("dayUtc", toDay)
+        )
+        .collect();
+      result[upper] = rows
+        .map((r) => ({ dayUtc: r.dayUtc, closeUsd: r.closeUsd }))
+        .sort((a, b) => a.dayUtc - b.dayUtc);
+    }
+    return result;
+  },
+});
+
 // ─── Public query: read user snapshots ────────────────────────────────
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     refreshToken: v.optional(v.number()),
   },
-  handler: async (ctx, { clerkId }) => {
+  handler: async (ctx) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
     const snapshots = await ctx.db
       .query("portfolioSnapshots")
       .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
@@ -44,8 +74,10 @@ export const listByUser = query({
 });
 
 export const getState = query({
-  args: { clerkId: v.string() },
-  handler: async (ctx, { clerkId }) => {
+  args: {},
+  handler: async (ctx) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return null;
     return await ctx.db
       .query("portfolioSnapshotState")
       .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
@@ -549,14 +581,13 @@ function buildSnapshots(
 
 export const recomputeForUser = action({
   args: {
-    clerkId: v.string(),
-    /** Force a full rebuild even if nothing changed since last compute */
     force: v.optional(v.boolean()),
   },
   handler: async (
     ctx,
-    { clerkId, force }
+    { force }
   ): Promise<{ status: string; days?: number; backfilled?: number }> => {
+    const clerkId = await requireUserId(ctx);
     // 1. Read current state to know if a rebuild is needed
     const state: Doc<"portfolioSnapshotState"> | null = await ctx.runQuery(
       internal.portfolioSnapshots.getStateInternal,

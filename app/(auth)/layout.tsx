@@ -32,9 +32,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         {/* Logo */}
         <Link href="/" className="relative flex items-center gap-2.5">
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-primary">
-            T
+            H
           </span>
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">Termenva</span>
+          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">Hashory</span>
         </Link>
 
         {/* Center content */}
@@ -78,9 +78,9 @@ export default function AuthLayout({ children }: AuthLayoutProps) {
         {/* Mobile logo */}
         <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
           <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-primary">
-            T
+            H
           </span>
-          <span className="text-base font-semibold text-foreground">Termenva</span>
+          <span className="text-base font-semibold text-foreground">Hashory</span>
         </Link>
 
         <div className="relative w-full max-w-sm">
