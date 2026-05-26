@@ -1,5 +1,6 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { optionalUserId } from "./auth";
 
 export const getByOrderId = query({
   args: {
@@ -30,13 +31,15 @@ export const listByIntegration = query({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
+
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
     if (integrations.length === 0) return [];
@@ -61,7 +64,7 @@ export const listByUser = query({
   },
 });
 
-export const insert = mutation({
+export const insert = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     tx: v.object({

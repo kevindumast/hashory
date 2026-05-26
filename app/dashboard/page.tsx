@@ -1,4 +1,4 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 
@@ -9,7 +9,5 @@ export default async function DashboardPage() {
     redirect("/sign-in");
   }
 
-  const user = await currentUser();
-
-  return <DashboardContent userName={user?.firstName ?? user?.username ?? null} />;
+  return <DashboardContent />;
 }

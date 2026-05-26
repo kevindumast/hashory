@@ -1,6 +1,6 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 
 const ETHERSCAN_API_BASE = "https://api.etherscan.io/v2/api?chainid=1";
@@ -46,7 +46,7 @@ export const syncEthereumWallet = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    const integration = await ctx.runQuery(api.integrations.getById, {
+    const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
@@ -70,7 +70,7 @@ export const syncEthereumWallet = action({
 
     const address = walletAddress.toLowerCase();
 
-    await ctx.runMutation(api.integrations.updateSyncStatus, {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
       syncStatus: "syncing",
     });
@@ -79,12 +79,12 @@ export const syncEthereumWallet = action({
       await syncNativeEth(ctx, args.integrationId, address, apiKey);
       await syncErc20(ctx, args.integrationId, address, apiKey);
 
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
     } catch (error) {
-      await ctx.runMutation(api.integrations.updateSyncStatus, {
+      await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "error",
       });
@@ -207,7 +207,7 @@ async function syncNativeEth(
     }
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset,
     scope,
@@ -331,7 +331,7 @@ async function syncErc20(
     }
   }
 
-  await ctx.runMutation(api.integrations.updateSyncState, {
+  await ctx.runMutation(internal.integrations.updateSyncState, {
     integrationId,
     dataset,
     scope,

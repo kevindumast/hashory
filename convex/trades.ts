@@ -1,7 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { optionalUserId } from "./auth";
 
-export const ingestBatch = mutation({
+export const ingestBatch = internalMutation({
   args: {
     integrationId: v.id("integrations"),
     trades: v.array(
@@ -38,9 +39,7 @@ export const ingestBatch = mutation({
         )
         .first();
 
-      if (existing) {
-        continue;
-      }
+      if (existing) continue;
 
       await ctx.db.insert("trades", {
         integrationId: args.integrationId,
@@ -72,23 +71,8 @@ export const ingestBatch = mutation({
 });
 
 const KNOWN_QUOTES = [
-  "USDT",
-  "USDC",
-  "BUSD",
-  "USD",
-  "FDUSD",
-  "TUSD",
-  "DAI",
-  "BTC",
-  "ETH",
-  "BNB",
-  "EUR",
-  "GBP",
-  "TRY",
-  "AUD",
-  "CAD",
-  "BRL",
-  "ARS",
+  "USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI",
+  "BTC", "ETH", "BNB", "EUR", "GBP", "TRY", "AUD", "CAD", "BRL", "ARS",
 ];
 
 function extractBaseAsset(symbol: string) {
@@ -96,9 +80,7 @@ function extractBaseAsset(symbol: string) {
   for (const quote of KNOWN_QUOTES) {
     if (upper.endsWith(quote)) {
       const base = upper.slice(0, upper.length - quote.length);
-      if (base) {
-        return base;
-      }
+      if (base) return base;
     }
   }
   return upper;
@@ -116,15 +98,9 @@ export const listAssetsByIntegration = query({
 
     const assets = new Set<string>();
     for (const trade of trades) {
-      if (trade.symbol) {
-        assets.add(extractBaseAsset(trade.symbol));
-      }
-      if (trade.fromAsset) {
-        assets.add(trade.fromAsset.toUpperCase());
-      }
-      if (trade.toAsset) {
-        assets.add(trade.toAsset.toUpperCase());
-      }
+      if (trade.symbol) assets.add(extractBaseAsset(trade.symbol));
+      if (trade.fromAsset) assets.add(trade.fromAsset.toUpperCase());
+      if (trade.toAsset) assets.add(trade.toAsset.toUpperCase());
     }
 
     return Array.from(assets);
@@ -133,23 +109,22 @@ export const listAssetsByIntegration = query({
 
 export const listByUser = query({
   args: {
-    clerkId: v.string(),
     limit: v.optional(v.number()),
     refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    void args.refreshToken;
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
+
     const integrations = await ctx.db
       .query("integrations")
-      .withIndex("by_user", (q) => q.eq("clerkUserId", args.clerkId))
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
       .collect();
 
-    if (integrations.length === 0) {
-      return [];
-    }
+    if (integrations.length === 0) return [];
 
-    const integrationMap = new Map(
-      integrations.map((integration) => [integration._id, integration])
-    );
+    const integrationMap = new Map(integrations.map((i) => [i._id, i]));
 
     const tradesPerIntegration = await Promise.all(
       integrations.map((integration) => {
@@ -161,10 +136,7 @@ export const listByUser = query({
       })
     );
 
-    const filtered = tradesPerIntegration
-      .flat()
-      .sort((a, b) => b.createdAt - a.createdAt);
-
+    const filtered = tradesPerIntegration.flat().sort((a, b) => b.createdAt - a.createdAt);
     const limited = args.limit ? filtered.slice(0, args.limit) : filtered;
 
     return limited.map((trade) => {

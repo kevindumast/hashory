@@ -1,27 +1,34 @@
 import { action } from "./_generated/server";
 import { v } from "convex/values";
-import { api } from "./_generated/api";
+import { internal } from "./_generated/api";
+import { requireUserId } from "./auth";
 
 /**
- * Reset ALL sync cursors for an integration (every dataset, every symbol scope).
- * After reset, next sync will re-fetch everything from scratch.
+ * Réinitialise tous les curseurs de sync d'une intégration.
+ * Le prochain sync repartira de zéro.
  */
 export const resetAllCursors = action({
   args: {
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
-    console.log(`🗑️ Deleting ALL sync states for integration ${args.integrationId}`);
+    const clerkUserId = await requireUserId(ctx);
 
-    const result: { deleted: number } = await ctx.runMutation(api.integrations.deleteAllSyncStates, {
+    const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
-    console.log(`✅ Deleted ${result.deleted} sync state entries`);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Not authorized");
+    }
+
+    const result: { deleted: number } = await ctx.runMutation(internal.integrations.deleteAllSyncStates, {
+      integrationId: args.integrationId,
+    });
 
     return {
       success: true,
-      message: `${result.deleted} sync cursors deleted — next sync will start from scratch`,
+      message: `${result.deleted} curseurs supprimés — le prochain sync repartira de zéro`,
       deleted: result.deleted,
     };
   },

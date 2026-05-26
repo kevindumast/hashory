@@ -59,7 +59,7 @@ const featureHighlights = [
     icon: <RefreshCw className="h-6 w-6" />,
     title: "Synchronisation continue, sans effort",
     description:
-      "Vos données se mettent à jour automatiquement. Fini la saisie manuelle et les tableurs obsolètes — Termenva reste toujours à jour.",
+      "Vos données se mettent à jour automatiquement. Fini la saisie manuelle et les tableurs obsolètes — Hashory reste toujours à jour.",
   },
 ];
 
@@ -76,7 +76,7 @@ const workflow = [
     icon: <RefreshCw className="h-5 w-5 text-primary" />,
     title: "Synchronisation automatique",
     description:
-      "Termenva agrège et historise l'ensemble de vos trades, dépôts, retraits et positions pour vous offrir une vue 360° complète et à jour.",
+      "Hashory agrège et historise l'ensemble de vos trades, dépôts, retraits et positions pour vous offrir une vue 360° complète et à jour.",
   },
   {
     step: "03",
@@ -108,7 +108,7 @@ const metrics = [
 const testimonials = [
   {
     quote:
-      "Termenva pose une base technique solide : en quelques heures nous avons livré un tableau de bord crypto complet avec synchronisation Binance.",
+      "Hashory pose une base technique solide : en quelques heures nous avons livré un tableau de bord crypto complet avec synchronisation Binance.",
     author: "Alexis",
     role: "CTO",
     company: "QuantFlow",
@@ -126,7 +126,7 @@ const testimonials = [
   },
   {
     quote:
-      "J'avais l'habitude de passer des heures sur Excel chaque semaine. Maintenant j'ouvre Termenva et tout est là, en temps réel. C'est une autre époque.",
+      "J'avais l'habitude de passer des heures sur Excel chaque semaine. Maintenant j'ouvre Hashory et tout est là, en temps réel. C'est une autre époque.",
     author: "Romain",
     role: "Trader indépendant",
     company: "Freelance",
@@ -137,9 +137,9 @@ const testimonials = [
 
 const faqItems = [
   {
-    question: "Comment Termenva garantit-il la sécurité de mes données ?",
+    question: "Comment Hashory garantit-il la sécurité de mes données ?",
     answer:
-      "Termenva ne demande que des accès en lecture seule à vos comptes d'échange. Vos clés API sont chiffrées au repos et en transit avec des protocoles de sécurité de niveau bancaire. Vos wallets on-chain sont connectés uniquement via adresse publique. Nous n'avons jamais accès à vos fonds.",
+      "Hashory ne demande que des accès en lecture seule à vos comptes d'échange. Vos clés API sont chiffrées au repos et en transit avec des protocoles de sécurité de niveau bancaire. Vos wallets on-chain sont connectés uniquement via adresse publique. Nous n'avons jamais accès à vos fonds.",
   },
   {
     question: "Quels exchanges et wallets sont supportés ?",
@@ -147,14 +147,14 @@ const faqItems = [
       "Nous supportons actuellement Binance et Bybit côté CEX, ainsi que les wallets Ethereum, Solana et Bitcoin (adresse publique). D'autres exchanges — Coinbase, Kraken, OKX — et protocoles DeFi sont en cours d'intégration selon les retours de la communauté.",
   },
   {
-    question: "Termenva est-il vraiment open source ?",
+    question: "Hashory est-il vraiment open source ?",
     answer:
-      "Oui, totalement. Le code source de Termenva est disponible sur GitHub sous licence MIT. Vous pouvez l'auditer, le forker, contribuer ou déployer votre propre instance. La transparence est au cœur du projet.",
+      "Oui, totalement. Le code source de Hashory est disponible sur GitHub sous licence MIT. Vous pouvez l'auditer, le forker, contribuer ou déployer votre propre instance. La transparence est au cœur du projet.",
   },
   {
-    question: "Puis-je déployer ma propre instance de Termenva ?",
+    question: "Puis-je déployer ma propre instance de Hashory ?",
     answer:
-      "Absolument. Termenva est conçu pour être auto-hébergeable. Suivez le guide de déploiement dans le README pour lancer votre propre instance sur Vercel en quelques minutes, avec votre propre base Convex et vos clés Clerk.",
+      "Absolument. Hashory est conçu pour être auto-hébergeable. Suivez le guide de déploiement dans le README pour lancer votre propre instance sur Vercel en quelques minutes, avec votre propre base Convex et vos clés Clerk.",
   },
 ];
 
@@ -193,7 +193,7 @@ export default async function Home() {
             <span className="text-primary">enfin réunis en un seul terminal.</span>
           </h1>
           <p className="text-pretty text-base text-muted-foreground sm:text-xl">
-            Termenva agrège vos exchanges CEX, vos wallets DEX et vos positions on-chain pour vous donner
+            Hashory agrège vos exchanges CEX, vos wallets DEX et vos positions on-chain pour vous donner
             une vue claire, complète et en temps réel de votre portefeuille.
           </p>
         </div>
@@ -224,7 +224,7 @@ export default async function Home() {
               <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
               <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
             </div>
-            <span className="text-xs text-muted-foreground/60">Termenva — Portefeuille global</span>
+            <span className="text-xs text-muted-foreground/60">Hashory — Portefeuille global</span>
             <div className="w-16" />
           </div>
           {/* Source badges */}
@@ -317,7 +317,7 @@ export default async function Home() {
       <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
         <div className="mb-12 text-center">
           <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-            Pourquoi Termenva ?
+            Pourquoi Hashory ?
           </Badge>
           <h2 className="text-balance text-3xl font-semibold text-foreground md:text-4xl">
             Arrêtez de naviguer à l&apos;aveugle.
@@ -326,7 +326,7 @@ export default async function Home() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="rounded-2xl border border-negative/20 bg-negative/5 p-6 sm:p-8">
             <p className="mb-5 text-sm font-semibold uppercase tracking-widest text-negative">
-              Sans Termenva
+              Sans Hashory
             </p>
             <ul className="space-y-4">
               {problems.map((p) => (
@@ -339,7 +339,7 @@ export default async function Home() {
           </div>
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6 sm:p-8">
             <p className="mb-5 text-sm font-semibold uppercase tracking-widest text-primary">
-              Avec Termenva
+              Avec Hashory
             </p>
             <ul className="space-y-4">
               {solutions.map((s) => (
@@ -449,7 +449,7 @@ export default async function Home() {
                 </Badge>
               </div>
               <h2 className="text-2xl font-semibold text-foreground md:text-3xl">
-                Termenva est entièrement open source.
+                Hashory est entièrement open source.
               </h2>
               <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
                 Auditez le code, déployez votre propre instance, proposez des intégrations d&apos;exchanges

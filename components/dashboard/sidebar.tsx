@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState } from "react"
+import { HashoryLogo } from "@/components/hashory-logo"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,10 +47,8 @@ export function Sidebar() {
       {/* Logo */}
       <div className="flex items-center justify-between px-4 h-[57px] border-b border-sidebar-border">
         <div className="flex items-center gap-2">
-          <div className="size-5 rounded bg-sidebar-primary/20 flex items-center justify-center">
-            <div className="size-2.5 rounded-sm bg-sidebar-primary" />
-          </div>
-          <span className="text-sm font-semibold text-sidebar-foreground tracking-tight">Termenva</span>
+          <HashoryLogo size={22} />
+          <span className="text-sm font-semibold text-sidebar-foreground tracking-tight">Hashory</span>
         </div>
         <ChevronDown className="size-3.5 text-muted-foreground" />
       </div>
@@ -136,10 +135,8 @@ export function MobileNav() {
   return (
     <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar px-4">
       <div className="flex items-center gap-2">
-        <div className="size-5 rounded bg-sidebar-primary/20 flex items-center justify-center">
-          <div className="size-2.5 rounded-sm bg-sidebar-primary" />
-        </div>
-        <span className="text-sm font-semibold text-sidebar-foreground">Termenva</span>
+        <HashoryLogo size={22} />
+        <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
       </div>
       <Sheet open={isOpen} onOpenChange={setIsOpen}>
         <SheetTrigger asChild>
@@ -149,10 +146,8 @@ export function MobileNav() {
         </SheetTrigger>
         <SheetContent side="left" className="flex w-[220px] flex-col gap-0 bg-sidebar border-r border-sidebar-border p-0">
           <div className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border">
-            <div className="size-5 rounded bg-sidebar-primary/20 flex items-center justify-center">
-              <div className="size-2.5 rounded-sm bg-sidebar-primary" />
-            </div>
-            <span className="text-sm font-semibold text-sidebar-foreground">Termenva</span>
+            <HashoryLogo size={22} />
+            <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
           </div>
           <nav className="flex-1 px-3 py-3 flex flex-col gap-5">
             {navSections.map((section) => (

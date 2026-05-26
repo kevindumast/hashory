@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 const DEFAULT_RECV_WINDOW = 5000;
-const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_BINANCE_API_URL ?? "https://api.binance.com";
+const DEFAULT_BASE_URL = process.env.BINANCE_API_BASE_URL ?? "https://api.binance.com";
 
 type SignedRequestOptions = {
   params?: Record<string, string | number | boolean | undefined>;

@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useUser } from "@clerk/nextjs";
 import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
 import { DashboardNewLayout } from "@/app/dashboard/sections/overview/DashboardNewLayout";
 
-export function DashboardContent({ userName }: { userName: string | null }) {
+export function DashboardContent() {
+  const { user } = useUser();
+  const userName = user?.firstName ?? user?.username ?? null;
   const [refreshToken] = useState(0);
   const {
     profitSummary,
