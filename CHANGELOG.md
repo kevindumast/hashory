@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/kevindumast/hashory/compare/termenva-v0.1.1...termenva-v0.1.2) (2026-07-11)
+
+
+### Features
+
+* add blockchain tao + correction ([846d4bb](https://github.com/kevindumast/hashory/commit/846d4bbf321bd4233410194a4e1cda58adbf6979))
+* add blockchain tao + correction ([89299ab](https://github.com/kevindumast/hashory/commit/89299abdc81f4b0215e1f6e225c367e6c9088226))
+
 ## [0.1.1](https://github.com/kevindumast/hashory/compare/termenva-v0.1.0...termenva-v0.1.1) (2026-07-11)
 
 
