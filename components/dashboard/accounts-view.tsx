@@ -58,6 +58,7 @@ const PROVIDER_ICONS: Record<string, string> = {
   arbitrum: "https://s2.coinmarketcap.com/static/img/coins/64x64/11841.png",
   solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
   kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
+  tao: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png",
   bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
 }
 
@@ -69,6 +70,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   arbitrum: "Arbitrum One",
   solana: "Solana",
   kaspa: "Kaspa",
+  tao: "Bittensor (TAO)",
   bitstack: "Bitstack",
   finary: "Finary",
 }
@@ -101,6 +103,7 @@ export function AccountsView() {
   const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
   const syncBitcoinWallet = useAction(api.bitcoin.syncBitcoinWallet)
+  const syncTaoWallet = useAction(api.tao.syncTaoWallet)
   const purgeAllData = useMutation(api.integrations.purgeAllData)
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
 
@@ -159,6 +162,8 @@ export function AccountsView() {
         await syncSolanaWallet({ integrationId: accountId })
       } else if (provider === "bitcoin") {
         await syncBitcoinWallet({ integrationId: accountId })
+      } else if (provider === "tao") {
+        await syncTaoWallet({ integrationId: accountId })
       } else if (provider === "binance" || !provider) {
         // Binance flow (default for backward compatibility)
         // First reset all cursors to force re-sync from the beginning
@@ -182,7 +187,7 @@ export function AccountsView() {
     } catch (error) {
       console.error("Failed to sync account:", error)
     }
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {

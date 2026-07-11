@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText, AlertCircle } from "lucide-react";
 import Image from "next/image";
@@ -179,11 +179,19 @@ type ConnectProviderDialogProps = {
   onOpenChange: (open: boolean) => void;
 };
 
+type ProviderCategory = "platform" | "blockchain";
+
+const CATEGORY_LABELS: Record<ProviderCategory, string> = {
+  platform: "Plateforme",
+  blockchain: "Blockchain",
+};
+
 type ProviderConfig = {
   value: string;
   label: string;
   description: string;
   iconUrl: string;
+  category: ProviderCategory;
   disabled?: boolean;
   fileImport?: boolean;
   fields: Array<{
@@ -198,9 +206,10 @@ type ProviderConfig = {
 const providerConfigs: ProviderConfig[] = [
   {
     value: "binance",
-    label: "Binance (API)",
+    label: "Binance",
     description: "Connexion par clé API avec permissions lecture seule.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
+    category: "platform",
     fields: [
       {
         name: "apiKey",
@@ -219,9 +228,10 @@ const providerConfigs: ProviderConfig[] = [
   },
   {
     value: "kaspa",
-    label: "Kaspa (wallet)",
+    label: "Kaspa",
     description: "Connexion par adresse publique Kaspa.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
+    category: "blockchain",
     fields: [
       {
         name: "address",
@@ -233,9 +243,10 @@ const providerConfigs: ProviderConfig[] = [
   },
   {
     value: "ethereum",
-    label: "Ethereum (wallet)",
+    label: "Ethereum",
     description: "Connexion par adresse publique Ethereum.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
+    category: "blockchain",
     fields: [
       {
         name: "address" as const,
@@ -247,9 +258,10 @@ const providerConfigs: ProviderConfig[] = [
   },
   {
     value: "solana",
-    label: "Solana (wallet)",
+    label: "Solana",
     description: "Connexion par adresse publique Solana.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
+    category: "blockchain",
     fields: [
       {
         name: "address" as const,
@@ -261,9 +273,10 @@ const providerConfigs: ProviderConfig[] = [
   },
   {
     value: "bitcoin",
-    label: "Bitcoin (wallet)",
+    label: "Bitcoin",
     description: "Connexion par adresse publique Bitcoin.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
+    category: "blockchain",
     fields: [
       {
         name: "address" as const,
@@ -274,26 +287,44 @@ const providerConfigs: ProviderConfig[] = [
     ],
   },
   {
+    value: "tao",
+    label: "Bittensor / TAO",
+    description: "Connexion par adresse publique (SS58) Bittensor.",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Bittensor",
+        placeholder: "Ex: 5F...",
+        helper: "Adresse publique (coldkey) — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
     value: "bitstack",
-    label: "Bitstack (CSV)",
+    label: "Bitstack",
     description: "Importez votre historique via un export CSV.",
     iconUrl: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
+    category: "platform",
     fileImport: true,
     fields: [],
   },
   {
     value: "finary",
-    label: "Finary (CSV)",
+    label: "Finary",
     description: "Importez votre historique via un export CSV Finary.",
     iconUrl: "",
+    category: "platform",
     fileImport: true,
     fields: [],
   },
   {
     value: "kucoin",
-    label: "KuCoin (API)",
+    label: "KuCoin",
     description: "Connexion par clé API avec passphrase.",
     iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
+    category: "platform",
     fields: [
       {
         name: "apiKey",
@@ -327,6 +358,7 @@ export function ConnectProviderDialog(props: ConnectProviderDialogProps) {
 }
 
 function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialogProps) {
+  const [categoryTab, setCategoryTab] = useState<ProviderCategory>(providerConfigs[0].category);
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
@@ -363,6 +395,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       setError(null);
       setCompleted(false);
       setProvider(providerConfigs[0]);
+      setCategoryTab(providerConfigs[0].category);
       setCsvFileName(null);
       setCsvParsed(null);
       setFinaryParsed(null);
@@ -371,7 +404,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     }
   }, [open]);
 
-  const maskedProviderLabel = useMemo(() => provider.label.replace(/\(.*\)/, "").trim(), [provider.label]);
+  const maskedProviderLabel = provider.label;
 
   function loadCsvFile(file: File) {
     setCsvFileName(file.name);
@@ -510,7 +543,38 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="space-y-1.5">
-            <Label htmlFor="provider" className="text-sm">Plateforme</Label>
+            <Label className="text-sm">Type de connexion</Label>
+            <div className="grid grid-cols-2 gap-1.5 rounded-md bg-muted/50 p-1">
+              {(Object.keys(CATEGORY_LABELS) as ProviderCategory[]).map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => {
+                    if (category === categoryTab) return;
+                    setCategoryTab(category);
+                    const first = providerConfigs.find((config) => config.category === category);
+                    if (first) {
+                      setProvider(first);
+                      setShowSecret(false);
+                    }
+                  }}
+                  className={cn(
+                    "h-8 rounded-sm text-sm font-medium transition-colors cursor-pointer",
+                    categoryTab === category
+                      ? "bg-background shadow-sm text-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {CATEGORY_LABELS[category]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="provider" className="text-sm">
+              {categoryTab === "platform" ? "Plateforme" : "Blockchain"}
+            </Label>
             <Select
               value={provider.value}
               onValueChange={(value) => {
@@ -522,34 +586,45 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               }}
             >
               <SelectTrigger id="provider" className="h-10">
-                <SelectValue placeholder="Choisir un provider" />
+                <SelectValue placeholder="Choisir un provider">
+                  <div className="flex items-center gap-2.5">
+                    <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
+                      {provider.iconUrl ? (
+                        <Image src={provider.iconUrl} alt="" fill sizes="24px" className="object-cover" />
+                      ) : (
+                        <FileText className="size-3.5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <span className="text-sm">{provider.label}</span>
+                  </div>
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {providerConfigs.map((config) => (
-                  <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
-                    <div className="flex items-center gap-2.5">
-                      <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
-                        {config.iconUrl ? (
-                          <Image
-                            src={config.iconUrl}
-                            alt=""
-                            fill
-                            sizes="24px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <FileText className="size-3.5 text-muted-foreground" />
-                        )}
-                      </div>
-                      <div className="flex flex-col gap-0.5 text-left">
+                {providerConfigs
+                  .filter((config) => config.category === categoryTab)
+                  .map((config) => (
+                    <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
+                      <div className="flex items-center gap-2.5">
+                        <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
+                          {config.iconUrl ? (
+                            <Image
+                              src={config.iconUrl}
+                              alt=""
+                              fill
+                              sizes="24px"
+                              className="object-cover"
+                            />
+                          ) : (
+                            <FileText className="size-3.5 text-muted-foreground" />
+                          )}
+                        </div>
                         <span className="text-sm">{config.label}</span>
-                        <span className="text-xs text-muted-foreground">{config.description}</span>
                       </div>
-                    </div>
-                  </SelectItem>
-                ))}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground leading-tight">{provider.description}</p>
           </div>
 
           {!provider.disabled ? (
