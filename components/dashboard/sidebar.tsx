@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { useState } from "react"
 import { HashoryLogo } from "@/components/hashory-logo"
+import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,12 +37,15 @@ const navSections = [
     title: "Fiscalité",
     links: [
       { href: "/dashboard/tax-report", label: "Déclaration fiscale", badge: null, icon: FileText },
-      { href: "/dashboard/transactions", label: "Transactions", badge: "208", icon: ArrowLeftRight },
+      { href: "/dashboard/transactions", label: "Transactions", badge: null, icon: ArrowLeftRight },
     ],
   },
 ]
 
 export function Sidebar() {
+  const { transactions, isLoading } = useDashboardMetrics(0)
+  const transactionCount = isLoading ? null : String(transactions.length)
+
   return (
     <aside className="hidden md:flex flex-col w-[220px] h-screen bg-sidebar border-r border-sidebar-border tracking-tight antialiased shrink-0">
       {/* Logo */}
@@ -62,7 +66,11 @@ export function Sidebar() {
             </p>
             <div className="flex flex-col gap-0.5">
               {section.links.map((link) => (
-                <SidebarLink key={link.href} {...link} />
+                <SidebarLink
+                  key={link.href}
+                  {...link}
+                  badge={link.href === "/dashboard/transactions" ? transactionCount : link.badge}
+                />
               ))}
             </div>
           </div>
@@ -131,6 +139,8 @@ function SidebarLink({ href, label, badge, icon: Icon }: { href: string; label: 
 export function MobileNav() {
   const [isOpen, setIsOpen] = useState(false)
   const pathname = usePathname()
+  const { transactions, isLoading } = useDashboardMetrics(0)
+  const transactionCount = isLoading ? null : String(transactions.length)
 
   return (
     <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar px-4">
@@ -159,6 +169,7 @@ export function MobileNav() {
                   {section.links.map((link) => {
                     const Icon = link.icon
                     const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(link.href))
+                    const badge = link.href === "/dashboard/transactions" ? transactionCount : link.badge
                     return (
                       <Link
                         key={link.href}
@@ -173,7 +184,7 @@ export function MobileNav() {
                       >
                         <Icon className="size-4 shrink-0" />
                         <span className="flex-1">{link.label}</span>
-                        {link.badge && <span className="text-[11px] text-muted-foreground">{link.badge}</span>}
+                        {badge && <span className="text-[11px] text-muted-foreground">{badge}</span>}
                       </Link>
                     )
                   })}
