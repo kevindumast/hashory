@@ -28,7 +28,7 @@ export function AnalyticsTab({
           <Card key={stat.label} className="border-border/60 bg-card/80 backdrop-blur">
             <CardHeader className="space-y-2">
               <CardDescription>{stat.label}</CardDescription>
-              <CardTitle className="text-3xl text-foreground">{stat.value}</CardTitle>
+              <CardTitle className="num text-3xl text-foreground">{stat.value}</CardTitle>
             </CardHeader>
             <CardContent>
               <span className="text-xs text-muted-foreground">{stat.trend}</span>

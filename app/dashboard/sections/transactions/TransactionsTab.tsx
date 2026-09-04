@@ -13,13 +13,18 @@ interface TransactionsTabProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   integrationId?: string | null;
+  /** Jeton pré-sélectionné, par exemple depuis la palette de commandes. */
+  initialSymbol?: string | null;
 }
 
 export function TransactionsTab({
   transactions,
   isLoading,
+  initialSymbol,
 }: TransactionsTabProps) {
-  const [symbolFilter, setSymbolFilter] = useState<string>("all");
+  const [symbolFilter, setSymbolFilter] = useState<string>(
+    initialSymbol ? initialSymbol.toUpperCase() : "all"
+  );
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {

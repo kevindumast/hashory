@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { errorMessage, toast } from "@/lib/toast";
 
 type BitstackImportDialogProps = {
   open: boolean;
@@ -236,19 +237,24 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
 
     try {
       const result = await ingestCsv({
-        trades: parsed.trades.map(({ kind: _k, ...t }) => t),
-        deposits: parsed.deposits.map(({ kind: _k, ...d }) => d),
+        trades: parsed.trades.map(({ kind, ...t }) => { void kind; return t; }),
+        deposits: parsed.deposits.map(({ kind, ...d }) => { void kind; return d; }),
         displayName: "Bitstack",
       });
       setImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.depositsInserted });
       setCompleted(true);
+      toast.success(
+        `Import Bitstack terminé : ${result.tradesInserted} achat${result.tradesInserted > 1 ? "s" : ""} et ${result.depositsInserted} dépôt${result.depositsInserted > 1 ? "s" : ""} ajoutés`
+      );
       onSuccess?.();
       setTimeout(() => {
         onOpenChange(false);
         reset();
       }, 2000);
     } catch (err) {
+      console.error("Bitstack CSV import failed:", err);
       setParseError(err instanceof Error ? err.message : "Erreur lors de l'import.");
+      toast.error(errorMessage(err, "Échec de l'import Bitstack."));
     } finally {
       setSubmitting(false);
     }
