@@ -2,19 +2,18 @@
 
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { TransactionsTab } from "@/app/dashboard/sections/transactions/TransactionsTab";
 
 export function TransactionsPageClient() {
   const searchParams = useSearchParams();
   const integrationId = searchParams.get("integrationId");
-  const { transactions, isLoading } = useDashboardMetrics(0);
+  const symbol = searchParams.get("symbol");
+  const { transactions, isLoading } = useDashboardData();
 
-  // Filtrer les transactions par integrationId si présent
+  // Filtre par plateforme : porté par l'URL depuis la page « Mes comptes ».
   const filteredTransactions = useMemo(() => {
-    if (!integrationId || !transactions) {
-      return transactions || [];
-    }
+    if (!integrationId) return transactions;
     return transactions.filter((tx) => tx.integrationId === integrationId);
   }, [transactions, integrationId]);
 
@@ -24,6 +23,7 @@ export function TransactionsPageClient() {
         transactions={filteredTransactions}
         isLoading={isLoading}
         integrationId={integrationId}
+        initialSymbol={symbol}
       />
     </div>
   );

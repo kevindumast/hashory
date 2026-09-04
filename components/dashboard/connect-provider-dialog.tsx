@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
-import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText, AlertCircle } from "lucide-react";
+import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText } from "lucide-react";
 import Image from "next/image";
 import {
   Dialog,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import { errorMessage, toast } from "@/lib/toast";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
 
@@ -477,6 +478,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         });
         setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.withdrawalsInserted });
         setCompleted(true);
+        toast.success(
+          `Import Finary terminé : ${result.tradesInserted} trade${result.tradesInserted > 1 ? "s" : ""} et ${result.withdrawalsInserted} retrait${result.withdrawalsInserted > 1 ? "s" : ""} ajoutés`
+        );
         setTimeout(() => { onOpenChange(false); }, 1500);
         return;
       }
@@ -489,6 +493,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         });
         setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.depositsInserted });
         setCompleted(true);
+        toast.success(
+          `Import Bitstack terminé : ${result.tradesInserted} achat${result.tradesInserted > 1 ? "s" : ""} et ${result.depositsInserted} dépôt${result.depositsInserted > 1 ? "s" : ""} ajoutés`
+        );
         setTimeout(() => {
           onOpenChange(false);
         }, 1500);
@@ -509,12 +516,15 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         displayName: label ? label.trim() : undefined,
       });
       setCompleted(true);
+      toast.success(`${provider.label} connecté, la synchronisation peut démarrer`);
       setTimeout(() => {
         onOpenChange(false);
       }, 900);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Impossible d&apos;enregistrer la connexion.";
+      console.error("Provider connection failed:", err);
+      const message = err instanceof Error ? err.message : "Impossible d'enregistrer la connexion.";
       setError(message);
+      toast.error(errorMessage(err, "Impossible d'enregistrer la connexion."));
     } finally {
       setSubmitting(false);
     }
@@ -561,7 +571,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                   className={cn(
                     "h-8 rounded-sm text-sm font-medium transition-colors cursor-pointer",
                     categoryTab === category
-                      ? "bg-background shadow-sm text-foreground"
+                      ? "bg-background text-foreground"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -761,7 +771,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               )}
             </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-border bg-muted/40 p-6 text-sm text-muted-foreground text-center">
+            <div className="rounded-lg border border-dashed border-border bg-muted/40 p-6 text-sm text-muted-foreground text-center">
               Cette intégration sera disponible très bientôt.
               <br />
               Restez informé dans notre changelog.

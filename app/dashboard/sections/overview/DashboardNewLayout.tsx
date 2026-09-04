@@ -19,6 +19,7 @@ import {
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
+import { Reveal } from "@/components/motion";
 
 type ChartFilter =
   | { type: "all" }
@@ -41,7 +42,7 @@ function ProviderAvatar({ provider, name }: { provider: string; name: string }) 
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt={name} className="w-7 h-7 shrink-0 rounded-full object-cover border border-border bg-muted" />
   ) : (
-    <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary uppercase border border-border">
+    <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary uppercase border border-border">
       {name.slice(0, 2)}
     </div>
   );
@@ -56,7 +57,7 @@ function formatAxisValue(v: number): string {
 }
 import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
-import { TrendingUp, LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
+import { LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
 
 type DashboardNewLayoutProps = {
   profitSummary: ProfitSummary;
@@ -182,6 +183,7 @@ export function DashboardNewLayout({
         <g transform={`translate(${x},${y})`}>
           {/* Month label */}
           <text
+            className="num"
             dy={14}
             textAnchor="middle"
             fill="var(--muted-foreground)"
@@ -203,6 +205,7 @@ export function DashboardNewLayout({
               />
               {/* year label */}
               <text
+                className="num"
                 dy={30}
                 textAnchor="middle"
                 fill="var(--muted-foreground)"
@@ -310,79 +313,82 @@ export function DashboardNewLayout({
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
         {/* Performance totale */}
-        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-[0.05] group-hover:opacity-[0.09] transition-opacity">
-            <TrendingUp className="w-14 h-14 text-primary" />
+        <Reveal className="h-full" delay={0}>
+          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5 relative overflow-hidden group">
+            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
+              Performance totale
+            </h3>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="num text-3xl font-normal tracking-tight text-foreground">
+                {currencyFormatter.format(totalProfit)}
+              </span>
+              <span className={`num text-sm font-bold ${isPositive ? "text-positive" : "text-negative"}`}>
+                {isPositive ? "+" : ""}{profitPercent.toFixed(2)}%
+              </span>
+            </div>
+            <div className="mt-4 h-px bg-border/60">
+              <div
+                className={`h-px transition-all ${isPositive ? "bg-positive" : "bg-negative"}`}
+                style={{ width: `${Math.min(Math.abs(profitPercent), 100)}%` }}
+              />
+            </div>
+            <p className="num mt-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">PnL réalisé + latent</p>
           </div>
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-            Performance totale
-          </h3>
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-3xl font-black tracking-tight tabular-nums text-foreground">
-              {currencyFormatter.format(totalProfit)}
-            </span>
-            <span className={`text-sm font-bold tabular-nums ${isPositive ? "text-positive" : "text-negative"}`}>
-              {isPositive ? "+" : ""}{profitPercent.toFixed(2)}%
-            </span>
-          </div>
-          <div className="mt-4 h-[3px] bg-border/40 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${isPositive ? "bg-gradient-to-r from-primary to-positive" : "bg-negative"}`}
-              style={{ width: `${Math.min(Math.abs(profitPercent), 100)}%` }}
-            />
-          </div>
-          <p className="mt-2 text-[10px] text-muted-foreground italic">PnL réalisé + latent combiné</p>
-        </div>
+        </Reveal>
 
         {/* Valeur actuelle */}
-        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">
-            Valeur du portefeuille
-          </h3>
-          <span className="text-3xl font-black tracking-tight tabular-nums text-foreground">
-            {hasCurrentPrices ? currencyFormatter.format(totalCurrentValue) : "—"}
-          </span>
-          <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-            <span className="text-muted-foreground">Coût total investi</span>
-            <span className="font-bold tabular-nums text-foreground">{currencyFormatter.format(totalCostBasis)}</span>
+        <Reveal className="h-full" delay={60}>
+          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
+            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
+              Valeur du portefeuille
+            </h3>
+            <span className="num text-3xl font-normal tracking-tight text-foreground">
+              {hasCurrentPrices ? currencyFormatter.format(totalCurrentValue) : "—"}
+            </span>
+            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
+              <span className="text-muted-foreground">Coût total investi</span>
+              <span className="num font-bold text-foreground">{currencyFormatter.format(totalCostBasis)}</span>
+            </div>
           </div>
-        </div>
+        </Reveal>
 
         {/* PnL latent */}
-        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="flex justify-between items-start mb-3">
-            <h3 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL latent</h3>
-            {hasCurrentPrices && unrealizedPnl !== null && (
-              <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                unrealizedPnl >= 0
-                  ? "bg-positive/10 text-positive"
-                  : "bg-negative/10 text-negative"
-              }`}>
-                {unrealizedPnl >= 0 ? "PROFIT" : "PERTE"}
-              </span>
-            )}
-          </div>
-          <span className={`text-3xl font-black tracking-tight tabular-nums ${
-            unrealizedPnl === null ? "text-muted-foreground" :
-            unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-          }`}>
-            {unrealizedPnl !== null
-              ? `${unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(unrealizedPnl)}`
-              : "—"}
-          </span>
-          <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-            <span className="text-muted-foreground">PnL réalisé</span>
-            <span className={`font-bold tabular-nums ${totalRealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
-              {totalRealizedPnl >= 0 ? "+" : ""}{currencyFormatter.format(totalRealizedPnl)}
+        <Reveal className="h-full" delay={120}>
+          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
+            <div className="flex justify-between items-start mb-3">
+              <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL latent</h3>
+              {hasCurrentPrices && unrealizedPnl !== null && (
+                <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                  unrealizedPnl >= 0
+                    ? "bg-positive/10 text-positive"
+                    : "bg-negative/10 text-negative"
+                }`}>
+                  {unrealizedPnl >= 0 ? "PROFIT" : "PERTE"}
+                </span>
+              )}
+            </div>
+            <span className={`num text-3xl font-semibold tracking-tight ${
+              unrealizedPnl === null ? "text-muted-foreground" :
+              unrealizedPnl >= 0 ? "text-positive" : "text-negative"
+            }`}>
+              {unrealizedPnl !== null
+                ? `${unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(unrealizedPnl)}`
+                : "—"}
             </span>
+            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
+              <span className="text-muted-foreground">PnL réalisé</span>
+              <span className={`num font-bold ${totalRealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                {totalRealizedPnl >= 0 ? "+" : ""}{currencyFormatter.format(totalRealizedPnl)}
+              </span>
+            </div>
           </div>
-        </div>
+        </Reveal>
       </section>
 
       {/* ── Period selector + filter pill ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Période</p>
+          <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Période</p>
           {chartFilter.type !== "all" && (
             <button
               onClick={() => setChartFilter({ type: "all" })}
@@ -501,11 +507,12 @@ export function DashboardNewLayout({
                       width={62}
                       tickFormatter={(v) => formatAxisValue(v)}
                       style={{ fontSize: "11px" }}
-                      tick={{ fill: "var(--muted-foreground)" }}
+                      tick={{ fill: "var(--muted-foreground)", className: "num" }}
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
                         <ChartTooltipContent
+                          className="num"
                           active={active}
                           payload={payload}
                           label={label}
@@ -655,11 +662,12 @@ export function DashboardNewLayout({
                       width={62}
                       tickFormatter={(v) => `${v.toFixed(0)}%`}
                       style={{ fontSize: "11px" }}
-                      tick={{ fill: "var(--muted-foreground)" }}
+                      tick={{ fill: "var(--muted-foreground)", className: "num" }}
                     />
                     <ChartTooltip
                       content={({ active, payload, label }) =>
                         <ChartTooltipContent
+                          className="num"
                           active={active}
                           payload={payload}
                           label={label}
@@ -802,7 +810,7 @@ export function DashboardNewLayout({
 
               const SortTh = ({ col, label, align = "right" }: { col: SortCol; label: string; align?: string }) => (
                 <th
-                  className={`px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-muted-foreground cursor-pointer hover:text-primary transition-colors ${align === "left" ? "text-left" : "text-right"}`}
+                  className={`px-4 py-3 num text-[10px] uppercase tracking-[0.24em] text-muted-foreground cursor-pointer hover:text-primary transition-colors ${align === "left" ? "text-left" : "text-right"}`}
                   onClick={() => {
                     if (sortColumn === col) setSortAsc(!sortAsc);
                     else { setSortColumn(col); setSortAsc(true); }
@@ -821,16 +829,16 @@ export function DashboardNewLayout({
                         <SortTh col="symbol" label="Actif" align="left" />
                         <SortTh col="qty" label="Quantité" />
                         <SortTh col="avgPrice" label="Prix achat" />
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
                           <span className="flex items-center justify-end gap-1">
                             Prix actuel
                             {pricesLoading && <LoaderCircle className="w-3 h-3 animate-spin text-primary" />}
                           </span>
                         </th>
                         <SortTh col="value" label="Valeur" />
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">% portefeuille</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL réalisé</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL latent</th>
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">% portefeuille</th>
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL réalisé</th>
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL latent</th>
                         <SortTh col="pnlTotal" label="PnL total" />
                       </tr>
                     </thead>
@@ -879,6 +887,8 @@ export function DashboardNewLayout({
                                 </button>
                                 <div className="w-7 h-7 shrink-0 relative">
                                   {getCmcIconUrl(token.symbol) ? (
+                                    // URL calculée au rendu + repli DOM sur erreur : next/image ne s'y prête pas.
+                                    // eslint-disable-next-line @next/next/no-img-element
                                     <img
                                       src={getCmcIconUrl(token.symbol) || ""}
                                       alt={token.symbol}
@@ -887,12 +897,12 @@ export function DashboardNewLayout({
                                         // Fallback to initials if image fails
                                         const container = e.currentTarget.parentElement;
                                         if (container) {
-                                          container.innerHTML = `<div class="w-7 h-7 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary">${token.symbol.slice(0, 2)}</div>`;
+                                          container.innerHTML = `<div class="w-7 h-7 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary">${token.symbol.slice(0, 2)}</div>`;
                                         }
                                       }}
                                     />
                                   ) : (
-                                    <div className="w-7 h-7 bg-muted rounded-full flex items-center justify-center text-[10px] font-black text-primary">
+                                    <div className="w-7 h-7 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary">
                                       {token.symbol.slice(0, 2)}
                                     </div>
                                   )}
@@ -903,18 +913,18 @@ export function DashboardNewLayout({
                                 </div>
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-right text-muted-foreground">
+                            <td className="num px-4 py-3 text-right text-muted-foreground">
                               {token.currentQuantity > 0
                                 ? token.currentQuantity.toLocaleString("fr-FR", { maximumFractionDigits: 6 })
                                 : "—"}
                             </td>
-                            <td className="px-4 py-3 text-right text-muted-foreground">
+                            <td className="num px-4 py-3 text-right text-muted-foreground">
                               {token.avgCostBasis > 0 ? currencyFormatter.format(token.avgCostBasis) : "—"}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-primary">
+                            <td className="num px-4 py-3 text-right font-bold text-primary">
                               {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold text-foreground">
+                            <td className="num px-4 py-3 text-right font-bold text-foreground">
                               {currentValue !== null ? currencyFormatter.format(currentValue) : "—"}
                             </td>
                             <td className="px-4 py-3 text-right">
@@ -926,7 +936,7 @@ export function DashboardNewLayout({
                                       style={{ width: `${Math.min(100, (currentValue / totalTokensValue) * 100)}%` }}
                                     />
                                   </div>
-                                  <span className="font-bold text-foreground tabular-nums min-w-[44px]">
+                                  <span className="num font-bold text-foreground min-w-[44px]">
                                     {((currentValue / totalTokensValue) * 100).toFixed(1)}%
                                   </span>
                                 </div>
@@ -934,17 +944,17 @@ export function DashboardNewLayout({
                                 <span className="text-muted-foreground/70">—</span>
                               )}
                             </td>
-                            <td className={`px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
                                 ? `${realized >= 0 ? "+" : ""}${currencyFormatter.format(realized)}`
                                 : <span className="text-muted-foreground/70">—</span>}
                             </td>
-                            <td className={`px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
                                 ? `${unrealized >= 0 ? "+" : ""}${currencyFormatter.format(unrealized)}`
                                 : "—"}
                             </td>
-                            <td className={`px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
                                 ? `${totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(totalPnl)}`
                                 : currencyFormatter.format(realized)}
@@ -1155,15 +1165,15 @@ export function DashboardNewLayout({
               <table className="w-full text-left border-collapse tabular-nums">
                 <thead>
                   <tr className="bg-muted/20">
-                    <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Plateforme</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Jetons</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Coût investi</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Valeur</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">% portefeuille</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL réalisé</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL latent</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">PnL total</th>
-                    <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dernière activité</th>
+                    <th className="px-4 py-3 text-left num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Plateforme</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Jetons</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Coût investi</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Valeur</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">% portefeuille</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL réalisé</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL latent</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL total</th>
+                    <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Dernière activité</th>
                   </tr>
                 </thead>
                 <tbody className="text-xs font-medium">
@@ -1214,11 +1224,11 @@ export function DashboardNewLayout({
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">{s.tokenCount}</td>
-                      <td className="px-4 py-3 text-right text-muted-foreground">
+                      <td className="num px-4 py-3 text-right text-muted-foreground">{s.tokenCount}</td>
+                      <td className="num px-4 py-3 text-right text-muted-foreground">
                         {s.costBasisUsd > 0 ? currencyFormatter.format(s.costBasisUsd) : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-foreground">
+                      <td className="num px-4 py-3 text-right font-bold text-foreground">
                         {hasCurrentPrices && s.currentValueUsd > 0 ? (
                           <span className="inline-flex items-center gap-1">
                             {currencyFormatter.format(s.currentValueUsd)}
@@ -1237,7 +1247,7 @@ export function DashboardNewLayout({
                                 style={{ width: `${Math.min(100, (s.currentValueUsd / totalPlatformValue) * 100)}%` }}
                               />
                             </div>
-                            <span className="font-bold text-foreground tabular-nums min-w-[44px]">
+                            <span className="num font-bold text-foreground min-w-[44px]">
                               {((s.currentValueUsd / totalPlatformValue) * 100).toFixed(1)}%
                             </span>
                           </div>
@@ -1245,22 +1255,22 @@ export function DashboardNewLayout({
                           <span className="text-muted-foreground/70">—</span>
                         )}
                       </td>
-                      <td className={`px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                         {s.realizedPnl !== 0
                           ? `${s.realizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.realizedPnl)}`
                           : "—"}
                       </td>
-                      <td className={`px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.unrealizedPnl !== null
                           ? `${s.unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.unrealizedPnl)}`
                           : "—"}
                       </td>
-                      <td className={`px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.totalPnl !== null
                           ? `${s.totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.totalPnl)}`
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-right text-muted-foreground text-[11px]">
+                      <td className="num px-4 py-3 text-right text-muted-foreground text-[11px]">
                         {s.lastActivityAt > 0
                           ? new Intl.DateTimeFormat("fr-FR", { dateStyle: "short" }).format(new Date(s.lastActivityAt))
                           : "—"}
@@ -1290,34 +1300,36 @@ export function DashboardNewLayout({
                                       <td className="px-3 py-2">
                                         <div className="flex items-center gap-2">
                                           {getCmcIconUrl(t.symbol) ? (
+                                            // Icône de jeton à URL calculée — voir la note plus haut.
+                                            // eslint-disable-next-line @next/next/no-img-element
                                             <img
                                               src={getCmcIconUrl(t.symbol) || ""}
                                               alt={t.symbol}
                                               className="w-5 h-5 rounded-full object-cover bg-muted"
                                             />
                                           ) : (
-                                            <div className="w-5 h-5 bg-muted rounded-full flex items-center justify-center text-[8px] font-black text-primary">
+                                            <div className="w-5 h-5 bg-muted rounded-full flex items-center justify-center text-[8px] font-semibold text-primary">
                                               {t.symbol.slice(0, 2)}
                                             </div>
                                           )}
                                           <span className="font-bold text-foreground text-[11px]">{t.symbol}</span>
                                         </div>
                                       </td>
-                                      <td className="px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                      <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
                                       </td>
-                                      <td className="px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                      <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.costBasis > 0 ? currencyFormatter.format(t.costBasis) : "—"}
                                       </td>
-                                      <td className="px-3 py-2 text-right font-bold text-foreground text-[11px]">
+                                      <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
                                         {t.currentValue !== null ? currencyFormatter.format(t.currentValue) : "—"}
                                       </td>
-                                      <td className={`px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                                         {t.realized !== 0
                                           ? `${t.realized >= 0 ? "+" : ""}${currencyFormatter.format(t.realized)}`
                                           : "—"}
                                       </td>
-                                      <td className={`px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                                         {t.unrealized !== null
                                           ? `${t.unrealized >= 0 ? "+" : ""}${currencyFormatter.format(t.unrealized)}`
                                           : "—"}

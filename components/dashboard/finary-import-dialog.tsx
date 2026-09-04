@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { errorMessage, toast } from "@/lib/toast";
 
 type FinaryImportDialogProps = {
   open: boolean;
@@ -250,13 +251,18 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
       });
       setImportResult({ tradesInserted: result.tradesInserted, withdrawalsInserted: result.withdrawalsInserted });
       setCompleted(true);
+      toast.success(
+        `Import Finary terminé : ${result.tradesInserted} trade${result.tradesInserted > 1 ? "s" : ""} et ${result.withdrawalsInserted} retrait${result.withdrawalsInserted > 1 ? "s" : ""} ajoutés`
+      );
       onSuccess?.();
       setTimeout(() => {
         onOpenChange(false);
         reset();
       }, 2000);
     } catch (err) {
+      console.error("Finary CSV import failed:", err);
       setParseError(err instanceof Error ? err.message : "Erreur lors de l'import.");
+      toast.error(errorMessage(err, "Échec de l'import Finary."));
     } finally {
       setSubmitting(false);
     }

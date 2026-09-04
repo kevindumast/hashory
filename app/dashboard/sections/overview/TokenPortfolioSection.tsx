@@ -668,24 +668,24 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className="text-sm text-foreground">
+                              <span className="num text-sm text-foreground">
                                 {numberFormatter.format(token.currentQuantity)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className="text-sm text-foreground">
+                              <span className="num text-sm text-foreground">
                                 {token.averageBuyPrice !== undefined
                                   ? numberFormatter.format(token.averageBuyPrice)
                                   : "-"}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className="font-medium text-foreground">
+                              <span className="num font-medium text-foreground">
                                 {netUsd === 0 ? "-" : currencyFormatter.format(netUsd)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-right">
-                              <span className="font-medium text-foreground">
+                              <span className="num font-medium text-foreground">
                                 {currentPrices[token.symbol]
                                   ? currencyFormatter.format(
                                       currentPrices[token.symbol] * token.currentQuantity
@@ -710,25 +710,25 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                                 <div className="grid grid-cols-2 gap-6 sm:grid-cols-4">
                                   <div className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground font-semibold uppercase">Bought</span>
-                                    <span className="text-sm font-medium text-emerald-500">
+                                    <span className="num text-sm font-medium text-emerald-500">
                                       +{numberFormatter.format(token.buyQuantity)}
                                     </span>
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground font-semibold uppercase">Sold</span>
-                                    <span className="text-sm font-medium text-red-500">
+                                    <span className="num text-sm font-medium text-red-500">
                                       -{numberFormatter.format(token.sellQuantity)}
                                     </span>
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground font-semibold uppercase">Deposits</span>
-                                    <span className="text-sm text-foreground">
+                                    <span className="num text-sm text-foreground">
                                       {token.depositQuantity === 0 ? "-" : numberFormatter.format(token.depositQuantity)}
                                     </span>
                                   </div>
                                   <div className="flex flex-col gap-1">
                                     <span className="text-xs text-muted-foreground font-semibold uppercase">Withdrawals</span>
-                                    <span className="text-sm text-foreground">
+                                    <span className="num text-sm text-foreground">
                                       {token.withdrawalQuantity === 0 ? "-" : `-${numberFormatter.format(token.withdrawalQuantity)}`}
                                     </span>
                                   </div>
@@ -790,7 +790,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                             className={cn(
                               "h-8 rounded-full px-3 text-xs font-medium transition",
                               range === key
-                                ? "bg-foreground text-background shadow-sm"
+                                ? "bg-foreground text-background"
                                 : "text-muted-foreground hover:bg-background/20"
                             )}
                             onClick={() => setRange(key)}
@@ -943,7 +943,7 @@ export function TokenPortfolioSection({ tokens }: TokenPortfolioSectionProps) {
                                   {event.providerDisplayName}
                                 </span>
                               </div>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="num text-xs text-muted-foreground">
                                 {new Date(event.timestamp).toLocaleString("fr-FR")}
                               </span>
                             </div>
@@ -996,14 +996,14 @@ function PriceTooltip({ active, payload }: ExtendedTooltipProps) {
   const isEvent = (raw as ChartPoint).type !== undefined;
 
   return (
-    <div className="rounded-xl border border-border/70 bg-background/95 px-4 py-3 text-xs shadow-lg">
-      <p className="text-sm font-semibold text-foreground">
+    <div className="rounded-lg border border-border/70 bg-background/95 px-4 py-3 text-xs">
+      <p className="num text-sm font-semibold text-foreground">
         {priceFormatter.format(priceValue)}
       </p>
       {percentChange !== undefined ? (
         <p
           className={cn(
-            "text-xs font-medium",
+            "num text-xs font-medium",
             percentChange >= 0 ? "text-emerald-500" : "text-red-500"
           )}
         >
@@ -1011,7 +1011,7 @@ function PriceTooltip({ active, payload }: ExtendedTooltipProps) {
           {percentChange.toFixed(2)}%
         </p>
       ) : null}
-      <p className="mt-1 text-[11px] text-muted-foreground">
+      <p className="num mt-1 text-[11px] text-muted-foreground">
         {new Date(timestamp).toLocaleString("fr-FR", {
           year: "numeric",
           month: "short",

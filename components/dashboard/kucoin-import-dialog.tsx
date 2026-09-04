@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { errorMessage, toast } from "@/lib/toast";
 import type { Id } from "@/convex/_generated/dataModel";
 
 type KucoinImportDialogProps = {
@@ -104,17 +105,6 @@ type ParseResult = {
 
 type SlotState = { fileName: string; count: number; skipped: number } | null;
 type AllParsed = { spotTrades: SpotTrade[]; converts: Convert[]; deposits: Deposit[]; withdrawals: Withdrawal[]; transfers: InternalTransfer[] };
-
-function detectFileType(filename: string): FileType | null {
-  const lower = filename.toLowerCase();
-  if (lower.includes("convert")) return "convert";
-  if (lower.includes("spot")) return "spot";
-  if (lower.includes("deposit history")) return "deposit";
-  if (lower.includes("withdrawal history")) return "withdrawal";
-  if (lower.includes("trading account")) return "account_trading";
-  if (lower.includes("funding account") || lower.includes("account history")) return "account_funding";
-  return null;
-}
 
 function parseFile(fileType: FileType, rows: string[][]): ParseResult {
   const empty: ParseResult = { spotTrades: [], converts: [], deposits: [], withdrawals: [], transfers: [], skipped: 0 };
@@ -404,10 +394,23 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
       });
       setImportResult(result);
       setCompleted(true);
+      const totalInserted =
+        result.spotInserted +
+        result.convertsInserted +
+        result.depositsInserted +
+        result.withdrawalsInserted +
+        result.transfersInserted;
+      toast.success(
+        totalInserted > 0
+          ? `Import KuCoin terminé : ${totalInserted} ligne${totalInserted > 1 ? "s" : ""} ajoutée${totalInserted > 1 ? "s" : ""}`
+          : "Import KuCoin terminé, aucune nouvelle ligne"
+      );
       onSuccess?.();
       setTimeout(() => { onOpenChange(false); reset(); }, 2500);
     } catch (err) {
+      console.error("KuCoin import failed:", err);
       setErrors((e) => ({ ...e, convert: err instanceof Error ? err.message : "Erreur lors de l'import." }));
+      toast.error(errorMessage(err, "Échec de l'import KuCoin."));
     } finally {
       setSubmitting(false);
     }
