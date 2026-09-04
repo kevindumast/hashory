@@ -58,7 +58,7 @@ const tiers = [
       "SSO et audit logs",
     ],
     cta: "Nous contacter",
-    ctaHref: "mailto:sales@termenva.com",
+    ctaHref: "mailto:contact@hashory.app",
     recommended: false,
   },
 ];

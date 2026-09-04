@@ -8,6 +8,7 @@ import { ReactNode, useEffect } from "react";
 import { convexClient, isConvexConfigured } from "@/convex/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClerkUserSync } from "@/components/auth/clerk-user-sync";
+import { Toaster } from "@/components/ui/sonner";
 
 type ProvidersProps = {
   children: ReactNode;
@@ -27,7 +28,7 @@ export function Providers({ children }: ProvidersProps) {
 
     const registerServiceWorker = () => {
       navigator.serviceWorker.register("/sw.js").catch((error) => {
-        console.warn("[termenva] Service worker registration failed", error);
+        console.warn("[Hashory] Service worker registration failed", error);
       });
     };
 
@@ -42,12 +43,17 @@ export function Providers({ children }: ProvidersProps) {
     };
   }, []);
 
-  const tooltipWrapped = <TooltipProvider delayDuration={150}>{children}</TooltipProvider>;
+  const tooltipWrapped = (
+    <TooltipProvider delayDuration={150}>
+      {children}
+      <Toaster />
+    </TooltipProvider>
+  );
 
   if (!publishableKey) {
     if (process.env.NODE_ENV === "development") {
       console.warn(
-        "[termenva] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Clerk features are disabled for this build."
+        "[Hashory] NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is not set. Clerk features are disabled for this build."
       );
     }
     if (isConvexConfigured && convexClient) {
@@ -63,7 +69,7 @@ export function Providers({ children }: ProvidersProps) {
         appearance={{
           baseTheme: dark,
           variables: {
-            colorPrimary: "#2563eb",
+            colorPrimary: "#6366f1",
           },
         }}
       >
@@ -81,7 +87,7 @@ export function Providers({ children }: ProvidersProps) {
       appearance={{
         baseTheme: dark,
         variables: {
-          colorPrimary: "#2563eb",
+          colorPrimary: "#6366f1",
         },
       }}
     >
