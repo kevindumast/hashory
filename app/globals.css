@@ -10,7 +10,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-body);
-  --font-mono: var(--font-display);
+  --font-display: var(--font-display);
+  --font-serif: var(--font-editorial);
+  --font-mono: var(--font-numeric);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -46,42 +48,52 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* ─────────────────────────────────────────────────────────────
+   Thème clair — variante d'un système pensé dark-first.
+   Le bleu shadcn par défaut laisse place à l'indigo de marque,
+   cohérent avec le periwinkle du thème sombre.
+   ───────────────────────────────────────────────────────────── */
 :root {
-  --radius: 0.625rem;
-  --positive: #10b981;
-  --negative: #ef4444;
-  --surface-low: rgba(255, 255, 255, 0.85);
-  --background: #f7f8fb;
+  --radius: 0.25rem;
+  --positive: #0f9d6f;
+  --negative: #dc4c4c;
+  --surface-low: rgba(255, 255, 255, 0.88);
+  --background: #fbfbfe;
   --foreground: #0b1120;
-  --card: rgba(255, 255, 255, 0.92);
+  --card: rgba(255, 255, 255, 0.94);
   --card-foreground: #0b1120;
-  --popover: rgba(255, 255, 255, 0.97);
+  --popover: rgba(255, 255, 255, 0.98);
   --popover-foreground: #0b1120;
-  --primary: #2563eb;
+  --primary: #4338ca;
   --primary-foreground: #f8fafc;
-  --secondary: rgba(15, 23, 42, 0.06);
+  --secondary: rgba(15, 23, 42, 0.05);
   --secondary-foreground: #0b1120;
-  --muted: rgba(15, 23, 42, 0.05);
-  --muted-foreground: rgba(15, 23, 42, 0.62);
-  --accent: rgba(37, 99, 235, 0.14);
+  --muted: rgba(15, 23, 42, 0.045);
+  --muted-foreground: rgba(15, 23, 42, 0.6);
+  --accent: rgba(67, 56, 202, 0.12);
   --accent-foreground: #0b1120;
-  --destructive: #ef4444;
+  --destructive: #dc4c4c;
   --border: rgba(15, 23, 42, 0.08);
   --input: rgba(15, 23, 42, 0.12);
-  --ring: rgba(37, 99, 235, 0.52);
-  --chart-1: #2563eb;
-  --chart-2: #38bdf8;
-  --chart-3: #22c55e;
+  --ring: rgba(67, 56, 202, 0.5);
+  --chart-1: #4338ca;
+  --chart-2: #0ea5e9;
+  --chart-3: #0f9d6f;
   --chart-4: #f97316;
   --chart-5: #a855f7;
-  --sidebar: rgba(255, 255, 255, 0.94);
+  --sidebar: rgba(255, 255, 255, 0.96);
   --sidebar-foreground: #0b1120;
-  --sidebar-primary: #2563eb;
+  --sidebar-primary: #4338ca;
   --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: rgba(37, 99, 235, 0.16);
+  --sidebar-accent: rgba(67, 56, 202, 0.1);
   --sidebar-accent-foreground: #0b1120;
   --sidebar-border: rgba(15, 23, 42, 0.08);
-  --sidebar-ring: rgba(59, 130, 246, 0.5);
+  --sidebar-ring: rgba(67, 56, 202, 0.45);
+
+  /* Jetons de marque : halos, grilles, effets de pointeur */
+  --brand-glow: rgba(67, 56, 202, 0.18);
+  --brand-glow-strong: rgba(67, 56, 202, 0.3);
+  --grid-line: rgba(15, 23, 42, 0.06);
 }
 
 .dark {
@@ -105,7 +117,7 @@
   --destructive: #ee7d77;
   --border: rgba(130, 155, 210, 0.28);
   --input: rgba(130, 155, 210, 0.22);
-  --ring: rgba(180, 197, 255, 0.50);
+  --ring: rgba(180, 197, 255, 0.5);
   --chart-1: #b4c5ff;
   --chart-2: #9bffce;
   --chart-3: #58e7ab;
@@ -117,18 +129,37 @@
   --sidebar-primary-foreground: #00389a;
   --sidebar-accent: rgba(180, 197, 255, 0.16);
   --sidebar-accent-foreground: #dfe4ff;
-  --sidebar-border: rgba(255, 255, 255, 0.10);
-  --sidebar-ring: rgba(180, 197, 255, 0.50);
+  --sidebar-border: rgba(255, 255, 255, 0.1);
+  --sidebar-ring: rgba(180, 197, 255, 0.5);
+
+  --brand-glow: rgba(180, 197, 255, 0.18);
+  --brand-glow-strong: rgba(180, 197, 255, 0.38);
+  --grid-line: rgba(180, 197, 255, 0.07);
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border;
   }
   body {
     @apply bg-background text-foreground;
   }
+  /* Anneau de focus au clavier uniquement — plus propre à la souris. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  /* Les chiffres financiers sont toujours tabulaires : les colonnes
+     s'alignent et les valeurs ne sautent plus à la mise à jour. */
+  .font-mono,
+  [data-numeric],
+  table td,
+  table th {
+    font-variant-numeric: tabular-nums;
+  }
 }
+
+/* ─── Utilitaires ──────────────────────────────────────────── */
 
 .no-scrollbar::-webkit-scrollbar {
   display: none;
@@ -136,4 +167,268 @@
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Barre de défilement discrète, cohérente avec le thème. */
+.scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scrollbar-subtle::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-subtle::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 9999px;
+}
+
+/* Étiquette éditoriale : mono, capitales, très espacée. Sert de sur-titre
+   de section, d'en-tête de colonne et de libellé d'indicateur. */
+.eyebrow {
+  font-family: var(--font-numeric), ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: var(--muted-foreground);
+}
+
+/* Filet horizontal — la structure du site repose dessus plutôt que sur
+   des cartes flottantes. */
+.rule {
+  border-bottom: 1px solid var(--border);
+}
+
+/* Valeur chiffrée : mono + tabulaire, à poser sur tout montant. */
+.num {
+  font-family: var(--font-numeric), ui-monospace, SFMono-Regular, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Effets pilotés par le pointeur ───────────────────────────
+   Les composants client posent --mx / --my (curseur dans l'élément,
+   en px) et --px / --py (position normalisée 0→1 dans la fenêtre).
+   Tout le rendu se fait en CSS : aucun re-render React.
+   ───────────────────────────────────────────────────────────── */
+
+/* Halo global qui suit le curseur sur la landing. */
+.cursor-aura {
+  position: fixed;
+  inset: 0;
+  /* Derrière le contenu, devant le fond de page — comme la grille et la lueur. */
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    600px circle at var(--cursor-x, 50%) var(--cursor-y, 0%),
+    var(--brand-glow) 0%,
+    transparent 65%
+  );
+  opacity: 0;
+  transition: opacity 600ms ease;
+}
+.cursor-aura[data-active="true"] {
+  opacity: 1;
+}
+
+/* Carte dont la bordure s'illumine sous le curseur. */
+.glow-card {
+  position: relative;
+}
+.glow-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: radial-gradient(
+    220px circle at var(--mx, 50%) var(--my, 50%),
+    var(--brand-glow-strong),
+    transparent 70%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+.glow-card::after {
+  content: "";
+  position: absolute;
+  inset: -24px;
+  border-radius: calc(var(--radius) + 24px);
+  /* Le pseudo déborde de 24px : on recale le centre du dégradé d'autant
+     pour qu'il reste exactement sous le curseur. */
+  background: radial-gradient(
+    280px circle at calc(var(--mx, 50%) + 24px) calc(var(--my, 50%) + 24px),
+    var(--brand-glow),
+    transparent 70%
+  );
+  filter: blur(12px);
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+  z-index: -1;
+}
+.glow-card:hover::before,
+.glow-card:hover::after {
+  opacity: 1;
+}
+
+/* Fondu vertical du champ de caractères : il naît sous l'en-tête et
+   s'efface avant l'aperçu produit. */
+.decoder-mask {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 56%,
+    transparent 92%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    #000 14%,
+    #000 56%,
+    transparent 92%
+  );
+}
+
+/* Grille de fond dont l'origine suit légèrement le curseur. */
+.reactive-grid {
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: calc(var(--px, 0.5) * -24px) calc(var(--py, 0.5) * -24px);
+  transition: background-position 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+}
+
+/* Parallaxe : l'élément se décale à l'inverse du curseur. */
+.parallax {
+  transform: translate3d(
+    calc((var(--px, 0.5) - 0.5) * var(--parallax-strength, 16px) * -1),
+    calc((var(--py, 0.5) - 0.5) * var(--parallax-strength, 16px) * -1),
+    0
+  );
+  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* Inclinaison 3D d'une carte suivant le pointeur. */
+.tilt {
+  transform: perspective(1200px)
+    rotateX(calc((var(--ty, 0.5) - 0.5) * var(--tilt-strength, 7deg) * -1))
+    rotateY(calc((var(--tx, 0.5) - 0.5) * var(--tilt-strength, 7deg)));
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Bouton magnétique — décalage posé en JS via --dx / --dy. */
+.magnetic {
+  transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0);
+  transition: transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* Révélation à l'entrée dans le viewport. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--reveal-delay, 0ms);
+}
+.reveal[data-revealed="true"] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Balayage lumineux (bordures animées, badges live). */
+@keyframes shimmer-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+.shimmer {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    var(--brand-glow-strong) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sweep 2.4s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 var(--brand-glow-strong);
+  }
+  70% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+.pulse-ring {
+  animation: pulse-ring 2.4s cubic-bezier(0.66, 0, 0, 1) infinite;
+}
+
+/* Défilement infini pour la barre de plateformes. */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee-scroll var(--marquee-duration, 40s) linear infinite;
+}
+.marquee-mask {
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.marquee-host:hover .marquee-track {
+  animation-play-state: paused;
+}
+
+/* Accessibilité : tout le mouvement est neutralisé si l'utilisateur
+   a demandé une réduction des animations au niveau système. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
+  .parallax,
+  .tilt,
+  .magnetic {
+    transform: none;
+  }
+  .cursor-aura {
+    display: none;
+  }
 }
