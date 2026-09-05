@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import type { ProviderId } from "@/lib/providers";
 import { errorMessage, toast } from "@/lib/toast";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ const CATEGORY_LABELS: Record<ProviderCategory, string> = {
 };
 
 type ProviderConfig = {
-  value: string;
+  value: ProviderId;
   label: string;
   description: string;
   iconUrl: string;

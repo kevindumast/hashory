@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { errorMessage, toast } from "@/lib/toast";
@@ -22,8 +23,6 @@ const RETRY_COOLDOWN_MS = 60 * 60 * 1000;
 
 const ATTEMPT_STORAGE_KEY = "hashory:auto-sync:last-attempt";
 
-/** Ces sources proviennent d'un fichier importé : rien à resynchroniser. */
-const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"]);
 
 function readLastAttempt(): number {
   try {

@@ -45,6 +45,7 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
+import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
 import { toast, withToast } from "@/lib/toast"
 import type { Id } from "@/convex/_generated/dataModel"
 
@@ -78,7 +79,6 @@ const PROVIDER_NAMES: Record<string, string> = {
   finary: "Finary",
 }
 
-const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"])
 
 type AccountType = "All" | "API" | "File"
 
