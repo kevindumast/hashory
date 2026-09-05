@@ -29,6 +29,7 @@ import type * as deposits from "../deposits.js";
 import type * as ethereum from "../ethereum.js";
 import type * as fiatTransactions from "../fiatTransactions.js";
 import type * as finary from "../finary.js";
+import type * as fxRates from "../fxRates.js";
 import type * as integrations from "../integrations.js";
 import type * as kaspa from "../kaspa.js";
 import type * as kucoin from "../kucoin.js";
@@ -72,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   ethereum: typeof ethereum;
   fiatTransactions: typeof fiatTransactions;
   finary: typeof finary;
+  fxRates: typeof fxRates;
   integrations: typeof integrations;
   kaspa: typeof kaspa;
   kucoin: typeof kucoin;

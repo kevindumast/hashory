@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
-import { computeCessionChain } from "../lib/tax";
+import { computeCessionChain, isBelowAnnualExemption, ANNUAL_EXEMPTION_EUR, PFU_RATE as TAX_RATE } from "../lib/tax";
+import { convertUsdToEur, createFxResolver } from "../lib/fx";
 import { optionalUserId } from "./auth";
 
 // Currencies that trigger a taxable "cession" in France (article 150 VH bis CGI)
@@ -45,6 +46,12 @@ export type TaxableEvent = {
   costBasisUsd: number;
   gainLossUsd: number;
   source: "trade" | "fiat" | "convert";
+  /** Montants convertis au cours du change du jour de la cession. */
+  proceedsEur: number | null;
+  costBasisEur: number | null;
+  gainLossEur: number | null;
+  /** Taux appliqué, en euros par dollar. */
+  fxRate: number | null;
 };
 
 export type TaxYearReport = {
@@ -55,6 +62,13 @@ export type TaxYearReport = {
   estimatedTaxUsd: number;
   isBelowThreshold: boolean;
   events: TaxableEvent[];
+  /**
+   * Totaux en euros, devise de la déclaration. `null` si l'historique de
+   * change ne couvre pas l'année.
+   */
+  totalProceedsEur: number | null;
+  netGainLossEur: number | null;
+  estimatedTaxEur: number | null;
 };
 
 export type TaxReportResult = {
@@ -74,13 +88,17 @@ export type TaxReportResult = {
    * revient, faute de cours historique. La plus-value est alors minorée.
    */
   hasIncompleteValuation: boolean;
+  /** Vrai si aucun taux de change n'est disponible pour convertir en euros. */
+  hasMissingFxRates: boolean;
 };
 
-// PFU flat tax rate (Prélèvement Forfaitaire Unique)
-const PFU_RATE = 0.30;
 
-// 305 EUR exemption threshold (approximate in USD; user should verify in EUR)
-const THRESHOLD_USD = 340;
+/**
+ * Repli utilisé uniquement si aucun taux de change n'est disponible : le
+ * seuil légal est de 305 €, apprécié en euros dès que la conversion est
+ * possible. Cette approximation en dollars ne doit jamais être la référence.
+ */
+const THRESHOLD_USD_FALLBACK = 340;
 
 export const computeTaxReport = query({
   args: {},
@@ -92,6 +110,7 @@ export const computeTaxReport = query({
       hasOnlyStablecoinTrades: false,
       currentAcquisitionCost: 0,
       hasIncompleteValuation: false,
+      hasMissingFxRates: true,
     };
     const clerkId = await optionalUserId(ctx);
     if (!clerkId) return empty;
@@ -277,10 +296,25 @@ export const computeTaxReport = query({
 
     const chain = computeCessionChain(events, priceAt);
 
+    // Taux de change du jour de chaque cession : la déclaration se fait en
+    // euros, et le texte retient le cours du jour de l'opération.
+    const fxRows = await ctx.db
+      .query("fxRateHistory")
+      .withIndex("by_day", (q) => q.gte("dayUtc", fromDay).lte("dayUtc", toDay))
+      .collect();
+    const rateAt = createFxResolver(
+      fxRows.map((row) => ({ dayUtc: row.dayUtc, eurPerUsd: row.eurPerUsd }))
+    );
+    const hasMissingFxRates = fxRows.length === 0;
+
     const taxableByYear = new Map<number, TaxableEvent[]>();
     for (const cession of chain.cessions) {
       const year = new Date(cession.date).getUTCFullYear();
       if (!taxableByYear.has(year)) taxableByYear.set(year, []);
+
+      const proceeds = convertUsdToEur(cession.proceedsUsd, cession.date, rateAt);
+      const costBasis = convertUsdToEur(cession.costBasisUsd, cession.date, rateAt);
+
       taxableByYear.get(year)!.push({
         date: cession.date,
         asset: cession.asset,
@@ -289,6 +323,11 @@ export const computeTaxReport = query({
         costBasisUsd: cession.costBasisUsd,
         gainLossUsd: cession.gainLossUsd,
         source: cession.source,
+        proceedsEur: proceeds?.amountEur ?? null,
+        costBasisEur: costBasis?.amountEur ?? null,
+        gainLossEur:
+          proceeds && costBasis ? proceeds.amountEur - costBasis.amountEur : null,
+        fxRate: proceeds?.rate ?? null,
       });
     }
 
@@ -316,16 +355,35 @@ export const computeTaxReport = query({
         const totalProceeds = sortedEvents.reduce((s, e) => s + e.proceedsUsd, 0);
         const totalCost = sortedEvents.reduce((s, e) => s + e.costBasisUsd, 0);
         const netGain = totalProceeds - totalCost;
-        const isBelowThreshold = totalProceeds < THRESHOLD_USD;
+
+        // Le seuil de 305 € est une valeur légale en euros : le comparer à un
+        // montant en dollars via un taux figé pouvait faire basculer du
+        // mauvais côté. On l'apprécie donc sur les cessions converties.
+        const hasFullEurCoverage = sortedEvents.every((e) => e.proceedsEur !== null);
+        const totalProceedsEur = hasFullEurCoverage
+          ? sortedEvents.reduce((s, e) => s + (e.proceedsEur ?? 0), 0)
+          : null;
+        const netGainEur = hasFullEurCoverage
+          ? sortedEvents.reduce((s, e) => s + (e.gainLossEur ?? 0), 0)
+          : null;
+
+        const isBelowThreshold =
+          totalProceedsEur !== null
+            ? isBelowAnnualExemption(totalProceedsEur, ANNUAL_EXEMPTION_EUR)
+            : totalProceeds < THRESHOLD_USD_FALLBACK;
 
         return {
           year,
           totalProceedsUsd: totalProceeds,
           totalCostBasisUsd: totalCost,
           netGainLossUsd: netGain,
-          estimatedTaxUsd: isBelowThreshold ? 0 : Math.max(0, netGain * PFU_RATE),
+          estimatedTaxUsd: isBelowThreshold ? 0 : Math.max(0, netGain * TAX_RATE),
           isBelowThreshold,
           events: sortedEvents,
+          totalProceedsEur,
+          netGainLossEur: netGainEur,
+          estimatedTaxEur:
+            netGainEur === null ? null : isBelowThreshold ? 0 : Math.max(0, netGainEur * TAX_RATE),
         };
       });
 
@@ -336,6 +394,7 @@ export const computeTaxReport = query({
       hasOnlyStablecoinTrades,
       currentAcquisitionCost: totalAcquisitionCost,
       hasIncompleteValuation: chain.hasIncompleteValuation,
+      hasMissingFxRates,
     };
   },
 });
