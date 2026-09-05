@@ -169,10 +169,27 @@ export function DashboardNewLayout({
     : profitSummary.profitPercentage || 0;
   const unrealizedPnl = hasCurrentPrices ? totalCurrentValue - totalCostBasis : null;
 
+  /** Clé d'axe unique : une journée ne peut pas apparaître deux fois. */
+  function axisKeyOf(timestamp: number): string {
+    return new Date(timestamp).toISOString().slice(0, 10);
+  }
+
+  /** Reconvertit la clé d'axe en date lisible pour l'infobulle. */
+  function axisKeyToLabel(value: string | number): string {
+    const parsed = Date.parse(String(value));
+    if (Number.isNaN(parsed)) return String(value);
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(parsed);
+  }
+
   // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
-  function makeXTick(series: { timestamp: number }[]) {
+  function makeXTick(series: { timestamp: number; label: string }[]) {
     return function XTick(props: { x?: string | number; y?: string | number; payload?: { value: string | number }; index?: number }) {
-      const { x = 0, y = 0, payload, index = 0 } = props;
+      const { x = 0, y = 0, index = 0 } = props;
       const point = series[index];
       if (!point) return <g />;
       const year = new Date(point.timestamp).getUTCFullYear();
@@ -188,7 +205,7 @@ export function DashboardNewLayout({
             fill="var(--muted-foreground)"
             fontSize={11}
           >
-            {payload?.value}
+            {point.label}
           </text>
 
           {/* Year boundary */}
@@ -257,7 +274,11 @@ export function DashboardNewLayout({
   }, [holdingsSeries]);
 
   const filteredHoldings = useMemo(
-    () => aggregateHoldingsByPeriod(holdingsSeries, activePeriod),
+    () =>
+      aggregateHoldingsByPeriod(holdingsSeries, activePeriod).map((point) => ({
+        ...point,
+        axisKey: axisKeyOf(point.timestamp),
+      })),
     [holdingsSeries, activePeriod]
   );
 
@@ -430,7 +451,7 @@ export function DashboardNewLayout({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
-                      dataKey="label"
+                      dataKey="axisKey"
                       tickLine={false}
                       axisLine={false}
                       height={46}
@@ -452,7 +473,7 @@ export function DashboardNewLayout({
                           className="num"
                           active={active}
                           payload={payload}
-                          label={label}
+                          label={axisKeyToLabel(label as string | number)}
                           formatter={(value) => currencyFormatter.format(Number(value))}
                         />
                       }
@@ -585,7 +606,7 @@ export function DashboardNewLayout({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
-                      dataKey="label"
+                      dataKey="axisKey"
                       tickLine={false}
                       axisLine={false}
                       height={46}
@@ -607,7 +628,7 @@ export function DashboardNewLayout({
                           className="num"
                           active={active}
                           payload={payload}
-                          label={label}
+                          label={axisKeyToLabel(label as string | number)}
                           formatter={(value) => {
                             const n = Number(value);
                             return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
