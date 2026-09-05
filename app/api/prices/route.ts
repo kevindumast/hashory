@@ -72,19 +72,40 @@ function readFreshPrice(symbol: string, now: number): string | null {
   return cached.price;
 }
 
-async function fetchBinance(symbol: string): Promise<{ symbol: string; price: string } | null> {
+/**
+ * Instantané de tous les cours Binance, en un seul appel.
+ *
+ * Interroger une paire à la fois paraissait économe, mais le tableau de bord
+ * en demande près d'une centaine : autant de requêtes simultanées, dont
+ * Binance rejette une partie. Le symptôme était trompeur — quelques actifs
+ * sans cours, différents à chaque chargement — parce que rien ne distingue
+ * un actif inconnu d'un appel refusé.
+ *
+ * L'endpoint sans paramètre renvoie l'ensemble des paires d'un coup. Une
+ * requête suffit donc, quel que soit le nombre d'actifs détenus.
+ */
+let binanceSnapshot: { fetchedAt: number; prices: Map<string, string> } | null = null;
+
+async function fetchBinanceSnapshot(now: number): Promise<Map<string, string>> {
+  if (binanceSnapshot && now - binanceSnapshot.fetchedAt < PRICE_TTL_MS) {
+    return binanceSnapshot.prices;
+  }
+
   try {
-    const response = await fetch(
-      `https://api.binance.com/api/v3/ticker/price?symbol=${symbol}`,
-      {
-        headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-    if (!response.ok) return null;
-    return (await response.json()) as { symbol: string; price: string };
-  } catch {
-    return null;
+    const response = await fetch('https://api.binance.com/api/v3/ticker/price', {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) throw new Error(`Binance a répondu ${response.status}`);
+
+    const rows = (await response.json()) as Array<{ symbol: string; price: string }>;
+    const prices = new Map(rows.map((row) => [row.symbol.toUpperCase(), row.price]));
+    binanceSnapshot = { fetchedAt: now, prices };
+    return prices;
+  } catch (error) {
+    console.error('[prices] instantané Binance indisponible', error);
+    // Mieux vaut un instantané légèrement daté que plus aucun cours.
+    return binanceSnapshot?.prices ?? new Map();
   }
 }
 
@@ -115,15 +136,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 1. Tentative Binance sur les symboles manquants
-    const binanceResults = await Promise.all(
-      symbolsToFetch.map(async (symbol) => ({ symbol, data: await fetchBinance(symbol) }))
-    );
-    for (const { symbol, data } of binanceResults) {
-      if (data) {
-        allResults.push(data);
-        resolvedPairs.add(data.symbol.toUpperCase());
-        rememberPrice(symbol, data.price, now);
+    // 1. Résolution depuis l'instantané Binance, en un seul appel réseau.
+    if (symbolsToFetch.length > 0) {
+      const snapshot = await fetchBinanceSnapshot(now);
+      for (const symbol of symbolsToFetch) {
+        const price = snapshot.get(symbol);
+        if (price) {
+          allResults.push({ symbol, price });
+          resolvedPairs.add(symbol);
+          rememberPrice(symbol, price, now);
+        }
       }
     }
 

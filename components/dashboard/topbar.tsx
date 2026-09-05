@@ -188,7 +188,17 @@ export function DashboardTopbar({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={theme === "dark" ? "Passer en mode clair" : "Passer en mode sombre"}
+              // Le thème résolu n'existe qu'après le montage : le serveur rend
+              // toujours la valeur par défaut. Décrire la destination avant
+              // d'en connaître l'origine produisait une divergence
+              // d'hydratation, l'icône et l'infobulle étant déjà protégées.
+              aria-label={
+                mounted
+                  ? theme === "dark"
+                    ? "Passer en mode clair"
+                    : "Passer en mode sombre"
+                  : "Changer de thème"
+              }
               className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
