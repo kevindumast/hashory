@@ -53,17 +53,17 @@ function SummaryCard({
 }) {
   const color =
     variant === "positive"
-      ? "text-emerald-500"
+      ? "text-positive"
       : variant === "negative"
-        ? "text-red-500"
+        ? "text-negative"
         : variant === "warning"
-          ? "text-amber-500"
+          ? "text-chart-4"
           : "text-foreground";
   return (
     <Card className="border-border/60 bg-card/80">
       <CardHeader className="pb-2">
         <CardDescription className="text-xs">{label}</CardDescription>
-        <CardTitle className={cn("text-2xl", color)}>{value}</CardTitle>
+        <CardTitle className={cn("num text-2xl", color)}>{value}</CardTitle>
       </CardHeader>
       {sub && (
         <CardContent className="pt-0">
@@ -105,23 +105,23 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
                 key={i}
                 className="border-b border-border/40 hover:bg-muted/30 transition-colors"
               >
-                <td className="py-2 px-3 text-muted-foreground">
+                <td className="num py-2 px-3 text-muted-foreground">
                   {new Date(e.date).toLocaleDateString("fr-FR")}
                 </td>
                 <td className="py-2 px-3 font-medium">{e.asset}</td>
-                <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
+                <td className="num py-2 px-3 text-right text-muted-foreground">
                   {qty.format(e.quantity)}
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums">
+                <td className="num py-2 px-3 text-right">
                   {usd.format(e.proceedsUsd)}
                 </td>
-                <td className="py-2 px-3 text-right tabular-nums text-muted-foreground">
+                <td className="num py-2 px-3 text-right text-muted-foreground">
                   {usd.format(e.costBasisUsd)}
                 </td>
                 <td
                   className={cn(
-                    "py-2 px-3 text-right tabular-nums font-medium",
-                    isGain ? "text-emerald-500" : "text-red-500"
+                    "num py-2 px-3 text-right font-medium",
+                    isGain ? "text-positive" : "text-negative"
                   )}
                 >
                   {isGain ? "+" : ""}
@@ -174,7 +174,7 @@ export function TaxReportView() {
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="text-2xl font-semibold tracking-tight">Déclaration fiscale</h1>
+            <h1 className="font-serif text-3xl font-normal leading-tight text-foreground">Déclaration fiscale</h1>
             <p className="text-sm text-muted-foreground">
               Calcul selon l&apos;article 150 VH bis du CGI — méthode proportionnelle (PFU 30%)
             </p>
@@ -199,7 +199,7 @@ export function TaxReportView() {
               key={y}
               onClick={() => setSelectedYear(y)}
               className={cn(
-                "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
+                "num px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
                 effectiveYear === y
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
@@ -252,10 +252,10 @@ export function TaxReportView() {
           <>
             {/* Threshold alert */}
             {report.isBelowThreshold && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/20 px-4 py-3">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+              <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+                <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
                 <div className="text-sm">
-                  <span className="font-medium text-amber-700 dark:text-amber-400">
+                  <span className="font-medium text-chart-4">
                     Seuil non atteint :
                   </span>{" "}
                   <span className="text-muted-foreground">
@@ -317,9 +317,9 @@ export function TaxReportView() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {report.netGainLossUsd >= 0 ? (
-                      <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
+                      <TrendingUp className="w-3.5 h-3.5 text-positive" />
                     ) : (
-                      <TrendingDown className="w-3.5 h-3.5 text-red-500" />
+                      <TrendingDown className="w-3.5 h-3.5 text-negative" />
                     )}
                     {report.events.length} opération{report.events.length > 1 ? "s" : ""}
                   </div>
@@ -361,7 +361,7 @@ export function TaxReportView() {
                       )}
                     >
                       <span className={highlight ? "text-foreground" : "text-muted-foreground"}>{label}</span>
-                      <span className={cn("tabular-nums", highlight && report.netGainLossUsd >= 0 ? "text-emerald-500" : highlight ? "text-red-500" : "")}>
+                      <span className={cn("num", highlight && report.netGainLossUsd >= 0 ? "text-positive" : highlight ? "text-negative" : "")}>
                         {value}
                       </span>
                     </div>

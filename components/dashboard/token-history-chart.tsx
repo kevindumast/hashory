@@ -144,7 +144,7 @@ export function TokenHistoryChart({
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
-                tick={{ fill: "var(--muted-foreground)", fontSize: 10 }}
+                tick={{ fill: "var(--muted-foreground)", fontSize: 10, className: "num" }}
                 minTickGap={40}
               />
               <YAxis
@@ -154,11 +154,12 @@ export function TokenHistoryChart({
                 width={62}
                 tickFormatter={(v) => formatAxisValue(v)}
                 style={{ fontSize: "10px" }}
-                tick={{ fill: "var(--muted-foreground)" }}
+                tick={{ fill: "var(--muted-foreground)", className: "num" }}
               />
               <ChartTooltip
                 content={({ active, payload, label }) =>
                   <ChartTooltipContent
+                    className="num"
                     active={active}
                     payload={payload}
                     label={label}

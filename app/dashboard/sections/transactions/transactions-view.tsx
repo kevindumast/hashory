@@ -321,7 +321,7 @@ export function TransactionsView({
   };
 
   return (
-    <div className="flex flex-col h-full bg-muted/40 font-sans rounded-xl overflow-hidden border border-border">
+    <div className="flex flex-col h-full bg-muted/40 font-sans rounded-lg overflow-hidden border border-border">
       {/* Header Tabs & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-muted/40">
         {/* Tabs */}
@@ -335,12 +335,12 @@ export function TransactionsView({
         <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-1 justify-end bg-muted/40">
           <Button
             variant="outline"
-            className="bg-card border-border text-foreground hover:bg-muted h-9 text-sm font-medium shadow-sm"
+            className="bg-card border-border text-foreground hover:bg-muted h-9 text-sm font-medium"
             onClick={handleExport}
           >
             <Download className="w-4 h-4 mr-2 text-foreground" />
             Exporter
-            <span className="ml-2 bg-muted/40 border border-border rounded-full px-2 py-0.5 text-xs text-foreground">{sortedTransactions.length}</span>
+            <span className="num ml-2 bg-muted/40 border border-border rounded-full px-2 py-0.5 text-xs text-foreground">{sortedTransactions.length}</span>
           </Button>
           <Button className="bg-primary/15 text-primary hover:bg-primary/25 border-none h-9 text-sm font-medium shadow-none">
             <Plus className="w-4 h-4 mr-2" />
@@ -381,14 +381,14 @@ export function TransactionsView({
           >
             <Filter className="w-4 h-4 mr-2" />
             Filtres
-            <span className="ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
+            <span className="num ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">
               {symbolFilter !== "all" || tokenSearch ? "1" : "0"}
             </span>
           </Button>
           <Button variant="ghost" className="bg-muted/40 text-foreground hover:bg-muted h-9 text-sm font-medium border border-border">
             <Eye className="w-4 h-4 mr-2" />
             Affichage
-            <span className="ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
+            <span className="num ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
           </Button>
         </div>
         
@@ -430,12 +430,12 @@ export function TransactionsView({
             </div>
         ) : (
         <table className="w-full text-left border-collapse">
-          <thead className="bg-card sticky top-0 z-10 shadow-sm">
+          <thead className="bg-card sticky top-0 z-10">
             <tr className="border-b border-border h-10">
               <th className="w-12 px-4 py-2 bg-card"><Checkbox className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary" /></th>
               <th className="w-10 px-2 py-2 bg-card"></th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Type de transaction</th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground bg-card">Type de transaction</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground bg-card">
                 <button
                   onClick={toggleDateSort}
                   className="flex items-center gap-1.5 hover:text-primary transition-colors"
@@ -444,13 +444,13 @@ export function TransactionsView({
                   <ArrowUpDown className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Sortie</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground bg-card">Sortie</th>
               <th className="w-10 px-2 py-2 bg-card"></th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-card">Entrée</th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Prix unitaire</th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Fee</th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Montant USD</th>
-              <th className="px-4 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider text-right bg-card">Montant EUR</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground bg-card">Entrée</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-right bg-card">Prix unitaire</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-right bg-card">Fee</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-right bg-card">Montant USD</th>
+              <th className="px-4 py-2 num text-[10px] uppercase tracking-[0.2em] text-muted-foreground text-right bg-card">Montant EUR</th>
             </tr>
           </thead>
           <tbody>
@@ -476,8 +476,8 @@ export function TransactionsView({
                 </td>
                 <td className="px-4 py-2">
                   <div className="flex flex-col">
-                    <span className="text-xs font-medium text-foreground">{tx.date}</span>
-                    <span className="text-[11px] text-muted-foreground">{tx.time}</span>
+                    <span className="num text-xs font-medium text-foreground">{tx.date}</span>
+                    <span className="num text-[11px] text-muted-foreground">{tx.time}</span>
                   </div>
                 </td>
                 <td className="px-4 py-2">
@@ -493,7 +493,7 @@ export function TransactionsView({
                         />
                       ) : null}
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
+                        <span className="num text-sm font-semibold text-foreground whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>
                         <div className="flex items-center gap-1.5">
                           <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
                           <span className="text-[11px] text-muted-foreground">{tx.out.account}</span>
@@ -521,7 +521,7 @@ export function TransactionsView({
                         />
                       ) : null}
                       <div className="flex flex-col gap-1">
-                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
+                        <span className="num text-sm font-semibold text-foreground whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>
                         <div className="flex items-center gap-1.5">
                           <div className="w-3 h-3 rounded-[2px] bg-[#F3BA2F]" title="Binance"></div>
                           <span className="text-[11px] text-muted-foreground">{tx.in.account}</span>
@@ -534,25 +534,25 @@ export function TransactionsView({
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="num text-sm font-medium text-foreground">
                     {tx.price != null ? numberFormatter.format(tx.price) : "-"}
                   </span>
                 </td>
                 <td className="px-4 py-2 text-right">
                   {tx.fee != null ? (
                     <div className="flex flex-col items-end">
-                      <span className="text-sm font-medium text-foreground">{numberFormatter.format(tx.fee)}</span>
+                      <span className="num text-sm font-medium text-foreground">{numberFormatter.format(tx.fee)}</span>
                       {tx.feeAsset && <span className="text-[11px] text-muted-foreground">{tx.feeAsset}</span>}
                     </div>
                   ) : (
-                    <span className="text-sm font-medium text-foreground">-</span>
+                    <span className="num text-sm font-medium text-foreground">-</span>
                   )}
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-foreground">{tx.amountDisplay}</span>
+                  <span className="num text-sm font-medium text-foreground">{tx.amountDisplay}</span>
                 </td>
                 <td className="px-4 py-2 text-right">
-                  <span className="text-sm font-medium text-foreground">
+                  <span className="num text-sm font-medium text-foreground">
                     {tx.amountEur != null && tx.amountEur > 0 ? `€${tx.amountEur.toFixed(2)}` : "-"}
                   </span>
                 </td>
@@ -567,13 +567,13 @@ export function TransactionsView({
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="sm:max-w-[500px] bg-card">
           <DialogHeader className="pb-4">
-            <DialogTitle className="text-xl font-bold text-foreground">Filtres</DialogTitle>
+            <DialogTitle className="font-serif text-2xl font-normal text-foreground">Filtres</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
             {/* Filter Section - Jeton */}
             <div className="space-y-3">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Jeton</label>
+              <label className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Jeton</label>
               <select
                 value={tempSymbolFilter}
                 onChange={(e) => setTempSymbolFilter(e.target.value)}
@@ -643,7 +643,7 @@ function Tab({ label, count, active }: { label: string, count: number, active?: 
                     {label}
                 </span>
                 <span className={cn(
-                    "text-xs font-medium px-1.5 py-0.5 rounded-full border", 
+                    "num text-xs font-medium px-1.5 py-0.5 rounded-full border", 
                     active 
                         ? "bg-card border-primary/50 text-foreground" 
                         : "border-border text-muted-foreground"

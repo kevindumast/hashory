@@ -1,56 +1,53 @@
 "use client";
 
-import { useState } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
 import { DashboardNewLayout } from "@/app/dashboard/sections/overview/DashboardNewLayout";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
+import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
+import { OnboardingChecklist, OnboardingHero } from "@/components/dashboard/onboarding";
 
 export function DashboardContent() {
   const { user } = useUser();
   const userName = user?.firstName ?? user?.username ?? null;
-  const [refreshToken] = useState(0);
+  const { openDialog } = useProviderDialog();
   const {
     profitSummary,
     historySeries,
     portfolioTokens,
     isLoading,
-  } = useDashboardMetrics(refreshToken);
+    isLoadingIntegrations,
+    hasNoIntegration,
+  } = useDashboardData();
 
-  const handleOpenIntegrations = () => {
-    // TODO: Open integrations dialog
-    console.log("Open integrations");
-  };
+  if (isLoading || isLoadingIntegrations) {
+    return <DashboardSkeleton />;
+  }
 
-  if (isLoading) {
-    return (
-      <div className="p-6 md:p-8 space-y-6">
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Terminal</p>
-          <h1 className="text-xl font-black tracking-tighter text-foreground">
-            Bonjour, {userName || "Investisseur"}
-          </h1>
-        </div>
-        <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-8 flex items-center gap-3 text-muted-foreground text-sm">
-          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          Chargement des données…
-        </div>
-      </div>
-    );
+  // Premier lancement : une seule action possible, mise en avant.
+  if (hasNoIntegration) {
+    return <OnboardingHero />;
   }
 
   return (
-    <div className="p-6 md:p-8 space-y-5 no-scrollbar">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-1">Terminal Intelligence</p>
-        <h1 className="text-xl font-black tracking-tighter text-foreground">
+    <div className="no-scrollbar space-y-6 p-6 md:p-8">
+      <header className="border-b border-border/60 pb-5">
+        <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+          <span className="h-px w-6 bg-primary" />
+          Portefeuille global
+        </p>
+        <h1 className="mt-3 font-serif text-3xl font-normal leading-tight text-foreground">
           Bonjour, {userName || "Investisseur"}
         </h1>
-      </div>
+      </header>
+
+      <OnboardingChecklist />
+
       <DashboardNewLayout
         profitSummary={profitSummary}
         historySeries={historySeries}
         portfolioTokens={portfolioTokens}
-        onOpenIntegrations={handleOpenIntegrations}
+        onOpenIntegrations={openDialog}
       />
     </div>
   );

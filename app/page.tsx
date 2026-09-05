@@ -1,162 +1,188 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import {
-  Activity,
-  ArrowRight,
-  BarChart3,
-  CircleGauge,
-  LineChart,
-  ShieldCheck,
-  GitFork,
-  Globe,
-  Layers,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Code2,
-  Users,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { GlowCard, Magnetic, NumberTicker, PointerAmbience, Reveal } from "@/components/motion";
+import { DecoderField } from "@/components/landing/decoder-field";
+import { HeroPreview } from "@/components/landing/hero-preview";
+import { PlatformMarquee } from "@/components/landing/platform-marquee";
+import { SiteFooter } from "@/components/site-footer";
+import { siteConfig } from "@/lib/site";
 
-const techStack = ["Binance", "Bybit", "Ethereum", "Vercel", "Clerk", "Convex"];
-
-const problems = [
-  "Vos actifs dispersés sur 5 exchanges et wallets différents",
-  "P&L calculé manuellement dans des tableaux Excel",
-  "Impossible de voir votre exposition globale en un coup d'œil",
-  "Heures perdues à consolider des données incompatibles",
-];
-
-const solutions = [
-  "Vue unifiée : CEX, DEX et wallets on-chain en un seul endroit",
-  "P&L automatique, historisé et décomposé par actif",
-  "Exposition globale et répartition de portefeuille en temps réel",
-  "Synchronisation automatique, zéro saisie manuelle",
-];
-
-const featureHighlights = [
+const comparison = [
   {
-    icon: <Layers className="h-6 w-6" />,
-    title: "CEX, DEX et wallets unifiés",
-    description:
-      "Connectez Binance, Bybit, vos wallets Ethereum, Solana, Bitcoin — et visualisez l'intégralité de vos actifs dans une interface unique et cohérente.",
+    before: "Vos actifs dispersés sur plusieurs exchanges et wallets",
+    after: "Une vue unifiée : exchanges, wallets on-chain et imports CSV",
   },
   {
-    icon: <BarChart3 className="h-6 w-6" />,
-    title: "Performance réelle, en temps réel",
-    description:
-      "P&L par actif, par période, ratio de Sharpe, Max Drawdown — les indicateurs qui comptent pour les traders sérieux, calculés automatiquement.",
+    before: "Un P&L recalculé à la main dans un tableur",
+    after: "Un P&L automatique, historisé et décomposé par actif",
   },
   {
-    icon: <RefreshCw className="h-6 w-6" />,
-    title: "Synchronisation continue, sans effort",
+    before: "Aucune idée de votre exposition réelle",
+    after: "Répartition et valeur du portefeuille, à jour en continu",
+  },
+  {
+    before: "Des heures à consolider des exports incompatibles",
+    after: "Une synchronisation continue, sans aucune ressaisie",
+  },
+  {
+    before: "Une déclaration fiscale reconstituée dans l'urgence",
+    after: "Les plus-values calculées selon l'article 150 VH bis du CGI",
+  },
+];
+
+const capabilities = [
+  {
+    index: "01",
+    title: "Exchanges et wallets unifiés",
     description:
-      "Vos données se mettent à jour automatiquement. Fini la saisie manuelle et les tableurs obsolètes — Hashory reste toujours à jour.",
+      "Binance et KuCoin par API, vos adresses Bitcoin, Ethereum, Solana, Kaspa et Bittensor par clé publique. Une seule interface pour l'ensemble.",
+  },
+  {
+    index: "02",
+    title: "Performance réelle",
+    description:
+      "P&L par actif, par période et par plateforme. Prix de revient moyen, répartition, historique complet — calculés, pas saisis.",
+  },
+  {
+    index: "03",
+    title: "Synchronisation continue",
+    description:
+      "Trades, conversions, dépôts, retraits, soldes et poussière. Vos données se mettent à jour sans que vous y pensiez.",
+  },
+  {
+    index: "04",
+    title: "Déclaration fiscale française",
+    description:
+      "Plus-values imposables selon l'article 150 VH bis du CGI, avec le détail cession par cession, prêt à reporter.",
+  },
+  {
+    index: "05",
+    title: "Saisonnalité et cycles",
+    description:
+      "Le comportement de vos actifs mois par mois, pour situer votre performance dans le cycle de marché.",
+  },
+  {
+    index: "06",
+    title: "Lecture seule, par conception",
+    description:
+      "Clés API en lecture seule et chiffrées au repos, wallets suivis par adresse publique. Aucun accès à vos fonds, jamais.",
   },
 ];
 
 const workflow = [
   {
     step: "01",
-    icon: <ShieldCheck className="h-5 w-5 text-primary" />,
-    title: "Connexion sécurisée en lecture seule",
+    title: "Vous connectez",
     description:
-      "Connectez vos exchanges (Binance, Bybit…) via clés API en lecture seule, et vos wallets on-chain via adresse publique. Aucun accès à vos fonds.",
+      "Une clé API en lecture seule, ou simplement l'adresse publique d'un wallet. Pas de clé sous la main ? Un export CSV suffit.",
   },
   {
     step: "02",
-    icon: <RefreshCw className="h-5 w-5 text-primary" />,
-    title: "Synchronisation automatique",
+    title: "Hashory reconstitue",
     description:
-      "Hashory agrège et historise l'ensemble de vos trades, dépôts, retraits et positions pour vous offrir une vue 360° complète et à jour.",
+      "L'intégralité de votre historique est récupérée, dédupliquée et rejouée pour reconstruire votre portefeuille depuis son premier achat.",
   },
   {
     step: "03",
-    icon: <CircleGauge className="h-5 w-5 text-primary" />,
-    title: "Visualisez et analysez",
+    title: "Vous lisez, vous déclarez",
     description:
-      "Explorez votre performance globale avec des graphiques interactifs, des métriques pro et des vues par actif, par exchange ou par stratégie.",
+      "Performance, répartition, saisonnalité et déclaration fiscale sortent des mêmes données. Une seule source, aucune ressaisie.",
   },
 ];
 
 const metrics = [
   {
-    label: "Données consolidées",
-    value: "100%",
-    description: "CEX, DEX et wallets on-chain — toutes vos sources en un seul endroit.",
+    label: "Sources connectables",
+    value: 9,
+    suffix: "",
+    description: "Exchanges, blockchains et imports de fichiers.",
   },
   {
-    label: "Indicateurs pro",
-    value: "12+",
-    description: "Sharpe, Drawdown, Calmar, Win Rate… les métriques qui comptent vraiment.",
+    label: "Historique reconstitué",
+    value: 100,
+    suffix: " %",
+    description: "Trades, conversions, dépôts, retraits, poussière.",
   },
   {
-    label: "Pour démarrer",
-    value: "<10 min",
-    description: "De la connexion de votre premier exchange à votre vue portefeuille complète.",
+    label: "Avant la première vue",
+    value: 2,
+    suffix: " min",
+    description: "De la connexion au portefeuille complet.",
   },
 ];
 
-const testimonials = [
+const transparency = [
   {
-    quote:
-      "Hashory pose une base technique solide : en quelques heures nous avons livré un tableau de bord crypto complet avec synchronisation Binance.",
-    author: "Alexis",
-    role: "CTO",
-    company: "QuantFlow",
-    initials: "AL",
-    color: "bg-chart-1/20 text-chart-1",
+    title: "Code auditable",
+    description:
+      "L'intégralité du code est publique sous licence MIT. Vous confiez à Hashory la lecture de vos comptes : vous pouvez vérifier exactement ce qu'il en fait.",
   },
   {
-    quote:
-      "Enfin un outil qui centralise vraiment tout — mes comptes Binance, mes wallets ETH et mes positions DeFi. La vue globale change tout.",
-    author: "Maya",
-    role: "Trader DeFi",
-    company: "Indépendante",
-    initials: "MA",
-    color: "bg-chart-5/20 text-chart-5",
+    title: "Auto-hébergeable",
+    description:
+      "Déployez votre propre instance avec votre base Convex et vos clés. Aucune donnée ne transite alors par nos serveurs.",
   },
   {
-    quote:
-      "J'avais l'habitude de passer des heures sur Excel chaque semaine. Maintenant j'ouvre Hashory et tout est là, en temps réel. C'est une autre époque.",
-    author: "Romain",
-    role: "Trader indépendant",
-    company: "Freelance",
-    initials: "RO",
-    color: "bg-chart-2/20 text-chart-2",
+    title: "Développement public",
+    description:
+      "Chaque version est documentée dans un changelog public, généré directement à partir des commits du dépôt.",
+  },
+  {
+    title: "Feuille de route ouverte",
+    description:
+      "Les prochaines intégrations sont priorisées selon les demandes remontées publiquement dans les issues GitHub.",
   },
 ];
 
 const faqItems = [
   {
-    question: "Comment Hashory garantit-il la sécurité de mes données ?",
+    question: "Comment mes clés API sont-elles protégées ?",
     answer:
-      "Hashory ne demande que des accès en lecture seule à vos comptes d'échange. Vos clés API sont chiffrées au repos et en transit avec des protocoles de sécurité de niveau bancaire. Vos wallets on-chain sont connectés uniquement via adresse publique. Nous n'avons jamais accès à vos fonds.",
+      "Hashory ne demande que des accès en lecture seule. Vos clés sont chiffrées avant d'être stockées et ne transitent jamais en clair. Vos wallets on-chain sont suivis via leur adresse publique uniquement : il n'existe aucun chemin technique permettant de déplacer vos fonds.",
   },
   {
-    question: "Quels exchanges et wallets sont supportés ?",
+    question: "Quelles plateformes sont réellement supportées ?",
     answer:
-      "Nous supportons actuellement Binance et Bybit côté CEX, ainsi que les wallets Ethereum, Solana et Bitcoin (adresse publique). D'autres exchanges — Coinbase, Kraken, OKX — et protocoles DeFi sont en cours d'intégration selon les retours de la communauté.",
+      "Aujourd'hui : Binance et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack et Finary sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
+  },
+  {
+    question: "La déclaration fiscale couvre-t-elle mon cas ?",
+    answer:
+      "Hashory calcule les plus-values de cession d'actifs numériques selon l'article 150 VH bis du CGI, avec le détail de chaque cession et la valeur globale du portefeuille au moment de celle-ci. C'est une aide au remplissage, pas un conseil fiscal : faites valider votre situation par un professionnel.",
   },
   {
     question: "Hashory est-il vraiment open source ?",
     answer:
-      "Oui, totalement. Le code source de Hashory est disponible sur GitHub sous licence MIT. Vous pouvez l'auditer, le forker, contribuer ou déployer votre propre instance. La transparence est au cœur du projet.",
+      "Oui. Le code est disponible sur GitHub sous licence MIT : vous pouvez l'auditer, le forker, y contribuer ou déployer votre propre instance. La transparence est la raison d'être du projet.",
   },
   {
-    question: "Puis-je déployer ma propre instance de Hashory ?",
+    question: "Puis-je héberger ma propre instance ?",
     answer:
-      "Absolument. Hashory est conçu pour être auto-hébergeable. Suivez le guide de déploiement dans le README pour lancer votre propre instance sur Vercel en quelques minutes, avec votre propre base Convex et vos clés Clerk.",
+      "Absolument. Suivez le guide de déploiement du README pour lancer votre instance sur Vercel en quelques minutes, avec votre propre base Convex et vos clés Clerk.",
   },
 ];
+
+/** En-tête de section : un numéro, un libellé, un filet. Pas de pastille. */
+function SectionLabel({ index, children }: { index: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-4 border-b border-border/60 pb-4">
+      <span className="num text-xs text-primary">{index}</span>
+      <span className="num text-xs uppercase tracking-[0.28em] text-muted-foreground">
+        {children}
+      </span>
+    </div>
+  );
+}
 
 export default async function Home() {
   const { userId } = await auth();
@@ -166,527 +192,365 @@ export default async function Home() {
   }
 
   return (
-    <main className="relative overflow-hidden">
-      {/* Dot grid background */}
-      <div
-        className="pointer-events-none absolute inset-0 z-[-2] opacity-[0.03]"
-        style={{
-          backgroundImage: "radial-gradient(circle, currentColor 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
-      {/* Top glow */}
-      <div className="pointer-events-none absolute inset-x-0 top-[-8rem] z-[-1] h-[36rem] bg-gradient-to-b from-primary/20 via-primary/8 to-transparent blur-3xl" />
+    <>
+      <main className="relative">
+        <PointerAmbience />
 
-      {/* ─── HERO ─── */}
-      <section className="mx-auto flex w-full max-w-6xl flex-col items-center gap-8 px-4 pb-20 pt-28 text-center sm:gap-10 sm:px-6 md:pt-36">
-        <Badge
-          variant="outline"
-          className="border-primary/40 bg-primary/10 px-4 py-1.5 text-[0.65rem] font-semibold uppercase tracking-[0.35em] text-primary sm:text-xs"
+        {/* ─── HERO — asymétrique, aligné à gauche ─── */}
+        <section className="mx-auto w-full max-w-6xl px-4 pb-16 pt-24 sm:px-6 md:pt-32">
+          <div className="grid items-end gap-12 lg:grid-cols-12 lg:gap-10">
+            <div className="lg:col-span-7">
+              <Reveal>
+                <p className="num flex items-center gap-3 text-xs uppercase tracking-[0.28em] text-muted-foreground">
+                  <span className="h-px w-8 bg-primary" />
+                  Terminal crypto open source
+                </p>
+              </Reveal>
+
+              <Reveal delay={80}>
+                <h1 className="mt-8 text-balance font-serif text-5xl font-normal leading-[0.95] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+                  Tous vos actifs crypto,
+                  <br />
+                  <span className="text-primary">dans un seul terminal.</span>
+                </h1>
+              </Reveal>
+
+              <Reveal delay={140}>
+                <p className="mt-7 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground">
+                  Hashory agrège vos exchanges, vos wallets on-chain et vos imports de fichiers,
+                  reconstitue votre historique complet, et va jusqu&apos;à votre déclaration fiscale.
+                </p>
+              </Reveal>
+
+              <Reveal delay={200}>
+                <div className="mt-10 flex flex-wrap items-center gap-3">
+                  <Magnetic strength={8}>
+                    <Button asChild size="lg" className="px-7">
+                      <Link href="/sign-up">
+                        Créer un compte gratuit
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </Magnetic>
+                  <Magnetic strength={6}>
+                    <Button
+                      asChild
+                      size="lg"
+                      variant="ghost"
+                      className="cursor-pointer px-5 text-muted-foreground hover:text-foreground"
+                    >
+                      <a href="#apercu">
+                        Voir l&apos;aperçu
+                        <ArrowUpRight className="ml-1.5 h-4 w-4" />
+                      </a>
+                    </Button>
+                  </Magnetic>
+                </div>
+              </Reveal>
+
+              <Reveal delay={260}>
+                <p className="num mt-10 text-[11px] uppercase tracking-[0.2em] text-muted-foreground/50">
+                  Lecture seule · Clés chiffrées · Licence MIT
+                </p>
+              </Reveal>
+            </div>
+
+            {/* Champ de caractères : le curseur y décode des mots cachés. */}
+            <Reveal delay={220} className="lg:col-span-5">
+              <div className="relative hidden h-[440px] overflow-hidden border border-border/60 bg-[var(--surface-low)] md:block lg:h-[520px]">
+                <DecoderField />
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-border/50 bg-background/70 px-4 py-2.5 backdrop-blur">
+                  <span className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+                    Déplacez le curseur
+                  </span>
+                  <span className="num text-[10px] uppercase tracking-[0.2em] text-primary/70">
+                    des mots s&apos;y cachent
+                  </span>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ─── SOURCES ─── */}
+        <section className="border-y border-border/60">
+          <div className="mx-auto w-full max-w-6xl">
+            <PlatformMarquee />
+          </div>
+        </section>
+
+        {/* ─── 01 · LE PROBLÈME ─── */}
+        <section className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
+          <Reveal>
+            <SectionLabel index="01">Le problème</SectionLabel>
+          </Reveal>
+
+          <Reveal delay={80}>
+            <h2 className="mt-10 max-w-2xl text-balance font-serif text-4xl font-normal leading-[1.05] text-foreground sm:text-5xl">
+              Un portefeuille éclaté sur six plateformes n&apos;est pas un portefeuille.
+            </h2>
+          </Reveal>
+
+          <div className="mt-14 border-t border-border/60">
+            <div className="grid grid-cols-1 gap-4 border-b border-border/60 py-3 sm:grid-cols-2 sm:gap-10">
+              <span className="num text-[10px] uppercase tracking-[0.28em] text-muted-foreground/60">
+                Aujourd&apos;hui
+              </span>
+              <span className="num text-[10px] uppercase tracking-[0.28em] text-primary/70">
+                Avec Hashory
+              </span>
+            </div>
+
+            {comparison.map((row, index) => (
+              <Reveal key={row.before} delay={index * 50}>
+                <div className="grid grid-cols-1 gap-2 border-b border-border/60 py-5 transition-colors hover:bg-muted/20 sm:grid-cols-2 sm:gap-10">
+                  <p className="text-sm leading-relaxed text-muted-foreground/70 line-through decoration-negative/40">
+                    {row.before}
+                  </p>
+                  <p className="text-sm leading-relaxed text-foreground">{row.after}</p>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ─── 02 · L'APERÇU ─── */}
+        <section
+          id="apercu"
+          className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-24 sm:px-6 lg:pb-32"
         >
-          Open source · Accès anticipé
-        </Badge>
+          <Reveal>
+            <SectionLabel index="02">L&apos;aperçu</SectionLabel>
+          </Reveal>
 
-        <div className="max-w-4xl space-y-5">
-          <h1 className="text-balance text-4xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
-            Tous vos actifs crypto,{" "}
-            <span className="text-primary">enfin réunis en un seul terminal.</span>
-          </h1>
-          <p className="text-pretty text-base text-muted-foreground sm:text-xl">
-            Hashory agrège vos exchanges CEX, vos wallets DEX et vos positions on-chain pour vous donner
-            une vue claire, complète et en temps réel de votre portefeuille.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          <Button asChild size="lg" className="bg-primary px-8 text-primary-foreground hover:bg-primary/90">
-            <Link href="/sign-up">
-              Créer un compte gratuit
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-          <Button
-            asChild
-            size="lg"
-            variant="outline"
-            className="cursor-pointer border-border/60 bg-card/60 backdrop-blur hover:bg-card/90"
-          >
-            <Link href="/dashboard">Voir la démo</Link>
-          </Button>
-        </div>
-
-        {/* Mock dashboard preview */}
-        <div className="w-full max-w-3xl overflow-hidden rounded-2xl border border-border/60 bg-card/70 shadow-2xl shadow-primary/10 backdrop-blur">
-          {/* Dashboard header */}
-          <div className="flex items-center justify-between border-b border-border/40 bg-background/40 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <div className="h-2.5 w-2.5 rounded-full bg-red-500/70" />
-              <div className="h-2.5 w-2.5 rounded-full bg-yellow-500/70" />
-              <div className="h-2.5 w-2.5 rounded-full bg-green-500/70" />
-            </div>
-            <span className="text-xs text-muted-foreground/60">Hashory — Portefeuille global</span>
-            <div className="w-16" />
-          </div>
-          {/* Source badges */}
-          <div className="flex items-center gap-2 border-b border-border/30 bg-background/20 px-5 py-2.5">
-            {["Binance", "Bybit", "0x7f…3a2c", "sol:9K…mR"].map((src) => (
-              <span
-                key={src}
-                className="rounded-md border border-border/40 bg-card/60 px-2 py-0.5 text-[10px] font-mono text-muted-foreground/70"
-              >
-                {src}
-              </span>
-            ))}
-            <span className="ml-auto text-[10px] text-positive">● Synchronisé</span>
-          </div>
-          {/* Metrics row */}
-          <div className="grid grid-cols-3 gap-px bg-border/30">
-            {[
-              { label: "Valeur totale", value: "€48 290", delta: "+12.4%", pos: true },
-              { label: "P&L du mois", value: "+€5 320", delta: "+11.0%", pos: true },
-              { label: "Sharpe Ratio", value: "1.82", delta: "Excellent", pos: true },
-            ].map((m) => (
-              <div key={m.label} className="flex flex-col gap-1 bg-card/60 px-4 py-4">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                  {m.label}
-                </span>
-                <span className="tabular-nums text-lg font-semibold text-foreground sm:text-xl">
-                  {m.value}
-                </span>
-                <span className={`text-[11px] font-medium ${m.pos ? "text-positive" : "text-negative"}`}>
-                  {m.delta}
-                </span>
-              </div>
-            ))}
-          </div>
-          {/* Sparkline */}
-          <div className="px-5 py-4 text-primary">
-            <svg viewBox="0 0 600 80" className="w-full" aria-label="Graphique de performance du portefeuille">
-              <defs>
-                <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="currentColor" stopOpacity="0.3" />
-                  <stop offset="100%" stopColor="currentColor" stopOpacity="0" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M0,65 L50,58 L100,52 L150,60 L200,45 L250,38 L300,42 L350,30 L400,25 L450,18 L500,22 L550,12 L600,8"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M0,65 L50,58 L100,52 L150,60 L200,45 L250,38 L300,42 L350,30 L400,25 L450,18 L500,22 L550,12 L600,8 L600,80 L0,80 Z"
-                fill="url(#sparkGrad)"
-              />
-            </svg>
-          </div>
-          {/* Allocation preview */}
-          <div className="mx-5 mb-5 grid grid-cols-3 gap-2">
-            {[
-              { asset: "BTC", pct: "42%", val: "€20 281" },
-              { asset: "ETH", pct: "31%", val: "€14 969" },
-              { asset: "Autres", pct: "27%", val: "€13 038" },
-            ].map((a) => (
-              <div key={a.asset} className="rounded-xl border border-border/40 bg-background/30 px-3 py-2.5 text-left">
-                <p className="text-[10px] text-muted-foreground/70">{a.asset}</p>
-                <p className="tabular-nums text-sm font-semibold text-foreground">{a.pct}</p>
-                <p className="tabular-nums text-[10px] text-muted-foreground/60">{a.val}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── TRUST BAR ─── */}
-      <section className="mx-auto w-full max-w-5xl px-4 pb-16 sm:px-6">
-        <div className="flex flex-col items-center gap-5 text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground/60">
-            Compatible avec les plateformes que vous utilisez déjà
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-3 text-[0.7rem] font-semibold uppercase tracking-[0.25em] text-muted-foreground/50">
-            {techStack.map((name) => (
-              <span key={name}>{name}</span>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── PROBLÈME vs SOLUTION ─── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
-        <div className="mb-12 text-center">
-          <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-            Pourquoi Hashory ?
-          </Badge>
-          <h2 className="text-balance text-3xl font-semibold text-foreground md:text-4xl">
-            Arrêtez de naviguer à l&apos;aveugle.
-          </h2>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-2xl border border-negative/20 bg-negative/5 p-6 sm:p-8">
-            <p className="mb-5 text-sm font-semibold uppercase tracking-widest text-negative">
-              Sans Hashory
-            </p>
-            <ul className="space-y-4">
-              {problems.map((p) => (
-                <li key={p} className="flex items-start gap-3 text-sm text-muted-foreground">
-                  <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-negative" />
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-6 sm:p-8">
-            <p className="mb-5 text-sm font-semibold uppercase tracking-widest text-primary">
-              Avec Hashory
-            </p>
-            <ul className="space-y-4">
-              {solutions.map((s) => (
-                <li key={s} className="flex items-start gap-3 text-sm text-muted-foreground">
-                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── FEATURES ─── */}
-      <section id="features" className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
-        <div className="mb-12 text-center">
-          <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-            Fonctionnalités
-          </Badge>
-          <h2 className="text-balance text-3xl font-semibold text-foreground md:text-4xl">
-            Tout ce dont vous avez besoin, rien de superflu.
-          </h2>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {featureHighlights.map((feature) => (
-            <div
-              key={feature.title}
-              className="group relative flex h-full cursor-pointer flex-col gap-5 rounded-2xl border border-border/60 bg-card/70 p-6 transition-all duration-200 hover:-translate-y-1 hover:border-primary/40 hover:bg-card/90 hover:shadow-lg hover:shadow-primary/10 sm:p-8"
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20 transition-colors group-hover:bg-primary/20">
-                {feature.icon}
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">{feature.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{feature.description}</p>
-              </div>
-              <div className="pointer-events-none absolute inset-0 rounded-2xl bg-gradient-to-br from-primary/0 via-primary/0 to-primary/8 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── WORKFLOW ─── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
-        <div className="mb-12 text-center">
-          <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-            Comment ça marche
-          </Badge>
-          <h2 className="text-balance text-3xl font-semibold text-foreground md:text-4xl">
-            Connecté en 3 étapes.
-          </h2>
-          <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground">
-            Nous gérons la complexité de l&apos;agrégation pour que vous vous concentriez sur votre portefeuille.
-          </p>
-        </div>
-        <div className="relative">
-          <div className="absolute left-[2.75rem] top-12 hidden h-[calc(100%-6rem)] w-px border-l-2 border-dashed border-border/40 md:block" />
-          <div className="space-y-6">
-            {workflow.map((item) => (
-              <div
-                key={item.step}
-                className="relative flex gap-6 rounded-2xl border border-border/40 bg-card/60 p-6 backdrop-blur transition-colors hover:border-primary/30"
-              >
-                <div className="flex shrink-0 flex-col items-center gap-2">
-                  <span className="tabular-nums text-3xl font-bold text-primary">{item.step}</span>
-                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                    {item.icon}
-                  </div>
-                </div>
-                <div className="pt-1">
-                  <h3 className="text-base font-semibold text-foreground">{item.title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.description}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── METRICS ─── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
-        <div className="grid gap-px overflow-hidden rounded-2xl border border-border/60 bg-border/20 shadow-lg shadow-primary/5 sm:grid-cols-3">
-          {metrics.map((metric) => (
-            <div key={metric.label} className="flex flex-col gap-3 bg-card/70 p-8 backdrop-blur">
-              <span className="text-xs font-semibold uppercase tracking-widest text-primary">
-                {metric.label}
-              </span>
-              <span className="tabular-nums text-5xl font-bold text-foreground">{metric.value}</span>
-              <p className="text-sm leading-relaxed text-muted-foreground">{metric.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── OPEN SOURCE ─── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 lg:pb-24">
-        <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/60 p-8 backdrop-blur sm:p-10">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent" />
-          <div className="relative flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-foreground/10">
-                  <Code2 className="h-5 w-5 text-foreground" />
-                </div>
-                <Badge variant="outline" className="border-border/60 text-muted-foreground">
-                  Open Source · MIT
-                </Badge>
-              </div>
-              <h2 className="text-2xl font-semibold text-foreground md:text-3xl">
-                Hashory est entièrement open source.
+          <div className="mt-10 grid gap-10 lg:grid-cols-12">
+            <Reveal delay={60} className="lg:col-span-4">
+              <h2 className="font-serif text-4xl font-normal leading-[1.05] text-foreground">
+                Une lecture, pas un tableau de bord de plus.
               </h2>
-              <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
-                Auditez le code, déployez votre propre instance, proposez des intégrations d&apos;exchanges
-                ou contribuez aux fonctionnalités. Le projet avance avec la communauté.
+              <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+                Valeur totale, P&amp;L de la période, ratio de Sharpe, répartition. Les mêmes chiffres
+                que vous calculiez à la main, tenus à jour tout seuls.
               </p>
-              <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <GitFork className="h-4 w-4 text-primary" />
-                  <span>Forkable &amp; auto-hébergeable</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-primary" />
-                  <span>Contributions bienvenues</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-primary" />
-                  <span>Transparence totale</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-col gap-3">
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="cursor-pointer gap-2 border-border/60 bg-background/60 hover:bg-background/80"
-              >
-                <a
-                  href="https://github.com/kevin-dumast/termenva"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden="true">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
-                  </svg>
-                  Voir sur GitHub
-                </a>
-              </Button>
-              <p className="text-center text-xs text-muted-foreground/60">
-                Lien disponible dès la mise en ligne
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── TESTIMONIALS ─── */}
-      <section className="mx-auto w-full max-w-6xl px-4 pb-20 sm:px-6 sm:pb-24">
-        <div className="mb-12 text-center">
-          <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-            Témoignages
-          </Badge>
-          <h2 className="text-balance text-3xl font-semibold text-foreground md:text-4xl">
-            Ils ont arrêté de jongler entre les plateformes.
-          </h2>
-        </div>
-        <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-          {testimonials.map((t) => (
-            <article
-              key={t.author}
-              className="flex h-full flex-col gap-5 rounded-2xl border border-border/60 bg-card/70 p-7"
-            >
-              <div className="flex gap-0.5" aria-label="5 étoiles sur 5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <svg key={i} viewBox="0 0 24 24" className="h-4 w-4 fill-yellow-400" aria-hidden="true">
-                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                  </svg>
+              <ul className="mt-8 border-t border-border/60">
+                {[
+                  "Performance historique et par actif",
+                  "Répartition consolidée toutes sources",
+                  "Historique filtrable jusqu'à la transaction",
+                  "Export complet de vos données",
+                ].map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-start gap-3 border-b border-border/60 py-3 text-sm text-muted-foreground"
+                  >
+                    <span className="num mt-0.5 text-[10px] text-primary">→</span>
+                    {item}
+                  </li>
                 ))}
-              </div>
-              <blockquote className="flex-1 text-sm leading-relaxed text-foreground/90">
-                &ldquo;{t.quote}&rdquo;
-              </blockquote>
-              <footer className="flex items-center gap-3">
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${t.color}`}
-                >
-                  {t.initials}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{t.author}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {t.role} · {t.company}
+              </ul>
+            </Reveal>
+
+            <Reveal delay={140} className="lg:col-span-8">
+              <HeroPreview />
+            </Reveal>
+          </div>
+        </section>
+
+        {/* ─── 03 · CE QUE ÇA FAIT ─── */}
+        <section
+          id="features"
+          className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-24 sm:px-6 lg:pb-32"
+        >
+          <Reveal>
+            <SectionLabel index="03">Ce que ça fait</SectionLabel>
+          </Reveal>
+
+          <div className="mt-10 grid border-t border-border/60 sm:grid-cols-2 lg:grid-cols-3">
+            {capabilities.map((capability, index) => (
+              <Reveal key={capability.index} delay={index * 60} className="border-b border-border/60">
+                <GlowCard className="h-full">
+                  <article className="flex h-full flex-col gap-4 p-7">
+                    <span className="num text-xs text-primary">{capability.index}</span>
+                    <h3 className="font-serif text-2xl font-normal leading-tight text-foreground">
+                      {capability.title}
+                    </h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">
+                      {capability.description}
+                    </p>
+                  </article>
+                </GlowCard>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ─── 04 · COMMENT ÇA MARCHE ─── */}
+        <section
+          id="workflow"
+          className="mx-auto w-full max-w-6xl scroll-mt-24 px-4 pb-24 sm:px-6 lg:pb-32"
+        >
+          <Reveal>
+            <SectionLabel index="04">Comment ça marche</SectionLabel>
+          </Reveal>
+
+          <div className="mt-10 border-t border-border/60">
+            {workflow.map((item, index) => (
+              <Reveal key={item.step} delay={index * 80}>
+                <div className="grid grid-cols-1 gap-4 border-b border-border/60 py-10 transition-colors hover:bg-muted/20 md:grid-cols-12 md:gap-10">
+                  <span className="num text-sm text-primary md:col-span-1">{item.step}</span>
+                  <h3 className="font-serif text-3xl font-normal leading-tight text-foreground md:col-span-5">
+                    {item.title}
+                  </h3>
+                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground md:col-span-6">
+                    {item.description}
                   </p>
                 </div>
-              </footer>
-            </article>
-          ))}
-        </div>
-      </section>
+              </Reveal>
+            ))}
+          </div>
+        </section>
 
-      {/* ─── PRODUCT OVERVIEW ─── */}
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-4 pb-20 sm:px-6 md:flex-row md:items-center lg:gap-16 lg:pb-24">
-        <div className="relative flex-1 overflow-hidden rounded-2xl border border-border/60 bg-card/60 p-6 shadow-lg backdrop-blur sm:p-8">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/15 via-transparent to-background opacity-60" />
-          <div className="relative flex flex-col gap-6">
-            <Badge variant="secondary" className="w-fit bg-primary/20 text-primary">
-              Aperçu produit
-            </Badge>
-            <h2 className="text-2xl font-semibold text-foreground md:text-3xl">
-              Un dashboard pensé pour avoir une vision globale, pas partielle.
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Chaque composant est conçu pour vous donner une lecture instantanée de votre portefeuille
-              complet — sur tous vos exchanges et wallets.
-            </p>
-            <div className="grid gap-4 text-sm text-muted-foreground sm:grid-cols-2">
-              {[
-                {
-                  icon: <LineChart className="mt-0.5 h-4 w-4 text-primary" />,
-                  title: "Performance historique",
-                  desc: "Graphiques interactifs sur vos performances dans le temps.",
-                },
-                {
-                  icon: <CircleGauge className="mt-0.5 h-4 w-4 text-primary" />,
-                  title: "Allocation globale",
-                  desc: "Répartition de vos actifs sur tous vos comptes agrégés.",
-                },
-                {
-                  icon: <Layers className="mt-0.5 h-4 w-4 text-primary" />,
-                  title: "Multi-sources",
-                  desc: "CEX, wallets EVM, Solana, Bitcoin — tout dans une vue.",
-                },
-                {
-                  icon: <Activity className="mt-0.5 h-4 w-4 text-primary" />,
-                  title: "Historique complet",
-                  desc: "Trades, dépôts et retraits centralisés et consultables.",
-                },
-              ].map((item) => (
-                <div
-                  key={item.title}
-                  className="flex items-start gap-3 rounded-xl border border-border/50 bg-background/40 p-4"
-                >
-                  {item.icon}
-                  <div>
-                    <h3 className="text-sm font-medium text-foreground">{item.title}</h3>
-                    <p className="mt-0.5 text-xs">{item.desc}</p>
-                  </div>
+        {/* ─── CHIFFRES ─── */}
+        <section className="border-y border-border/60">
+          <div className="mx-auto grid w-full max-w-6xl grid-cols-1 sm:grid-cols-3">
+            {metrics.map((metric, index) => (
+              <Reveal
+                key={metric.label}
+                delay={index * 70}
+                className="border-b border-border/60 sm:border-b-0 sm:border-r sm:last:border-r-0"
+              >
+                <div className="h-full px-6 py-10">
+                  <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/60">
+                    {metric.label}
+                  </p>
+                  <p className="mt-4 text-6xl text-foreground">
+                    <NumberTicker
+                      value={metric.value}
+                      suffix={metric.suffix}
+                      className="font-serif"
+                    />
+                  </p>
+                  <p className="mt-3 text-sm text-muted-foreground">{metric.description}</p>
                 </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
+        {/* ─── 05 · TRANSPARENCE ─── */}
+        <section className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
+          <Reveal>
+            <SectionLabel index="05">Transparence</SectionLabel>
+          </Reveal>
+
+          <div className="mt-10 grid gap-12 lg:grid-cols-12">
+            <Reveal delay={60} className="lg:col-span-5">
+              <h2 className="font-serif text-4xl font-normal leading-[1.05] text-foreground sm:text-5xl">
+                Un outil financier mérite d&apos;être vérifiable.
+              </h2>
+              <Magnetic strength={6}>
+                <Button
+                  asChild
+                  variant="outline"
+                  className="mt-8 cursor-pointer gap-2 border-border/60"
+                >
+                  <a href={siteConfig.github} target="_blank" rel="noopener noreferrer">
+                    <svg viewBox="0 0 24 24" className="h-4 w-4 fill-current" aria-hidden="true">
+                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+                    </svg>
+                    Voir le code
+                  </a>
+                </Button>
+              </Magnetic>
+            </Reveal>
+
+            <div className="border-t border-border/60 lg:col-span-7">
+              {transparency.map((item, index) => (
+                <Reveal key={item.title} delay={index * 60}>
+                  <div className="border-b border-border/60 py-6">
+                    <h3 className="text-sm font-medium text-foreground">{item.title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      {item.description}
+                    </p>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
-        </div>
-        <div className="flex-1 space-y-6">
-          <h2 className="text-pretty text-2xl font-semibold text-foreground md:text-3xl">
-            Connectez une fois. Suivez partout.
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Nous avons simplifié l&apos;agrégation multi-sources pour que vous puissiez vous concentrer sur
-            votre portefeuille, pas sur la plomberie technique.
-          </p>
-          <ul className="space-y-3">
-            {[
-              "Synchronisation automatique de vos trades",
-              "Calcul P&L par actif, par période, par source",
-              "Vue consolidée CEX + wallets on-chain",
-              "Export CSV de votre historique complet",
-            ].map((item) => (
-              <li key={item} className="flex items-center gap-3 text-sm text-muted-foreground">
-                <ArrowRight className="h-4 w-4 shrink-0 text-primary" />
-                {item}
-              </li>
-            ))}
-          </ul>
-          <Button asChild variant="outline" className="cursor-pointer border-border/60">
-            <Link href="/dashboard">
-              Explorer le dashboard
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </div>
-      </section>
+        </section>
 
-      {/* ─── FAQ ─── */}
-      <section className="mx-auto w-full max-w-4xl px-4 pb-20 sm:px-6 sm:pb-24">
-        <div className="space-y-8 text-center">
-          <div>
-            <Badge variant="outline" className="mb-4 border-primary/30 bg-primary/10 text-primary">
-              Questions fréquentes
-            </Badge>
-            <h2 className="text-3xl font-semibold text-foreground">Tout ce que vous voulez savoir.</h2>
-          </div>
-          <Accordion type="single" collapsible className="w-full text-left">
-            {faqItems.map((item, index) => (
-              <AccordionItem key={index} value={`item-${index + 1}`}>
-                <AccordionTrigger className="text-base font-semibold hover:no-underline">
-                  {item.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                  {item.answer}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </div>
-      </section>
+        {/* ─── 06 · QUESTIONS ─── */}
+        <section className="mx-auto w-full max-w-6xl px-4 pb-24 sm:px-6 lg:pb-32">
+          <Reveal>
+            <SectionLabel index="06">Questions</SectionLabel>
+          </Reveal>
 
-      {/* ─── FINAL CTA ─── */}
-      <section className="mx-auto w-full max-w-4xl px-4 pb-24 sm:px-6 sm:pb-32">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/40 bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 p-8 text-center backdrop-blur sm:p-12">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(37,99,235,0.25),_transparent_60%)]" />
-          <div className="relative space-y-6">
-            <h2 className="text-3xl font-semibold text-foreground sm:text-4xl">
-              Prêt à voir l&apos;ensemble de votre portefeuille ?
-            </h2>
-            <p className="mx-auto max-w-lg text-base text-muted-foreground">
-              Connectez vos exchanges et wallets en quelques minutes.{" "}
-              <strong className="text-foreground">
-                Gratuit · Open source · Aucune carte bancaire requise.
-              </strong>
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-              <Button
-                asChild
-                size="lg"
-                className="cursor-pointer bg-primary px-8 text-primary-foreground hover:bg-primary/90"
-              >
-                <Link href="/sign-up">
-                  Créer un compte gratuit
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Link>
-              </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="cursor-pointer border-primary/40 bg-background/60 text-primary hover:bg-background/80"
-              >
-                <Link href="/dashboard">Voir la démo</Link>
-              </Button>
-            </div>
-            <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-              <ShieldCheck className="h-3.5 w-3.5 text-primary" />
-              <span>Accès lecture seule · Aucun accès à vos fonds · Chiffrement bancaire</span>
-            </div>
+          <div className="mt-10 grid gap-10 lg:grid-cols-12">
+            <Reveal delay={60} className="lg:col-span-4">
+              <h2 className="font-serif text-4xl font-normal leading-[1.05] text-foreground">
+                Ce qu&apos;on nous demande le plus.
+              </h2>
+            </Reveal>
+
+            <Reveal delay={120} className="lg:col-span-8">
+              <Accordion type="single" collapsible className="w-full border-t border-border/60">
+                {faqItems.map((item, index) => (
+                  <AccordionItem key={item.question} value={`item-${index + 1}`}>
+                    <AccordionTrigger className="py-5 text-left text-base font-medium hover:no-underline">
+                      {item.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="max-w-2xl pb-6 text-sm leading-relaxed text-muted-foreground">
+                      {item.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </Reveal>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+
+        {/* ─── CTA FINAL ─── */}
+        <section className="border-t border-border/60">
+          <div className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 lg:py-32">
+            <Reveal>
+              <div className="grid items-end gap-10 lg:grid-cols-12">
+                <div className="lg:col-span-7">
+                  <h2 className="text-balance font-serif text-5xl font-normal leading-[0.98] text-foreground sm:text-6xl">
+                    Voyez enfin l&apos;ensemble.
+                  </h2>
+                  <p className="mt-6 max-w-md text-sm leading-relaxed text-muted-foreground">
+                    Connectez une première plateforme en deux minutes. Gratuit, open source,
+                    sans carte bancaire.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 lg:col-span-5 lg:justify-end">
+                  <Magnetic strength={8}>
+                    <Button asChild size="lg" className="px-7">
+                      <Link href="/sign-up">
+                        Créer un compte
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </Magnetic>
+                  <Magnetic strength={6}>
+                    <Button
+                      asChild
+                      size="lg"
+                      variant="ghost"
+                      className="cursor-pointer text-muted-foreground hover:text-foreground"
+                    >
+                      <Link href="/sign-in">J&apos;ai déjà un compte</Link>
+                    </Button>
+                  </Magnetic>
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+      </main>
+
+      <SiteFooter />
+    </>
   );
 }

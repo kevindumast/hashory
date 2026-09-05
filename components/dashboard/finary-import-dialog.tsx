@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { errorMessage, toast } from "@/lib/toast";
 
 type FinaryImportDialogProps = {
   open: boolean;
@@ -250,13 +251,18 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
       });
       setImportResult({ tradesInserted: result.tradesInserted, withdrawalsInserted: result.withdrawalsInserted });
       setCompleted(true);
+      toast.success(
+        `Import Finary terminé : ${result.tradesInserted} trade${result.tradesInserted > 1 ? "s" : ""} et ${result.withdrawalsInserted} retrait${result.withdrawalsInserted > 1 ? "s" : ""} ajoutés`
+      );
       onSuccess?.();
       setTimeout(() => {
         onOpenChange(false);
         reset();
       }, 2000);
     } catch (err) {
+      console.error("Finary CSV import failed:", err);
       setParseError(err instanceof Error ? err.message : "Erreur lors de l'import.");
+      toast.error(errorMessage(err, "Échec de l'import Finary."));
     } finally {
       setSubmitting(false);
     }
@@ -275,7 +281,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle>Importer un export Finary</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Importer un export Finary</DialogTitle>
           <DialogDescription className="text-xs">
             Importez votre historique depuis un fichier CSV exporté depuis Finary (Compte → Exporter).
           </DialogDescription>
@@ -317,7 +323,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
           </label>
 
           {parsed && !completed && (
-            <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm space-y-1">
+            <div className="space-y-1 border-l-2 border-border py-3 pl-4 text-sm">
               <p className="font-medium text-foreground">Aperçu du fichier</p>
               {buyCount > 0 && (
                 <p className="text-muted-foreground">
@@ -335,7 +341,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
                 </p>
               )}
               {parsed.skipped > 0 && (
-                <p className="text-amber-600 dark:text-amber-500 text-xs">
+                <p className="text-chart-4 text-xs">
                   {parsed.skipped} ligne{parsed.skipped > 1 ? "s" : ""} ignorée{parsed.skipped > 1 ? "s" : ""}
                 </p>
               )}
@@ -343,19 +349,19 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
           )}
 
           {completed && importResult && (
-            <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm space-y-1">
-              <p className="font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+            <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
+              <p className="font-medium text-positive flex items-center gap-2">
                 <Check className="size-4" />
                 Import réussi
               </p>
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs">
+              <p className="text-positive text-xs">
                 {importResult.tradesInserted} trade{importResult.tradesInserted > 1 ? "s" : ""} · {importResult.withdrawalsInserted} retrait{importResult.withdrawalsInserted > 1 ? "s" : ""} ajouté{importResult.tradesInserted + importResult.withdrawalsInserted > 1 ? "s" : ""}
               </p>
             </div>
           )}
 
           {parseError && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2" role="alert">
+            <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive flex items-start gap-2" role="alert">
               <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
               {parseError}
             </div>

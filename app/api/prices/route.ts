@@ -19,6 +19,59 @@ const GECKO_IDS: Record<string, string> = {
   TON: 'the-open-network',
 };
 
+/* ─── Cache mémoire ───────────────────────────────────────────────
+   Le dashboard redemande les mêmes symboles à chaque rafraîchissement.
+   Un cache au niveau module suffit à absorber ces rafales : il vit le
+   temps de l'instance serverless, reste borné, et n'appelle Binance ou
+   CoinGecko que pour les symboles réellement périmés.
+   ─────────────────────────────────────────────────────────────── */
+
+const PRICE_TTL_MS = 60_000;
+const MAX_CACHED_SYMBOLS = 500;
+
+type CachedPrice = { price: string; fetchedAt: number };
+
+const priceCache = new Map<string, CachedPrice>();
+
+/**
+ * Purge les entrées expirées, puis évince les plus anciennes si le cache
+ * dépasse encore sa borne — l'ordre d'insertion d'une Map fait foi.
+ */
+function pruneCache(now: number): void {
+  for (const [symbol, cached] of priceCache) {
+    if (now - cached.fetchedAt >= PRICE_TTL_MS) {
+      priceCache.delete(symbol);
+    }
+  }
+
+  let overflow = priceCache.size - MAX_CACHED_SYMBOLS;
+  if (overflow <= 0) return;
+
+  for (const symbol of priceCache.keys()) {
+    priceCache.delete(symbol);
+    if (--overflow <= 0) break;
+  }
+}
+
+/** Réinsère systématiquement en fin de Map pour garder l'ordre chronologique. */
+function rememberPrice(symbol: string, price: string, fetchedAt: number): void {
+  priceCache.delete(symbol);
+  priceCache.set(symbol, { price, fetchedAt });
+}
+
+/** Prix encore frais pour ce symbole, sinon null (l'entrée périmée est jetée). */
+function readFreshPrice(symbol: string, now: number): string | null {
+  const cached = priceCache.get(symbol);
+  if (!cached) return null;
+
+  if (now - cached.fetchedAt >= PRICE_TTL_MS) {
+    priceCache.delete(symbol);
+    return null;
+  }
+
+  return cached.price;
+}
+
 async function fetchBinance(symbol: string): Promise<{ symbol: string; price: string } | null> {
   try {
     const response = await fetch(
@@ -47,17 +100,35 @@ export async function POST(request: NextRequest) {
     const allResults: Array<{ symbol: string; price: string }> = [];
     const resolvedPairs = new Set<string>();
 
-    // 1. Tentative Binance
-    const binanceResults = await Promise.all(uniqueSymbols.map(fetchBinance));
-    for (const result of binanceResults) {
-      if (result) {
-        allResults.push(result);
-        resolvedPairs.add(result.symbol.toUpperCase());
+    const now = Date.now();
+    pruneCache(now);
+
+    // 0. Ce que le cache couvre déjà : aucun appel réseau pour ces symboles.
+    const symbolsToFetch: string[] = [];
+    for (const symbol of uniqueSymbols) {
+      const cachedPrice = readFreshPrice(symbol, now);
+      if (cachedPrice !== null) {
+        allResults.push({ symbol, price: cachedPrice });
+        resolvedPairs.add(symbol);
+      } else {
+        symbolsToFetch.push(symbol);
+      }
+    }
+
+    // 1. Tentative Binance sur les symboles manquants
+    const binanceResults = await Promise.all(
+      symbolsToFetch.map(async (symbol) => ({ symbol, data: await fetchBinance(symbol) }))
+    );
+    for (const { symbol, data } of binanceResults) {
+      if (data) {
+        allResults.push(data);
+        resolvedPairs.add(data.symbol.toUpperCase());
+        rememberPrice(symbol, data.price, now);
       }
     }
 
     // 2. Fallback CoinGecko pour les paires non résolues
-    const missingPairs = uniqueSymbols.filter((pair) => !resolvedPairs.has(pair));
+    const missingPairs = symbolsToFetch.filter((pair) => !resolvedPairs.has(pair));
     const pairToBase: Record<string, string> = {};
     const geckoIdsToFetch: string[] = [];
 
@@ -84,13 +155,14 @@ export async function POST(request: NextRequest) {
         for (const [pair, geckoId] of Object.entries(pairToBase)) {
           const entry = geckoData[geckoId];
           if (entry && typeof entry.usd === 'number') {
-            allResults.push({ symbol: pair, price: String(entry.usd) });
+            const price = String(entry.usd);
+            allResults.push({ symbol: pair, price });
+            rememberPrice(pair, price, now);
           }
         }
       }
     }
 
-    console.log(`[prices] ${allResults.length}/${uniqueSymbols.length} prix récupérés`);
     return NextResponse.json(allResults);
   } catch (error) {
     console.error('[prices] Erreur:', error);

@@ -40,11 +40,11 @@ import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-d
 import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
 import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
-import { useIntegrations } from "@/hooks/dashboard/useIntegrations"
-import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics"
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
+import { toast, withToast } from "@/lib/toast"
 import type { Id } from "@/convex/_generated/dataModel"
 
 // Types pour les données
@@ -85,12 +85,18 @@ export function AccountsView() {
   const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
   const [isKucoinImportOpen, setIsKucoinImportOpen] = React.useState(false)
   const [kucoinImportIntegrationId, setKucoinImportIntegrationId] = React.useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = React.useState(0)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
   const [viewMode, setViewMode] = React.useState<"list" | "grid">("list")
-  const { integrations, isLoading: integrationsLoading } = useIntegrations()
-  const { transactions, isLoading: transactionsLoading } = useDashboardMetrics(refreshToken)
+  // Les données viennent du contexte du dashboard : un seul chargement
+  // partagé avec la sidebar et la vue portefeuille.
+  const {
+    integrations,
+    isLoadingIntegrations: integrationsLoading,
+    transactions,
+    isLoading: transactionsLoading,
+    refresh: handleRefresh,
+  } = useDashboardData()
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
   const syncKucoin = useAction(api.kucoin.syncAccount)
@@ -143,135 +149,183 @@ export function AccountsView() {
     })
   }, [integrations, transactions])
 
-  const handleRefresh = React.useCallback(() => {
-    setRefreshToken((prev) => prev + 1)
-  }, [])
-
   const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">, provider?: string) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      if (provider === "kaspa") {
-        await syncKaspaWallet({ integrationId: accountId })
-      } else if (provider === "ethereum") {
-        await syncEthereumWallet({ integrationId: accountId })
-      } else if (provider === "solana") {
-        await syncSolanaWallet({ integrationId: accountId })
-      } else if (provider === "bitcoin") {
-        await syncBitcoinWallet({ integrationId: accountId })
-      } else if (provider === "tao") {
-        await syncTaoWallet({ integrationId: accountId })
-      } else if (provider === "binance" || !provider) {
-        // Binance flow (default for backward compatibility)
-        // First reset all cursors to force re-sync from the beginning
-        await resetAllCursors({ integrationId: accountId })
-        console.log("✓ Cursors reset, now starting data sync...")
+    const providerKey = provider || "binance"
+    const providerName = PROVIDER_NAMES[providerKey] || "le compte"
 
-        // Then call syncAccount to fetch the actual data (status is managed in the backend)
-        await syncAccount({ integrationId: accountId })
-        console.log("✓ Sync completed")
-      } else if (provider === "kucoin") {
-        await syncKucoin({ integrationId: accountId })
-        console.log("✓ KuCoin sync completed")
-      } else {
-        console.error(`Unsupported provider for sync: ${provider}`)
-        return
+    const done = await withToast(
+      async () => {
+        if (providerKey === "kaspa") {
+          await syncKaspaWallet({ integrationId: accountId })
+        } else if (providerKey === "ethereum") {
+          await syncEthereumWallet({ integrationId: accountId })
+        } else if (providerKey === "solana") {
+          await syncSolanaWallet({ integrationId: accountId })
+        } else if (providerKey === "bitcoin") {
+          await syncBitcoinWallet({ integrationId: accountId })
+        } else if (providerKey === "tao") {
+          await syncTaoWallet({ integrationId: accountId })
+        } else if (providerKey === "binance") {
+          // Binance flow (default for backward compatibility)
+          // First reset all cursors to force re-sync from the beginning
+          await resetAllCursors({ integrationId: accountId })
+
+          // Then call syncAccount to fetch the actual data (status is managed in the backend)
+          await syncAccount({ integrationId: accountId })
+        } else if (providerKey === "kucoin") {
+          await syncKucoin({ integrationId: accountId })
+        } else {
+          throw new Error(`Synchronisation non prise en charge pour ${providerName}.`)
+        }
+        return true as const
+      },
+      {
+        loading: `Synchronisation de ${providerName}…`,
+        success: `${providerName} synchronisé`,
+        error: `Échec de la synchronisation de ${providerName}`,
       }
+    )
 
-      // Wait a brief moment before refreshing
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync account:", error)
-    }
+    if (!done) return
+
+    // Wait a brief moment before refreshing
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      await syncFiatOnly({ integrationId: accountId })
-      console.log("✓ Fiat sync completed")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync fiat:", error)
-    }
+    const done = await withToast(
+      async () => {
+        await syncFiatOnly({ integrationId: accountId })
+        return true as const
+      },
+      {
+        loading: "Synchronisation des ordres fiat…",
+        success: "Ordres fiat synchronisés",
+        error: "Échec de la synchronisation des ordres fiat",
+      }
+    )
+
+    if (!done) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, syncFiatOnly])
 
   const handleSyncKucoinConverts = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      await syncKucoinConverts({ integrationId: accountId })
-      console.log("✓ KuCoin converts sync completed")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync KuCoin converts:", error)
-    }
+    const done = await withToast(
+      async () => {
+        await syncKucoinConverts({ integrationId: accountId })
+        return true as const
+      },
+      {
+        loading: "Synchronisation des converts KuCoin…",
+        success: "Converts KuCoin synchronisés",
+        error: "Échec de la synchronisation des converts KuCoin",
+      }
+    )
+
+    if (!done) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, syncKucoinConverts])
 
   const handleSyncDustOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      await syncDustOnly({ integrationId: accountId })
-      console.log("✓ Dust sync completed")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync dust:", error)
-    }
+    const done = await withToast(
+      async () => {
+        await syncDustOnly({ integrationId: accountId })
+        return true as const
+      },
+      {
+        loading: "Synchronisation des conversions dust…",
+        success: "Conversions dust synchronisées",
+        error: "Échec de la synchronisation des conversions dust",
+      }
+    )
+
+    if (!done) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, syncDustOnly])
 
   const handleSyncBalances = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      await syncBalances({ integrationId: accountId })
-      console.log("✓ Balances sync completed")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync balances:", error)
-    }
+    const assets = await withToast(
+      () => syncBalances({ integrationId: accountId }),
+      {
+        loading: "Synchronisation des soldes…",
+        success: (result) =>
+          `${result.length} actif${result.length > 1 ? "s" : ""} mis à jour`,
+        error: "Échec de la synchronisation des soldes",
+      }
+    )
+
+    if (!assets) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, syncBalances])
 
   const handleSyncOrders = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
-    try {
-      await syncOrders({ integrationId: accountId })
-      console.log("✓ Orders sync completed")
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to sync orders:", error)
-    }
+    const done = await withToast(
+      async () => {
+        await syncOrders({ integrationId: accountId })
+        return true as const
+      },
+      {
+        loading: "Synchronisation de l'historique des ordres…",
+        success: "Historique des ordres synchronisé",
+        error: "Échec de la synchronisation de l'historique des ordres",
+      }
+    )
+
+    if (!done) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
   }, [handleRefresh, syncOrders])
 
   const handlePurgeData = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
@@ -279,19 +333,36 @@ export function AccountsView() {
       return
     }
 
-    try {
-      const counts = await purgeAllData({ integrationId: accountId })
-      console.log("✓ Data purged:", counts)
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to purge data:", error)
-    }
+    const counts = await withToast(
+      () => purgeAllData({ integrationId: accountId }),
+      {
+        loading: "Suppression des données du compte…",
+        success: (result) => {
+          const total =
+            result.trades +
+            result.orders +
+            result.convertTrades +
+            result.deposits +
+            result.withdrawals +
+            result.fiatTransactions +
+            result.balances
+          if (total === 0) return "Aucune donnée à supprimer pour ce compte"
+          return `${total.toLocaleString("fr-FR")} enregistrement${total > 1 ? "s" : ""} supprimé${total > 1 ? "s" : ""} : ${result.trades} trades, ${result.orders} ordres, ${result.deposits} dépôts, ${result.withdrawals} retraits`
+        },
+        error: "Échec de la suppression des données",
+      }
+    )
+
+    if (!counts) return
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    handleRefresh()
   }, [handleRefresh, purgeAllData])
 
   const handleDeleteAccount = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
       console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
       return
     }
 
@@ -299,14 +370,22 @@ export function AccountsView() {
       return
     }
 
-    try {
-      await deleteIntegration({ integrationId: accountId })
-      console.log("✓ Integration deleted")
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      handleRefresh()
-    } catch (error) {
-      console.error("Failed to delete integration:", error)
-    }
+    const done = await withToast(
+      async () => {
+        await deleteIntegration({ integrationId: accountId })
+        return true as const
+      },
+      {
+        loading: "Suppression du compte…",
+        success: "Compte supprimé avec toutes ses données",
+        error: "Échec de la suppression du compte",
+      }
+    )
+
+    if (!done) return
+
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    handleRefresh()
   }, [handleRefresh, deleteIntegration])
 
   const isLoading = integrationsLoading || transactionsLoading
@@ -336,12 +415,12 @@ export function AccountsView() {
       {/* Header */}
       <div className="flex flex-row justify-between items-center mb-9">
         <div className="flex flex-col gap-1">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Portefeuille</p>
-          <h1 className="text-[28px] font-bold tracking-tight text-foreground">Mes comptes</h1>
+          <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Portefeuille</p>
+          <h1 className="font-serif text-3xl font-normal leading-tight text-foreground">Mes comptes</h1>
         </div>
         <Button
           onClick={() => setIsConnectOpen(true)}
-          className="h-10 px-5 rounded-md font-medium shadow-sm cursor-pointer gap-2"
+          className="h-10 px-5 rounded-md font-medium cursor-pointer gap-2"
         >
           <Plus className="w-4 h-4" />
           Ajouter un compte
@@ -394,7 +473,7 @@ export function AccountsView() {
             className={cn(
               "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
               viewMode === "grid"
-                ? "bg-card text-foreground shadow-sm"
+                ? "bg-card text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -409,7 +488,7 @@ export function AccountsView() {
             className={cn(
               "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
               viewMode === "list"
-                ? "bg-card text-foreground shadow-sm"
+                ? "bg-card text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
@@ -432,7 +511,7 @@ export function AccountsView() {
           <NoResultsState query={searchQuery} onReset={() => { setSearchQuery(""); setTypeFilter("All") }} />
         ) : (
           filteredAccounts.map((account) => (
-            <Accordion type="single" collapsible key={account.id} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden transition-colors hover:border-primary/30">
+            <Accordion type="single" collapsible key={account.id} className="bg-card rounded-lg border border-border overflow-hidden transition-colors hover:border-primary/30">
               <AccordionItem value={account.id} className="border-none">
                 <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
                   <div className="flex items-center justify-between w-full pr-2 gap-3">
@@ -658,7 +737,7 @@ function CopyableAddress({ address }: { address: string }) {
     >
       <span className="truncate">{address}</span>
       {copied ? (
-        <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+        <Check className="w-3 h-3 text-positive shrink-0" />
       ) : (
         <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
       )}
@@ -687,7 +766,7 @@ function FilterChip({ label, active, onClick }: { label: string; active?: boolea
 function StatusBadge({ status, showText }: { status: AccountStatus, showText?: boolean }) {
   if (status === 'synced') {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+      <div className="num flex items-center gap-1.5 border border-positive/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-positive">
         <Check className="w-3.5 h-3.5" />
         {showText && <span className="text-[12px] font-medium">Synchronisé</span>}
       </div>
@@ -695,7 +774,7 @@ function StatusBadge({ status, showText }: { status: AccountStatus, showText?: b
   }
   if (status === 'syncing') {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+      <div className="num flex items-center gap-1.5 border border-chart-4/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-chart-4">
         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
         {showText && <span className="text-[12px] font-medium">Synchronisation…</span>}
       </div>
@@ -726,7 +805,7 @@ function AccountsSkeleton() {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="bg-card rounded-xl border border-border shadow-sm px-5 py-4 flex items-center justify-between animate-pulse"
+          className="bg-card rounded-lg border border-border px-5 py-4 flex items-center justify-between animate-pulse"
         >
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-muted" />
@@ -744,7 +823,7 @@ function AccountsSkeleton() {
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-14 px-6 rounded-xl border border-dashed border-border bg-card/60">
+    <div className="flex flex-col items-center justify-center text-center py-14 px-6 rounded-lg border border-dashed border-border bg-card/60">
       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
         <Inbox className="w-6 h-6 text-primary" />
       </div>
@@ -762,7 +841,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 
 function NoResultsState({ query, onReset }: { query: string; onReset: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-xl border border-dashed border-border bg-card/60">
+    <div className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-lg border border-dashed border-border bg-card/60">
       <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center mb-3">
         <Search className="w-5 h-5 text-muted-foreground" />
       </div>
