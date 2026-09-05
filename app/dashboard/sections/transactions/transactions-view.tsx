@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
+import { useFxRates } from "@/hooks/useFxRates";
 
 // Helper pour extraire le quote asset (réutilisé de votre logique existante)
 const QUOTE_ASSETS = [
@@ -53,6 +54,7 @@ export function TransactionsView({
   const [tempSymbolFilter, setTempSymbolFilter] = React.useState(symbolFilter);
   const [tokenSearch, setTokenSearch] = React.useState("");
   const [assetPrices, setAssetPrices] = React.useState<Record<string, number>>({});
+  const { rateAt } = useFxRates();
 
   const USD_STABLES = React.useMemo(() => new Set([
     "USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI",
@@ -166,7 +168,11 @@ export function TransactionsView({
       let amount = 0;
       let amountDisplay = "";
       let amountEur: number | null = null;
-      const EUR_USD = 1 / 0.92; // taux approx EUR→USD
+      // Taux du jour de l'opération, issu de l'historique BCE. Un taux figé
+      // appliquait la même conversion à des transactions de toutes dates.
+      const fx = rateAt(tx.type === "trade" ? tx.executedAt : tx.timestamp);
+      const eurPerUsd = fx?.eurPerUsd ?? null;
+      const usdPerEur = eurPerUsd ? 1 / eurPerUsd : null;
 
       if (tx.type === 'trade') {
         const quoteQty = tx.quoteQuantity ?? (tx.price * tx.quantity);
@@ -174,11 +180,12 @@ export function TransactionsView({
         const quoteIsEur = quoteAsset === "EUR";
         if (quoteIsEur) {
           // quoteQty est en EUR : convertir en USD pour la colonne USD
-          amount = quoteQty * EUR_USD;
+          // Cotée en euros : c'est la colonne dollars qu'il faut convertir.
+          amount = usdPerEur ? quoteQty * usdPerEur : quoteQty;
           amountEur = quoteQty;
         } else {
           amount = quoteQty; // USD/stablecoin
-          amountEur = quoteQty * 0.92;
+          amountEur = eurPerUsd ? quoteQty * eurPerUsd : null;
         }
         amountDisplay = currencyFormatter.format(amount);
       } else if (tx.type === 'deposit' || tx.type === 'withdrawal') {
@@ -187,7 +194,7 @@ export function TransactionsView({
         if (priceUsd !== undefined) {
           amount = tx.amount * priceUsd;
           amountDisplay = currencyFormatter.format(amount);
-          amountEur = amount * 0.92;
+          amountEur = eurPerUsd ? amount * eurPerUsd : null;
         } else {
           amount = 0;
           amountDisplay = "-";
@@ -237,7 +244,7 @@ export function TransactionsView({
         providerIcon: getProviderIcon(tx.type === 'trade' ? tx.providerDisplayName : (tx.type === 'deposit' ? tx.providerDisplayName : tx.providerDisplayName)),
       };
     });
-  }, [transactions, assetPrices, USD_STABLES]);
+  }, [transactions, assetPrices, USD_STABLES, rateAt]);
 
   // Appliquer la recherche par token puis le tri
   const sortedTransactions = React.useMemo(() => {

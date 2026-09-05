@@ -142,7 +142,13 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 export function TaxReportView() {
-  const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
+  const eur = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  maximumFractionDigits: 0,
+});
+
+const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
@@ -285,11 +291,32 @@ export function TaxReportView() {
               </div>
             )}
 
+            {/* Sans historique de change, les montants restent en dollars
+                alors que la déclaration se fait en euros : il faut le dire. */}
+            {result?.hasMissingFxRates && (
+              <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+                <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-chart-4">Conversion indisponible :</span>{" "}
+                  <span className="text-muted-foreground">
+                    aucun taux de change n&apos;est en base, les montants sont donc affichés en
+                    dollars. La déclaration se fait en euros, au cours du jour de chaque cession.
+                    Lancez l&apos;action <span className="num">fxRates.backfillEurUsd</span> pour
+                    charger l&apos;historique de la BCE.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Summary cards */}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
                 label="Total des cessions"
-                value={usd.format(report.totalProceedsUsd)}
+                value={
+                  report.totalProceedsEur !== null
+                    ? eur.format(report.totalProceedsEur)
+                    : usd.format(report.totalProceedsUsd)
+                }
                 sub={`${report.events.length} cession${report.events.length > 1 ? "s" : ""} taxable${report.events.length > 1 ? "s" : ""}`}
               />
               <SummaryCard
@@ -300,8 +327,9 @@ export function TaxReportView() {
               <SummaryCard
                 label="Plus-value nette"
                 value={
-                  (report.netGainLossUsd >= 0 ? "+" : "") +
-                  usd.format(report.netGainLossUsd)
+                  report.netGainLossEur !== null
+                    ? (report.netGainLossEur >= 0 ? "+" : "") + eur.format(report.netGainLossEur)
+                    : (report.netGainLossUsd >= 0 ? "+" : "") + usd.format(report.netGainLossUsd)
                 }
                 sub={
                   report.totalProceedsUsd > 0
@@ -318,7 +346,13 @@ export function TaxReportView() {
               />
               <SummaryCard
                 label="Impôt estimé (PFU 30%)"
-                value={report.isBelowThreshold ? "0 $ (exonéré)" : usd.format(report.estimatedTaxUsd)}
+                value={
+                  report.isBelowThreshold
+                    ? "0 € (exonéré)"
+                    : report.estimatedTaxEur !== null
+                      ? eur.format(report.estimatedTaxEur)
+                      : usd.format(report.estimatedTaxUsd)
+                }
                 sub={report.isBelowThreshold ? "Seuil 305 € non atteint" : "12,8% IR + 17,2% PS"}
                 variant={report.estimatedTaxUsd > 0 ? "warning" : "neutral"}
               />
@@ -401,10 +435,10 @@ export function TaxReportView() {
               est réparti au prorata de chaque cession sur la valeur résiduelle du portefeuille.
             </p>
             <p>
-              <strong className="text-foreground">Approximation :</strong> La valeur résiduelle
-              est estimée à partir du coût d&apos;acquisition moyen (pas du cours de marché au
-              moment de la cession). Pour une déclaration officielle, vérifiez les montants avec
-              un comptable ou convertissez en EUR au taux de change du jour de chaque opération.
+              <strong className="text-foreground">Méthode :</strong> la valeur globale du
+              portefeuille est établie au cours du marché à la date de chaque cession, et les
+              montants sont convertis en euros au taux de change de ce même jour, publié par la
+              BCE. Faites néanmoins vérifier les montants par un professionnel avant de déclarer.
             </p>
             <p>
               Les échanges crypto-vers-crypto (y compris vers stablecoins) ne sont{" "}
