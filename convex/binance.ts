@@ -1,4 +1,4 @@
-import { action } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { requireUserId } from "./auth";
 import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
@@ -592,19 +592,31 @@ export const syncAccount = action({
       earliestActivityCandidates.length > 0 ? Math.min(...earliestActivityCandidates) : null;
     const accountCreatedAt = accountCreationFromApi ?? inferredCreation ?? null;
 
-    // Queue spot trades sync in background (don't await)
+    // Les étapes longues repartent en tâche de fond. Elles visent les
+    // variantes internes : une tâche planifiée s'exécute sans utilisateur
+    // connecté, et la vérification d'appelant des actions publiques les
+    // faisait échouer immédiatement — laissant le compte affiché « en
+    // synchronisation » sans que rien ne tourne plus.
     console.log("📊 Launching spot trades sync in background...");
-    ctx.scheduler.runAfter(0, api.binance.syncSpotTradesOnly, {
+    const spotJobId = await ctx.scheduler.runAfter(0, internal.binance.syncSpotTradesScheduled, {
       integrationId: args.integrationId,
       symbols: detection.symbols,
       startTime: args.options?.startTime,
+    });
+    await ctx.runMutation(internal.integrations.recordSyncJob, {
+      integrationId: args.integrationId,
+      jobId: spotJobId,
     });
 
     // Queue orders sync in background (runs after converts/deposits are done
     // so it can discover all assets including zero-balance ones like SNX)
     console.log("📋 Launching order history sync in background...");
-    ctx.scheduler.runAfter(5000, api.binance.syncOrdersOnly, {
+    const ordersJobId = await ctx.scheduler.runAfter(5000, internal.binance.syncOrdersScheduled, {
       integrationId: args.integrationId,
+    });
+    await ctx.runMutation(internal.integrations.recordSyncJob, {
+      integrationId: args.integrationId,
+      jobId: ordersJobId,
     });
 
     await ctx.runMutation(internal.integrations.updateMetadata, {
@@ -634,7 +646,30 @@ export const syncAccount = action({
 });
 
 // Separate action for spot trades sync - can run for longer without blocking
-export const syncSpotTradesOnly = action({
+/**
+ * Vérifie que l'appelant est bien le propriétaire du compte.
+ *
+ * Réservé aux actions publiques. Les actions internes s'en passent : elles
+ * sont hors d'atteinte depuis un client, et une tâche planifiée ne porte
+ * aucune authentification — c'est précisément ce qui faisait échouer les
+ * étapes de fond.
+ */
+async function authorizeIntegration(ctx: ActionCtx, integrationId: Id<"integrations">) {
+  const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
+    integrationId,
+  })) as IntegrationRecord | null;
+
+  if (!integration) {
+    throw new Error("Intégration introuvable.");
+  }
+  const clerkUserId = await requireUserId(ctx);
+  if (integration.clerkUserId !== clerkUserId) {
+    throw new Error("Not authorized");
+  }
+  return integration;
+}
+
+export const syncSpotTradesScheduled = internalAction({
   args: {
     integrationId: v.id("integrations"),
     symbols: v.array(v.string()),
@@ -648,11 +683,6 @@ export const syncSpotTradesOnly = action({
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
-    const clerkUserIdSpot = await requireUserId(ctx);
-    if (integration.clerkUserId !== clerkUserIdSpot) {
-      throw new Error("Not authorized");
-    }
-
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
@@ -682,6 +712,23 @@ export const syncSpotTradesOnly = action({
       });
       throw error;
     }
+  },
+});
+
+/** Version appelable depuis l'interface : mêmes étapes, appelant vérifié. */
+export const syncSpotTradesOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+    symbols: v.array(v.string()),
+    startTime: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<{ fetched: number; inserted: number }> => {
+    await authorizeIntegration(ctx, args.integrationId);
+    const result = (await ctx.runAction(internal.binance.syncSpotTradesScheduled, args)) as {
+      fetched: number;
+      inserted: number;
+    };
+    return { fetched: result.fetched, inserted: result.inserted };
   },
 });
 
@@ -804,7 +851,7 @@ export const syncDustOnly = action({
 
 // Action to sync all filled spot orders (take_profit, stop_loss, etc.)
 // Uses /api/v3/allOrders and stores into the `orders` table (no collision with trades)
-export const syncOrdersOnly = action({
+export const syncOrdersScheduled = internalAction({
   args: {
     integrationId: v.id("integrations"),
   },
@@ -816,11 +863,6 @@ export const syncOrdersOnly = action({
     if (!integration) {
       throw new Error("Intégration introuvable.");
     }
-    const clerkUserIdOrders = await requireUserId(ctx);
-    if (integration.clerkUserId !== clerkUserIdOrders) {
-      throw new Error("Not authorized");
-    }
-
     const { apiKey, apiSecret } = integration.encryptedCredentials;
     const decryptedKey = decryptSecret(apiKey);
     const decryptedSecret = decryptSecret(apiSecret);
@@ -1005,6 +1047,21 @@ export const syncOrdersOnly = action({
       });
       throw error;
     }
+  },
+});
+
+/** Version appelable depuis l'interface : mêmes étapes, appelant vérifié. */
+export const syncOrdersOnly = action({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, args): Promise<{ fetched: number; inserted: number }> => {
+    await authorizeIntegration(ctx, args.integrationId);
+    const result = (await ctx.runAction(internal.binance.syncOrdersScheduled, args)) as {
+      fetched: number;
+      inserted: number;
+    };
+    return { fetched: result.fetched, inserted: result.inserted };
   },
 });
 
@@ -2505,7 +2562,7 @@ async function syncSymbolTrades(
   }
 ): Promise<SyncResult> {
   const scope = params.symbol.toUpperCase();
-  const syncState = await ctx.runQuery(api.integrations.getSyncState, {
+  const syncState = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
     integrationId: params.integrationId,
     dataset: DATASET_SPOT_TRADES,
     scope,
@@ -2923,7 +2980,7 @@ async function fetchFiatPayments(
 
 
 async function loadConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<ConvertCursor> {
-  const state = await ctx.runQuery(api.integrations.getSyncState, {
+  const state = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
     integrationId,
     dataset: DATASET_CONVERT_TRADES,
     scope: "default",
@@ -2959,7 +3016,7 @@ async function saveConvertCursor(ctx: ActionCtx, integrationId: Id<"integrations
 }
 
 async function loadFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<FiatCursor> {
-  const state = await ctx.runQuery(api.integrations.getSyncState, {
+  const state = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
     integrationId,
     dataset: DATASET_FIAT_ORDERS,
     scope: "default",
@@ -2995,7 +3052,7 @@ async function saveFiatCursor(ctx: ActionCtx, integrationId: Id<"integrations">,
 }
 
 async function loadDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<DepositCursor> {
-  const state = await ctx.runQuery(api.integrations.getSyncState, {
+  const state = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
     integrationId,
     dataset: DATASET_DEPOSITS,
     scope: "default",
@@ -3029,7 +3086,7 @@ async function saveDepositCursor(ctx: ActionCtx, integrationId: Id<"integrations
 }
 
 async function loadWithdrawalCursor(ctx: ActionCtx, integrationId: Id<"integrations">): Promise<WithdrawalCursor> {
-  const state = await ctx.runQuery(api.integrations.getSyncState, {
+  const state = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
     integrationId,
     dataset: DATASET_WITHDRAWALS,
     scope: "default",
