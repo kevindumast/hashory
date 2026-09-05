@@ -18,6 +18,9 @@ const DATASET_TRADES = "kraken_trades";
 const DATASET_LEDGERS = "kraken_ledgers";
 const SCOPE = "default";
 
+/** Contreparties : leur présence d'un côté du couple en fixe le sens. */
+const QUOTE_ASSETS = new Set(["EUR", "USD", "GBP", "CHF", "USDT", "USDC", "DAI", "USDG", "PYUSD"]);
+
 /* ─── Authentification ─────────────────────────────────────────────────────
    Kraken signe chaque appel privé ainsi :
 
@@ -249,7 +252,7 @@ async function syncLedgers(
   integrationId: Id<"integrations">,
   apiKey: string,
   apiSecret: string
-): Promise<{ deposits: number; withdrawals: number }> {
+): Promise<{ deposits: number; withdrawals: number; converts: number }> {
   const state = await ctx.runQuery(api.integrations.getSyncState, {
     integrationId,
     dataset: DATASET_LEDGERS,
@@ -262,6 +265,16 @@ async function syncLedgers(
   let latestTs = cursor?.latestTs ?? 0;
   let deposits = 0;
   let withdrawals = 0;
+
+  // Une conversion Kraken n'apparaît pas dans TradesHistory : elle produit
+  // deux écritures, « spend » pour l'actif cédé et « receive » pour l'actif
+  // obtenu, réunies par un même refid. On les rassemble avant de les
+  // convertir en opération, car rien ne garantit qu'elles tombent sur la
+  // même page.
+  const swapLegs = new Map<
+    string,
+    { spend?: { asset: string; amount: number }; receive?: { asset: string; amount: number }; timestamp: number }
+  >();
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
     const result = await privatePost<{ ledger: Record<string, KrakenLedger>; count: number }>(
@@ -312,6 +325,16 @@ async function syncLedgers(
           },
         });
         withdrawals += 1;
+      } else if (entry.type === "spend" || entry.type === "receive") {
+        const reference = entry.refid ?? ledgerId;
+        const leg = swapLegs.get(reference) ?? { timestamp };
+        leg.timestamp = Math.max(leg.timestamp, timestamp);
+        if (entry.type === "spend") {
+          leg.spend = { asset, amount: Math.abs(amount) };
+        } else {
+          leg.receive = { asset, amount: Math.abs(amount) };
+        }
+        swapLegs.set(reference, leg);
       }
     }
 
@@ -329,7 +352,47 @@ async function syncLedgers(
     });
   }
 
-  return { deposits, withdrawals };
+  // Seuls les couples complets décrivent une conversion exploitable.
+  const converts = Array.from(swapLegs.entries()).flatMap(([reference, leg]) => {
+    if (!leg.spend || !leg.receive) return [];
+    if (leg.spend.amount <= 0 || leg.receive.amount <= 0) return [];
+
+    const from = leg.spend;
+    const to = leg.receive;
+
+    // La contrepartie sert de cotation ; à défaut, l'actif reçu fait office
+    // de base, comme pour les conversions crypto contre crypto.
+    const toIsQuote = QUOTE_ASSETS.has(to.asset);
+    const side = toIsQuote ? ("SELL" as const) : ("BUY" as const);
+    const base = toIsQuote ? from.asset : to.asset;
+    const quote = toIsQuote ? to.asset : from.asset;
+    const quantity = toIsQuote ? from.amount : to.amount;
+    const quoteQuantity = toIsQuote ? to.amount : from.amount;
+
+    return [
+      {
+        providerTradeId: `convert:${reference}`,
+        tradeType: "CONVERT" as const,
+        symbol: `${base}${quote}`,
+        side,
+        quantity,
+        price: quantity > 0 ? quoteQuantity / quantity : 0,
+        quoteQuantity,
+        isMaker: false,
+        executedAt: leg.timestamp,
+        fromAsset: from.asset,
+        fromAmount: from.amount,
+        toAsset: to.asset,
+        toAmount: to.amount,
+      },
+    ];
+  });
+
+  if (converts.length > 0) {
+    await ctx.runMutation(internal.trades.ingestBatch, { integrationId, trades: converts });
+  }
+
+  return { deposits, withdrawals, converts: converts.length };
 }
 
 /**
@@ -344,7 +407,7 @@ export const syncAccount = action({
   handler: async (
     ctx,
     args
-  ): Promise<{ trades: number; deposits: number; withdrawals: number }> => {
+  ): Promise<{ trades: number; deposits: number; withdrawals: number; converts: number }> => {
     const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
@@ -369,7 +432,7 @@ export const syncAccount = action({
 
       const trades = await syncTrades(ctx, args.integrationId, apiKey, apiSecret, pairs);
       await wait(DELAY_MS);
-      const { deposits, withdrawals } = await syncLedgers(
+      const { deposits, withdrawals, converts } = await syncLedgers(
         ctx,
         args.integrationId,
         apiKey,
@@ -385,7 +448,7 @@ export const syncAccount = action({
         lastSyncedAt: Date.now(),
       });
 
-      return { trades, deposits, withdrawals };
+      return { trades, deposits, withdrawals, converts };
     } catch (error) {
       await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
