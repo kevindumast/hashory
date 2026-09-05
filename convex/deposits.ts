@@ -126,6 +126,7 @@ export const insert = internalMutation({
       addressTag: v.optional(v.string()),
       insertTime: v.number(),
       confirmedTime: v.optional(v.number()),
+      fee: v.optional(v.number()),
       raw: v.optional(v.any()),
       createdAt: v.number(),
     }),
@@ -138,7 +139,14 @@ export const insert = internalMutation({
       )
       .first();
 
-    if (existing) return existing._id;
+    if (existing) {
+      // Même principe que pour les opérations : une entrée déjà connue
+      // récupère la commission qui lui manquait, sans être réécrite.
+      if (existing.fee === undefined && args.deposit.fee !== undefined && args.deposit.fee > 0) {
+        await ctx.db.patch(existing._id, { fee: args.deposit.fee });
+      }
+      return existing._id;
+    }
 
     return await ctx.db.insert("deposits", {
       integrationId: args.integrationId,
@@ -152,6 +160,7 @@ export const insert = internalMutation({
       addressTag: args.deposit.addressTag,
       insertTime: args.deposit.insertTime,
       confirmedTime: args.deposit.confirmedTime,
+      fee: args.deposit.fee,
       raw: args.deposit.raw,
       createdAt: args.deposit.createdAt,
     });

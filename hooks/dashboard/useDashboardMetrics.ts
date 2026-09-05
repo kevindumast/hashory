@@ -93,6 +93,8 @@ export type DepositRecord = {
   addressTag: string | null;
   insertTime: number;
   txId: string | null;
+  /** Commission prélevée sur l'entrée, dans la devise du dépôt. */
+  fee?: number | null;
 };
 
 export type WithdrawalRecord = {
@@ -159,6 +161,7 @@ export type TransactionEntry =
       status: string;
       timestamp: number;
       txId: string | null;
+      fee?: number | null;
       direction: "IN";
     }
   | {
@@ -538,6 +541,7 @@ export function useDashboardMetrics(refreshToken: number) {
         status: deposit.status,
         timestamp: deposit.insertTime,
         txId: deposit.txId,
+        fee: deposit.fee,
         direction: "IN",
       });
     });

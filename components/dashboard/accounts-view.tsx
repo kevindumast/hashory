@@ -17,6 +17,7 @@ import {
   Inbox,
   Copy,
   FileUp,
+  CircleStop,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -48,6 +49,7 @@ import { isConvexConfigured } from "@/convex/client"
 import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
 import { PROVIDER_ICONS } from "@/lib/provider-icons"
 import { toast, withToast } from "@/lib/toast"
+import { assessSyncHealth, formatElapsed, type SyncHealth } from "@/lib/sync-health"
 import type { Id } from "@/convex/_generated/dataModel"
 
 // Types pour les données
@@ -70,6 +72,24 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 
 type AccountType = "All" | "API" | "File"
+
+/**
+ * Horloge réveillée régulièrement, pour que la durée affichée avance et que
+ * le seuil d'alerte finisse par se déclencher sans recharger la page.
+ *
+ * Nulle au premier rendu : l'heure du navigateur ne peut pas être lue
+ * pendant le rendu serveur, et l'y comparer produirait une divergence
+ * d'hydratation.
+ */
+function useNow(intervalMs = 30_000) {
+  const [now, setNow] = React.useState<number | null>(null)
+  React.useEffect(() => {
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs)
+    return () => window.clearInterval(id)
+  }, [intervalMs])
+  return now
+}
 
 export function AccountsView() {
   const [isConnectOpen, setIsConnectOpen] = React.useState(false)
@@ -106,6 +126,27 @@ export function AccountsView() {
   const purgeAllData = useMutation(api.integrations.purgeAllData)
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
   const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
+  const cancelSync = useMutation(api.integrations.cancelSync)
+  const now = useNow()
+
+  // Diagnostic de synchronisation, tenu à part : il se rafraîchit à chaque
+  // battement d'horloge, alors que le décompte des transactions ci-dessous
+  // n'a aucune raison d'être refait toutes les trente secondes.
+  const syncHealthById = React.useMemo(() => {
+    const map = new Map<string, SyncHealth>()
+    for (const integration of integrations) {
+      map.set(
+        integration._id,
+        assessSyncHealth({
+          syncStatus: integration.syncStatus,
+          startedAt: integration.syncStartedAt,
+          jobs: integration.syncJobs,
+          now: now ?? integration.syncStartedAt ?? 0,
+        })
+      )
+    }
+    return map
+  }, [integrations, now])
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -140,9 +181,10 @@ export function AccountsView() {
         lastSync,
         status,
         accountCreatedAt,
+        health: syncHealthById.get(integration._id) ?? null,
       }
     })
-  }, [integrations, transactions])
+  }, [integrations, transactions, syncHealthById])
 
   const handleToggleSync = React.useCallback(
     async (accountId: Id<"integrations">, enabled: boolean, label: string) => {
@@ -159,6 +201,24 @@ export function AccountsView() {
       handleRefresh()
     },
     [setSyncEnabled, handleRefresh]
+  )
+
+  const handleCancelSync = React.useCallback(
+    async (accountId: Id<"integrations">, label: string) => {
+      if (!isConvexConfigured) {
+        toast.error("Convex n'est pas configuré, l'action est indisponible.")
+        return
+      }
+      await withToast(() => cancelSync({ integrationId: accountId }), {
+        loading: `Arrêt de la synchronisation de ${label}…`,
+        success: (result) =>
+          result.cancelled > 0
+            ? `Synchronisation de ${label} arrêtée — ${result.cancelled} étape${result.cancelled > 1 ? "s" : ""} annulée${result.cancelled > 1 ? "s" : ""}`
+            : `${label} n'est plus marqué en synchronisation`,
+      })
+      handleRefresh()
+    },
+    [cancelSync, handleRefresh]
   )
 
   const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">, provider?: string) => {
@@ -550,14 +610,45 @@ export function AccountsView() {
                     </div>
 
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-[12px] text-muted-foreground hidden sm:inline whitespace-nowrap">{account.lastSync}</span>
+                      <span className="text-[12px] text-muted-foreground hidden sm:inline whitespace-nowrap">
+                        {/* Pendant une synchronisation, sa durée renseigne
+                            davantage que la date du dernier import réussi. */}
+                        {account.health && account.health.kind !== "idle" && account.health.elapsedMs !== null
+                          ? `depuis ${formatElapsed(account.health.elapsedMs)}`
+                          : account.lastSync}
+                      </span>
                       <StatusBadge status={account.status} showText />
+                      {account.health && account.health.message && (
+                        <AlertCircle className="w-4 h-4 text-chart-4 shrink-0" aria-label={account.health.message} />
+                      )}
                     </div>
                   </div>
                 </AccordionTrigger>
 
                 <AccordionContent className="px-0 pb-0">
                   <Separator className="bg-border" />
+                  {account.health?.message && (
+                    <div className="flex flex-wrap items-center gap-3 border-b border-chart-4/30 bg-chart-4/5 px-5 py-3">
+                      <AlertCircle className="w-4 h-4 text-chart-4 shrink-0" />
+                      <p className="text-[13px] text-foreground min-w-0 flex-1">
+                        {account.health.message}{" "}
+                        <span className="text-muted-foreground">
+                          {account.health.kind === "orphaned"
+                            ? "Le compte est resté affiché en synchronisation ; l'arrêter le libère sans rien perdre."
+                            : "Les données déjà importées sont conservées : une synchronisation reprise ne crée pas de doublon."}
+                        </span>
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shrink-0 cursor-pointer"
+                        onClick={() => void handleCancelSync(account.id as Id<"integrations">, account.name)}
+                      >
+                        <CircleStop className="w-3.5 h-3.5" />
+                        Arrêter
+                      </Button>
+                    </div>
+                  )}
                   <div className="p-5 grid grid-cols-1 md:grid-cols-[1.4fr_auto_auto_1fr] gap-4 items-center">
                     {/* Platform Info */}
                     <div className="flex items-center gap-3">
@@ -600,6 +691,19 @@ export function AccountsView() {
                           </span>
                         ) : (
                           <StatusBadge status={account.status} showText />
+                        )}
+                        {/* Toujours offert pendant une synchronisation, pas
+                            seulement quand elle devient suspecte. */}
+                        {account.health?.canCancel && !account.health.message && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1.5 px-2 text-[12px] text-muted-foreground hover:text-foreground cursor-pointer"
+                            onClick={() => void handleCancelSync(account.id as Id<"integrations">, account.name)}
+                          >
+                            <CircleStop className="w-3.5 h-3.5" />
+                            Arrêter
+                          </Button>
                         )}
                         {/* Les imports de fichiers n'ont pas d'API à interroger. */}
                         {account.type === "API" && (

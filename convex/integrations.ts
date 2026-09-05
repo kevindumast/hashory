@@ -1,8 +1,10 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
+import type { GenericId } from "convex/values";
 import { optionalUserId, requireUserId } from "./auth";
 import { SUPPORTED_PROVIDERS, WALLET_PROVIDERS } from "../lib/providers";
+import type { SyncJob } from "../lib/sync-health";
 
 export const list = query({
   args: {
@@ -21,7 +23,7 @@ export const list = query({
       .order("desc")
       .collect();
 
-    return integrations.map((integration) => {
+    return Promise.all(integrations.map(async (integration) => {
       let publicAddress: string | null = null;
       if (WALLET_PROVIDERS.has(integration.provider)) {
         try {
@@ -30,6 +32,22 @@ export const list = query({
           publicAddress = null;
         }
       }
+
+      // État des étapes planifiées, lu directement chez le planificateur.
+      // C'est la seule source qui dise si un travail est encore à venir ;
+      // le statut, lui, n'est qu'un souvenir de la dernière écriture.
+      const syncJobs: SyncJob[] = [];
+      if (integration.syncStatus === "syncing") {
+        for (const jobId of integration.syncJobIds ?? []) {
+          const job = await ctx.db.system.get(jobId as GenericId<"_scheduled_functions">);
+          if (!job) continue;
+          syncJobs.push({
+            state: job.state.kind,
+            error: job.state.kind === "failed" ? job.state.error : null,
+          });
+        }
+      }
+
       return {
         _id: integration._id,
         provider: integration.provider,
@@ -40,12 +58,20 @@ export const list = query({
         updatedAt: integration.updatedAt,
         lastSyncedAt: integration.lastSyncedAt ?? null,
         syncStatus: integration.syncStatus ?? "idle",
+        // Les synchronisations parties avant l'existence de ce champ n'ont
+        // pas de départ enregistré. `updatedAt` en tient lieu : le passage
+        // au statut « en cours » est justement une écriture, donc une borne
+        // haute honnête pour une synchronisation qui n'a plus rien écrit
+        // depuis. Ce repli ne sert que le temps que les comptes bloqués
+        // soient repris en main.
+        syncStartedAt: integration.syncStartedAt ?? integration.updatedAt,
+        syncJobs,
         accountCreatedAt: integration.accountCreatedAt ?? null,
         // Absent = actif : le champ n'existe pas sur les comptes antérieurs.
         syncEnabled: integration.syncEnabled ?? true,
         publicAddress,
       };
-    });
+    }));
   },
 });
 
@@ -238,6 +264,42 @@ export const getSyncState = query({
   },
 });
 
+/**
+ * Interne : le même curseur, sans exiger d'utilisateur connecté.
+ *
+ * Les étapes de synchronisation lancées en tâche de fond n'en ont pas :
+ * une tâche planifiée s'exécute sans authentification. Passer par la
+ * version publique les faisait échouer dès la lecture du premier curseur.
+ * L'appartenance du compte a déjà été vérifiée à l'entrée de la
+ * synchronisation, avant toute planification.
+ */
+export const getSyncStateInternal = internalQuery({
+  args: {
+    integrationId: v.id("integrations"),
+    dataset: v.string(),
+    scope: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db
+      .query("integrationSyncStates")
+      .withIndex("by_integration_dataset_scope", (q) =>
+        q.eq("integrationId", args.integrationId).eq("dataset", args.dataset).eq("scope", args.scope)
+      )
+      .first();
+
+    if (!record) return null;
+
+    let cursor: Record<string, unknown> | null = null;
+    try {
+      cursor = JSON.parse(record.cursor);
+    } catch {
+      cursor = null;
+    }
+
+    return { ...record, cursor };
+  },
+});
+
 // Interne: mise à jour du curseur de sync (appelé depuis les actions serveur)
 export const updateSyncState = internalMutation({
   args: {
@@ -398,8 +460,118 @@ export const updateSyncStatus = internalMutation({
     syncStatus: v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error")),
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.integrationId, { syncStatus: args.syncStatus, updatedAt: Date.now() });
+    const integration = await ctx.db.get(args.integrationId);
+    const payload: Record<string, unknown> = {
+      syncStatus: args.syncStatus,
+      updatedAt: Date.now(),
+    };
+
+    if (args.syncStatus === "syncing") {
+      // Une synchronisation se déroule en plusieurs étapes, dont chacune
+      // repose le statut. Seule la première marque le départ : le remettre à
+      // chaque étape ferait paraître récente une synchronisation partie
+      // depuis des heures.
+      if (integration?.syncStatus !== "syncing") {
+        payload.syncStartedAt = Date.now();
+        payload.syncJobIds = [];
+      }
+    } else {
+      // Le travail est fini : plus aucune tâche ne reste à suivre.
+      payload.syncJobIds = [];
+    }
+
+    await ctx.db.patch(args.integrationId, payload);
     return { status: "ok" };
+  },
+});
+
+/**
+ * Interne : oublie les curseurs d'un compte, sans toucher aux données.
+ *
+ * Un curseur fait gagner du temps mais fige le passé : une correction
+ * apportée à la lecture d'un relevé ne profite qu'aux entrées à venir, et
+ * les anciennes restent telles qu'elles ont été mal comprises. L'oublier
+ * fait relire l'historique complet, ce qui ne crée aucun doublon puisque
+ * chaque insertion est dédoublonnée.
+ */
+export const clearSyncStates = internalMutation({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, { integrationId }) => {
+    const states = await ctx.db
+      .query("integrationSyncStates")
+      .withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", integrationId))
+      .collect();
+
+    for (const state of states) await ctx.db.delete(state._id);
+    return { cleared: states.length };
+  },
+});
+
+/**
+ * Interne : enregistre une tâche planifiée par la synchronisation en cours.
+ *
+ * Sans cela, une étape planifiée qui échoue ne laisse aucune trace côté
+ * application — le statut reste à « en cours » et rien ne permet de savoir
+ * qu'il n'y a plus rien à attendre.
+ */
+export const recordSyncJob = internalMutation({
+  args: {
+    integrationId: v.id("integrations"),
+    jobId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const integration = await ctx.db.get(args.integrationId);
+    if (!integration) return { status: "missing" };
+
+    const existing = integration.syncJobIds ?? [];
+    if (existing.includes(args.jobId)) return { status: "ok" };
+
+    await ctx.db.patch(args.integrationId, { syncJobIds: [...existing, args.jobId] });
+    return { status: "ok" };
+  },
+});
+
+/**
+ * Arrête la synchronisation en cours.
+ *
+ * Ce qui est réellement interrompu : les étapes encore en attente, annulées
+ * auprès du planificateur. Une étape déjà en train de s'exécuter va, elle,
+ * jusqu'au bout — rien ne permet d'interrompre une action Convex en vol.
+ * Le compte redevient disponible immédiatement dans les deux cas, et les
+ * données déjà importées sont conservées : chaque insertion est dédoublonnée,
+ * une synchronisation reprise ne crée donc pas de doublon.
+ */
+export const cancelSync = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+  },
+  handler: async (ctx, { integrationId }) => {
+    const clerkUserId = await requireUserId(ctx);
+
+    const integration = await ctx.db.get(integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    let cancelled = 0;
+    for (const jobId of integration.syncJobIds ?? []) {
+      try {
+        await ctx.scheduler.cancel(jobId as GenericId<"_scheduled_functions">);
+        cancelled += 1;
+      } catch {
+        // Une tâche déjà terminée n'est plus annulable : rien à signaler.
+      }
+    }
+
+    await ctx.db.patch(integrationId, {
+      syncStatus: "idle",
+      syncJobIds: [],
+      updatedAt: Date.now(),
+    });
+
+    return { cancelled };
   },
 });
 
