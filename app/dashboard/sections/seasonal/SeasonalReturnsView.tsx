@@ -242,14 +242,14 @@ function fmt(v: number | null) {
 
 function ReturnCell({ value }: { value: number | null }) {
   return (
-    <td className={`px-2 py-2 text-center text-[12px] font-bold tabular-nums rounded transition-all ${cellColor(value)}`} style={cellBg(value)}>
+    <td className={`num px-2 py-2 text-center text-[12px] font-bold rounded transition-all ${cellColor(value)}`} style={cellBg(value)}>
       {fmt(value)}
     </td>
   );
 }
 
 function SummaryCell({ value }: { value: number | null }) {
-  return <td className="px-2 py-2 text-center text-[12px] font-semibold tabular-nums bg-muted/30 text-muted-foreground">{fmt(value)}</td>;
+  return <td className="num px-2 py-2 text-center text-[12px] font-semibold bg-muted/30 text-muted-foreground">{fmt(value)}</td>;
 }
 
 function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Map<number, (number | null)[]>; cols: string[]; colsFull: string[] }) {
@@ -267,15 +267,15 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border/60">
-              <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-widest text-muted-foreground w-16">Temps</th>
-              {cols.map((col, i) => <th key={col} title={colsFull[i]} className="px-2 py-3 text-center text-[11px] font-bold uppercase tracking-widest text-muted-foreground min-w-[80px]">{col}</th>)}
-              <th className="px-2 py-3 text-center text-[11px] font-bold uppercase tracking-widest text-muted-foreground min-w-[80px]">Total</th>
+              <th className="px-4 py-3 text-left num text-[10px] uppercase tracking-[0.24em] text-muted-foreground w-16">Temps</th>
+              {cols.map((col, i) => <th key={col} title={colsFull[i]} className="px-2 py-3 text-center num text-[10px] uppercase tracking-[0.24em] text-muted-foreground min-w-[80px]">{col}</th>)}
+              <th className="px-2 py-3 text-center num text-[10px] uppercase tracking-[0.24em] text-muted-foreground min-w-[80px]">Total</th>
             </tr>
           </thead>
           <tbody>
             {years.map((year, yi) => (
               <tr key={year} className="border-b border-border/30 hover:bg-muted/10 transition-colors">
-                <td className="px-4 py-1.5 text-[12px] font-bold text-foreground">{year}</td>
+                <td className="num px-4 py-1.5 text-[12px] font-bold text-foreground">{year}</td>
                 {(data.get(year) ?? []).map((val, i) => <ReturnCell key={i} value={val} />)}
                 <ReturnCell value={yearTotals[yi]} />
               </tr>
@@ -338,7 +338,7 @@ export function SeasonalReturnsView({ snapshots, integrations, allTrades, select
     <div className="space-y-6">
       {/* Integration filter */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Portefeuille</span>
+        <span className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Portefeuille</span>
         <div className="flex gap-1">
           <button onClick={() => onSelectIntegration("all")}
             className={`px-3 py-1 text-[11px] font-bold rounded transition-colors cursor-pointer ${selectedIntegration === "all" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"}`}>

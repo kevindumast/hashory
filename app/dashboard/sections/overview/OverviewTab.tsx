@@ -205,7 +205,7 @@ export function OverviewTab({
                           domain={historyYAxisDomain as [number, number]}
                           tickFormatter={(value) => formatAxisValue(value)}
                         />
-                        <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
+                        <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent className="num" active={active} payload={payload} label={label} />} />
                         <Area
                           type="monotone"
                           dataKey="profitUsd"
@@ -251,7 +251,7 @@ export function OverviewTab({
                               <Cell key={item.symbol} fill={item.color} stroke="transparent" />
                             ))}
                           </Pie>
-                          <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
+                          <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent className="num" active={active} payload={payload} label={label} />} />
                         </PieChart>
                       </ResponsiveContainer>
                     </ChartContainer>
@@ -266,7 +266,7 @@ export function OverviewTab({
                           />
                           <span className="font-medium text-foreground">{item.symbol}</span>
                         </div>
-                        <span className="text-muted-foreground">{item.share.toFixed(2)}%</span>
+                        <span className="num text-muted-foreground">{item.share.toFixed(2)}%</span>
                       </div>
                     ))}
                     {allocationData.length === 0 ? null : (
@@ -313,7 +313,7 @@ export function OverviewTab({
                         width={56}
                         tickFormatter={(value) => `${value.toFixed(1)}%`}
                       />
-                      <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent active={active} payload={payload} label={label} />} />
+                      <ChartTooltip content={({ active, payload, label }) => <ChartTooltipContent className="num" active={active} payload={payload} label={label} />} />
                       <Line
                         type="monotone"
                         dataKey="profitPercent"
@@ -363,7 +363,7 @@ function StatCard({ title, value, subtitle, accent }: StatCardProps) {
           {title}
         </CardDescription>
         <CardTitle
-          className={`text-2xl ${
+          className={`num text-2xl ${
             accent === "positive"
               ? "text-emerald-500"
               : accent === "negative"
@@ -401,11 +401,11 @@ function PerformerCard({ title, performer, fallbackLabel = "N/A" }: PerformerCar
       <CardContent className="text-xs text-muted-foreground">
         {performer ? (
           <>
-            <span className={performer.profitUsd >= 0 ? "text-emerald-500" : "text-red-500"}>
+            <span className={performer.profitUsd >= 0 ? "num text-emerald-500" : "num text-red-500"}>
               {formatCurrencyWithSign(performer.profitUsd)}
             </span>
             {performer.profitPercentage !== undefined ? (
-              <span className="ml-1">
+              <span className="num ml-1">
                 {formatPercent(performer.profitPercentage)}
               </span>
             ) : null}

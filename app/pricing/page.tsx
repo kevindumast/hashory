@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { GlowCard } from "@/components/motion";
+import { SiteFooter } from "@/components/site-footer";
+import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -58,7 +60,7 @@ const tiers = [
       "SSO et audit logs",
     ],
     cta: "Nous contacter",
-    ctaHref: "mailto:sales@termenva.com",
+    ctaHref: "mailto:contact@hashory.app",
     recommended: false,
   },
 ];
@@ -82,7 +84,7 @@ const faqItems = [
   {
     question: "Existe-t-il une période d'essai pour le plan Pro ?",
     answer:
-      "Nous proposons un plan Hobby entièrement gratuit qui vous permet de tester les fonctionnalités de base. Si vous souhaitez essayer le plan Pro, nous offrons une garantie de remboursement de 14 jours &apos;satisfait ou remboursé&apos;.",
+      "Nous proposons un plan Hobby entièrement gratuit qui vous permet de tester les fonctionnalités de base. Si vous souhaitez essayer le plan Pro, nous offrons une garantie de remboursement de 14 jours « satisfait ou remboursé ».",
   },
 ];
 
@@ -91,87 +93,111 @@ export default function PricingPage() {
   notFound();
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute inset-x-0 top-[-12rem] z-[-1] h-[28rem] bg-gradient-to-b from-primary/25 via-primary/10 to-transparent blur-3xl" />
+    <>
       <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-24 sm:px-6 lg:pb-32 lg:pt-32">
-        <div className="text-center">
-          <Badge
-            variant="outline"
-            className="border-primary/30 bg-primary/10 px-4 py-2 text-sm font-semibold uppercase tracking-widest text-primary"
-          >
+        <header>
+          <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+            <span className="h-px w-6 bg-primary" />
             Tarifs
-          </Badge>
-          <h1 className="mt-8 text-balance text-3xl font-bold leading-tight text-foreground sm:text-5xl md:text-6xl">
+          </p>
+          <h1 className="mt-6 max-w-2xl text-balance font-serif text-5xl font-normal leading-[1.02] text-foreground sm:text-6xl">
             Un plan pour chaque ambition.
           </h1>
-          <p className="mt-6 max-w-2xl mx-auto text-pretty text-lg text-muted-foreground">
-            De la simple surveillance à l&apos;optimisation IA avancée, choisissez le plan qui correspond à votre stratégie.
+          <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            De la simple surveillance à l&apos;optimisation avancée, choisissez le plan qui
+            correspond à votre stratégie.
           </p>
-        </div>
+        </header>
 
-        <div className="mt-16 grid gap-8 lg:grid-cols-3">
+        {/* Colonnes séparées par des filets : pas de carte surlignée en couleur. */}
+        <div className="mt-16 grid border-t border-border/60 lg:grid-cols-3">
           {tiers.map((tier) => (
-            <div
+            <GlowCard
               key={tier.name}
-              className={`flex flex-col rounded-3xl border ${
-                tier.recommended ? "border-primary" : "border-border/60"
-              } bg-card/70 p-8 shadow-lg ${
-                tier.recommended ? "shadow-primary/20" : "shadow-primary/5"
-              }`}
+              className={cn(
+                "flex h-full flex-col border-b border-border/60 lg:border-r lg:last:border-r-0",
+                tier.recommended && "border-t-2 border-t-primary"
+              )}
             >
-              <div className="flex-grow">
-                <div className="flex justify-between items-start">
-                  <h2 className="text-xl font-semibold text-foreground">{tier.name}</h2>
+              <div className="flex h-full flex-col p-8">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h2 className="font-serif text-2xl font-normal text-foreground">{tier.name}</h2>
                   {tier.recommended && (
-                    <Badge variant="secondary" className="bg-primary/20 text-primary">
+                    <span className="num text-[10px] uppercase tracking-[0.2em] text-primary">
                       Recommandé
-                    </Badge>
+                    </span>
                   )}
                 </div>
-                <p className="mt-4 flex items-baseline gap-x-2">
-                  <span className="text-4xl font-bold tracking-tight text-foreground">{tier.price}</span>
+
+                <p className="mt-6 flex items-baseline gap-x-2">
+                  <span className="num text-5xl font-normal tracking-tight text-foreground">
+                    {tier.price}
+                  </span>
                   {tier.priceFrequency && (
-                    <span className="text-sm font-medium text-muted-foreground">{tier.priceFrequency}</span>
+                    <span className="num text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                      {tier.priceFrequency}
+                    </span>
                   )}
                 </p>
-                <p className="mt-4 text-sm text-muted-foreground">{tier.description}</p>
-                <ul role="list" className="mt-8 space-y-4 text-sm">
+
+                <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
+                  {tier.description}
+                </p>
+
+                <ul role="list" className="mt-8 border-t border-border/60">
                   {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
-                      <Check className="h-5 w-5 flex-shrink-0 text-primary" />
-                      <span className="text-muted-foreground">{feature}</span>
+                    <li
+                      key={feature}
+                      className="flex items-start gap-3 border-b border-border/60 py-3 text-sm text-muted-foreground"
+                    >
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span>{feature}</span>
                     </li>
                   ))}
                 </ul>
+
+                <Button
+                  asChild
+                  size="lg"
+                  className="mt-8 w-full"
+                  variant={tier.recommended ? "default" : "outline"}
+                >
+                  <Link href={tier.ctaHref}>{tier.cta}</Link>
+                </Button>
               </div>
-              <Button
-                asChild
-                size="lg"
-                className={`mt-8 w-full ${
-                  tier.recommended ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""
-                }`}
-                variant={tier.recommended ? "default" : "outline"}
-              >
-                <Link href={tier.ctaHref}>{tier.cta}</Link>
-              </Button>
-            </div>
+            </GlowCard>
           ))}
         </div>
 
-        <section className="mx-auto w-full max-w-4xl pt-24 sm:pt-32">
-          <div className="space-y-8 text-center">
-            <h2 className="text-3xl font-semibold text-foreground">Questions fréquentes sur les tarifs</h2>
-            <Accordion type="single" collapsible className="w-full text-left">
-              {faqItems.map((item, index) => (
-                <AccordionItem key={index} value={`item-${index + 1}`}>
-                  <AccordionTrigger className="text-base font-medium">{item.question}</AccordionTrigger>
-                  <AccordionContent className="text-sm text-muted-foreground">{item.answer}</AccordionContent>
+        <section className="mt-24 grid gap-10 lg:grid-cols-12">
+          <div className="lg:col-span-4">
+            <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+              <span className="h-px w-6 bg-primary" />
+              Questions
+            </p>
+            <h2 className="mt-6 font-serif text-4xl font-normal leading-[1.05] text-foreground">
+              Sur la facturation.
+            </h2>
+          </div>
+
+          <div className="lg:col-span-8">
+            <Accordion type="single" collapsible className="w-full border-t border-border/60">
+              {faqItems.map((item) => (
+                <AccordionItem key={item.question} value={item.question}>
+                  <AccordionTrigger className="py-5 text-left text-base font-medium hover:no-underline">
+                    {item.question}
+                  </AccordionTrigger>
+                  <AccordionContent className="max-w-2xl pb-6 text-sm leading-relaxed text-muted-foreground">
+                    {item.answer}
+                  </AccordionContent>
                 </AccordionItem>
               ))}
             </Accordion>
           </div>
         </section>
       </main>
-    </div>
+
+      <SiteFooter />
+    </>
   );
 }

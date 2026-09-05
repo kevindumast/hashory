@@ -12,8 +12,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { HashoryLogo } from "@/components/hashory-logo";
 
 const navLinks = [
-  { href: "/#features", label: "Features" },
-  { href: "/dashboard", label: "Dashboard" },
+  { href: "/#features", label: "Fonctionnalités" },
+  { href: "/#workflow", label: "Comment ça marche" },
+  { href: "/changelog", label: "Changelog" },
 ];
 
 const hiddenOnRoutes = ["/sign-in", "/sign-up", "/dashboard"];
@@ -27,17 +28,17 @@ export function SiteHeader() {
   }
 
   return (
-    <div className="sticky top-4 z-40 mx-auto w-full max-w-6xl px-4 md:px-6">
-      <header className="rounded-2xl border border-border/60 bg-background/80 shadow-lg shadow-black/10 backdrop-blur">
-        <div className="flex h-14 w-full items-center justify-between px-4 md:px-6">
+    <div className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
+      <header className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+        <div className="flex h-16 w-full items-center justify-between">
           <Link
             href="/"
             className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground sm:text-lg"
           >
-            <HashoryLogo size={32} />
+            <HashoryLogo size={26} />
             <span className="leading-none">Hashory</span>
           </Link>
-          <nav className="hidden items-center gap-6 text-sm font-medium text-muted-foreground md:flex">
+          <nav className="num hidden items-center gap-8 text-[11px] uppercase tracking-[0.18em] text-muted-foreground md:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -58,7 +59,7 @@ export function SiteHeader() {
                 <Link href="/sign-in">Se connecter</Link>
               </Button>
               <Button asChild size="sm" className="hidden md:inline-flex">
-                <Link href="/sign-up">Commencer gratuitement</Link>
+                <Link href="/sign-up">Commencer</Link>
               </Button>
             </SignedOut>
             <SignedIn>

@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { HashoryLogo } from "@/components/hashory-logo";
+import { DecoderField } from "@/components/landing/decoder-field";
+import { siteConfig } from "@/lib/site";
 
 const perks = [
-  "CEX, DEX et wallets on-chain unifiés",
+  "Exchanges, wallets on-chain et imports CSV réunis",
   "P&L automatique par actif et par période",
-  "Synchronisation continue, zéro saisie manuelle",
-  "Open source · Accès lecture seule · Chiffrement bancaire",
+  "Plus-values calculées selon l'article 150 VH bis",
+  "Accès en lecture seule, clés chiffrées au repos",
 ];
 
 type AuthLayoutProps = {
@@ -16,76 +18,64 @@ type AuthLayoutProps = {
 export default function AuthLayout({ children }: AuthLayoutProps) {
   return (
     <div className="flex min-h-screen">
-      {/* Left panel — branding, theme-aware */}
-      <div className="relative hidden flex-col justify-between overflow-hidden bg-sidebar border-r border-sidebar-border px-10 py-12 lg:flex lg:w-[45%]">
-        {/* Dot grid */}
-        <div
-          className="pointer-events-none absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: "radial-gradient(circle, currentColor 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-          }}
-        />
-        {/* Glow */}
-        <div className="pointer-events-none absolute -top-32 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+      {/* Colonne éditoriale — reprend le vocabulaire de la page d'accueil */}
+      <div className="relative hidden flex-col justify-between overflow-hidden border-r border-border/60 bg-[var(--surface-low)] px-10 py-12 lg:flex lg:w-[46%]">
+        {/* Champ de caractères, très en retrait : la signature reste lisible
+            sans jamais concurrencer le formulaire. */}
+        <div className="pointer-events-none absolute inset-0 opacity-40 [mask-image:linear-gradient(to_bottom,transparent,#000_30%,#000_70%,transparent)]">
+          <DecoderField />
+        </div>
 
-        {/* Logo */}
         <Link href="/" className="relative flex items-center gap-2.5">
-          <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-primary">
-            H
+          <HashoryLogo size={28} />
+          <span className="text-base font-semibold tracking-tight text-foreground">
+            {siteConfig.name}
           </span>
-          <span className="text-lg font-semibold tracking-tight text-sidebar-foreground">Hashory</span>
         </Link>
 
-        {/* Center content */}
-        <div className="relative space-y-8">
-          <div className="space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-              Terminal crypto open source
+        <div className="relative space-y-10">
+          <div className="space-y-6">
+            <p className="num flex items-center gap-3 text-[11px] uppercase tracking-[0.28em] text-muted-foreground">
+              <span className="h-px w-6 bg-primary" />
+              {siteConfig.tagline}
             </p>
-            <h2 className="text-balance text-3xl font-bold leading-tight text-sidebar-foreground">
-              Tous vos actifs,<br />un seul terminal.
+            <h2 className="text-balance font-serif text-4xl font-normal leading-[1.02] text-foreground">
+              Tous vos actifs,
+              <br />
+              <span className="text-primary">un seul terminal.</span>
             </h2>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              Connectez vos exchanges et wallets en quelques minutes
-              et visualisez l&apos;intégralité de votre portefeuille crypto.
-            </p>
           </div>
-          <ul className="space-y-3">
-            {perks.map((p) => (
-              <li key={p} className="flex items-start gap-3 text-sm text-sidebar-foreground/70">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-positive" />
-                {p}
+
+          <ul className="border-t border-border/60">
+            {perks.map((perk) => (
+              <li
+                key={perk}
+                className="flex items-start gap-3 border-b border-border/60 py-3 text-sm text-muted-foreground"
+              >
+                <span className="num mt-0.5 text-[10px] text-primary">→</span>
+                {perk}
               </li>
             ))}
           </ul>
         </div>
 
-        {/* Bottom quote */}
-        <div className="relative rounded-xl border border-sidebar-border bg-sidebar-accent/40 p-4">
-          <p className="text-sm italic text-muted-foreground">
-            &ldquo;Enfin un outil qui centralise vraiment tout — Binance, wallets ETH et positions DeFi.&rdquo;
-          </p>
-          <p className="mt-2 text-xs text-muted-foreground/60">Maya · Trader DeFi indépendante</p>
-        </div>
+        <p className="num relative text-[10px] uppercase tracking-[0.22em] text-muted-foreground/60">
+          Open source · Licence MIT · Aucun accès à vos fonds
+        </p>
       </div>
 
-      {/* Right panel — form */}
+      {/* Colonne formulaire */}
       <div className="relative flex flex-1 flex-col items-center justify-center bg-background px-4 py-12 sm:px-8">
-        {/* Background effect */}
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-primary/5 to-transparent" />
-
-        {/* Mobile logo */}
-        <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-primary/30 bg-primary/10 text-sm font-bold text-primary">
-            H
-          </span>
-          <span className="text-base font-semibold text-foreground">Hashory</span>
+        <Link href="/" className="mb-10 flex items-center gap-2 lg:hidden">
+          <HashoryLogo size={26} />
+          <span className="text-base font-semibold text-foreground">{siteConfig.name}</span>
         </Link>
 
-        <div className="relative w-full max-w-sm">
-          {children}
-        </div>
+        <div className="relative w-full max-w-sm">{children}</div>
+
+        <p className="num mt-10 text-[10px] uppercase tracking-[0.22em] text-muted-foreground/50">
+          Lecture seule · Clés chiffrées
+        </p>
       </div>
     </div>
   );

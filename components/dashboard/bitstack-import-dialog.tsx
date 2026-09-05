@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
+import { errorMessage, toast } from "@/lib/toast";
 
 type BitstackImportDialogProps = {
   open: boolean;
@@ -236,19 +237,24 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
 
     try {
       const result = await ingestCsv({
-        trades: parsed.trades.map(({ kind: _k, ...t }) => t),
-        deposits: parsed.deposits.map(({ kind: _k, ...d }) => d),
+        trades: parsed.trades.map(({ kind, ...t }) => { void kind; return t; }),
+        deposits: parsed.deposits.map(({ kind, ...d }) => { void kind; return d; }),
         displayName: "Bitstack",
       });
       setImportResult({ tradesInserted: result.tradesInserted, depositsInserted: result.depositsInserted });
       setCompleted(true);
+      toast.success(
+        `Import Bitstack terminé : ${result.tradesInserted} achat${result.tradesInserted > 1 ? "s" : ""} et ${result.depositsInserted} dépôt${result.depositsInserted > 1 ? "s" : ""} ajoutés`
+      );
       onSuccess?.();
       setTimeout(() => {
         onOpenChange(false);
         reset();
       }, 2000);
     } catch (err) {
+      console.error("Bitstack CSV import failed:", err);
       setParseError(err instanceof Error ? err.message : "Erreur lors de l'import.");
+      toast.error(errorMessage(err, "Échec de l'import Bitstack."));
     } finally {
       setSubmitting(false);
     }
@@ -263,7 +269,7 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle>Importer un export Bitstack</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Importer un export Bitstack</DialogTitle>
           <DialogDescription className="text-xs">
             Importez votre historique de transactions depuis un fichier CSV exporté depuis Bitstack.
           </DialogDescription>
@@ -305,7 +311,7 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
           </label>
 
           {parsed && !completed && (
-            <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm space-y-1">
+            <div className="space-y-1 border-l-2 border-border py-3 pl-4 text-sm">
               <p className="font-medium text-foreground">Aperçu du fichier</p>
               <p className="text-muted-foreground">
                 {parsed.trades.length} achat{parsed.trades.length > 1 ? "s" : ""} par carte détecté{parsed.trades.length > 1 ? "s" : ""}
@@ -314,7 +320,7 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
                 {parsed.deposits.length} dépôt{parsed.deposits.length > 1 ? "s" : ""} fiat détecté{parsed.deposits.length > 1 ? "s" : ""}
               </p>
               {parsed.skipped > 0 && (
-                <p className="text-amber-600 dark:text-amber-500 text-xs">
+                <p className="text-chart-4 text-xs">
                   {parsed.skipped} ligne{parsed.skipped > 1 ? "s" : ""} ignorée{parsed.skipped > 1 ? "s" : ""}
                 </p>
               )}
@@ -322,19 +328,19 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
           )}
 
           {completed && importResult && (
-            <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm space-y-1">
-              <p className="font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2">
+            <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
+              <p className="font-medium text-positive flex items-center gap-2">
                 <Check className="size-4" />
                 Import réussi
               </p>
-              <p className="text-emerald-700 dark:text-emerald-400 text-xs">
+              <p className="text-positive text-xs">
                 {importResult.tradesInserted} achat{importResult.tradesInserted > 1 ? "s" : ""} et {importResult.depositsInserted} dépôt{importResult.depositsInserted > 1 ? "s" : ""} ajouté{importResult.tradesInserted + importResult.depositsInserted > 1 ? "s" : ""}
               </p>
             </div>
           )}
 
           {parseError && (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2" role="alert">
+            <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive flex items-start gap-2" role="alert">
               <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
               {parseError}
             </div>

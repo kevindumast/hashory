@@ -5,8 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
-import { useDashboardMetrics } from "@/hooks/dashboard/useDashboardMetrics";
-import { useIntegrations } from "@/hooks/dashboard/useIntegrations";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SeasonalReturnsView } from "@/app/dashboard/sections/seasonal/SeasonalReturnsView";
 import { CalendarDays } from "lucide-react";
 
@@ -26,8 +25,8 @@ export function SeasonalPageClient() {
   const [selectedIntegration, setSelectedIntegration] = useState<string>("all");
 
   const { snapshots, isComputing } = usePortfolioSnapshots();
-  const { trades, isLoading } = useDashboardMetrics(0);
-  const { integrations } = useIntegrations();
+  // Données partagées avec le reste du dashboard : un seul calcul.
+  const { trades, isLoading, integrations } = useDashboardData();
 
   // Detect DCA-only integrations (no sells)
   const isDcaOnly = useMemo(() => {
