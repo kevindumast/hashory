@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.7](https://github.com/kevindumast/hashory/compare/hashory-v0.1.6...hashory-v0.1.7) (2026-09-05)
+
+
+### Features
+
+* bascule dollar / euro sur les jetons et les plateformes ([25726f8](https://github.com/kevindumast/hashory/commit/25726f83c5bc362a47cbf89705065092678659f5))
+
+
+### Bug Fixes
+
+* le prix de revient était dilué par les transferts entre comptes ([5aad858](https://github.com/kevindumast/hashory/commit/5aad85839f6c80b26e64b822200bdd7a60a452ee))
+
 ## [0.1.6](https://github.com/kevindumast/hashory/compare/hashory-v0.1.5...hashory-v0.1.6) (2026-09-05)
 
 
