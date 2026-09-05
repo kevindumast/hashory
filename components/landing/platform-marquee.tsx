@@ -4,6 +4,7 @@ import Image from "next/image";
 const PLATFORMS = [
   { name: "Binance", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png", kind: "API" },
   { name: "KuCoin", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png", kind: "API" },
+  { name: "Kraken", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png", kind: "API" },
   { name: "Bitcoin", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png", kind: "Wallet" },
   { name: "Ethereum", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png", kind: "Wallet" },
   { name: "Solana", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png", kind: "Wallet" },

@@ -53,6 +53,7 @@ type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
 const PROVIDER_ICONS: Record<string, string> = {
   binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
+  kraken: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png",
   kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
   ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
   bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
@@ -65,6 +66,7 @@ const PROVIDER_ICONS: Record<string, string> = {
 
 const PROVIDER_NAMES: Record<string, string> = {
   binance: "Binance",
+  kraken: "Kraken",
   kucoin: "KuCoin",
   ethereum: "Ethereum",
   bitcoin: "Bitcoin",
@@ -101,6 +103,7 @@ export function AccountsView() {
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
   const syncKucoin = useAction(api.kucoin.syncAccount)
+  const syncKraken = useAction(api.kraken.syncAccount)
   const syncKucoinConverts = useAction(api.kucoin.syncConvertsOnly)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
@@ -200,6 +203,8 @@ export function AccountsView() {
           await syncAccount({ integrationId: accountId })
         } else if (providerKey === "kucoin") {
           await syncKucoin({ integrationId: accountId })
+        } else if (providerKey === "kraken") {
+          await syncKraken({ integrationId: accountId })
         } else {
           throw new Error(`Synchronisation non prise en charge pour ${providerName}.`)
         }
@@ -217,7 +222,7 @@ export function AccountsView() {
     // Wait a brief moment before refreshing
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {

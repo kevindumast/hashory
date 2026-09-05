@@ -32,6 +32,7 @@ import type * as finary from "../finary.js";
 import type * as fxRates from "../fxRates.js";
 import type * as integrations from "../integrations.js";
 import type * as kaspa from "../kaspa.js";
+import type * as kraken from "../kraken.js";
 import type * as kucoin from "../kucoin.js";
 import type * as kucoin_import from "../kucoin_import.js";
 import type * as migrateTradeTypes from "../migrateTradeTypes.js";
@@ -76,6 +77,7 @@ declare const fullApi: ApiFromModules<{
   fxRates: typeof fxRates;
   integrations: typeof integrations;
   kaspa: typeof kaspa;
+  kraken: typeof kraken;
   kucoin: typeof kucoin;
   kucoin_import: typeof kucoin_import;
   migrateTradeTypes: typeof migrateTradeTypes;
