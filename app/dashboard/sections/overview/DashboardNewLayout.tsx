@@ -1266,6 +1266,7 @@ export function DashboardNewLayout({
                                     <th className="px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Jeton</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Quantité</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Coût investi</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PRU</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Valeur</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL réalisé</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL latent</th>
@@ -1297,6 +1298,11 @@ export function DashboardNewLayout({
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.costBasis > 0 ? currencyFormatter.format(t.costBasis) : "—"}
+                                      </td>
+                                      <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                        {t.qty > 0 && t.costBasis > 0
+                                          ? currencyFormatter.format(t.costBasis / t.qty)
+                                          : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
                                         {t.currentValue !== null ? currencyFormatter.format(t.currentValue) : "—"}
