@@ -2,8 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
-
-const SUPPORTED_PROVIDERS = ["binance", "kucoin", "kaspa", "ethereum", "solana", "bitcoin", "tao", "bitstack", "finary"];
+import { SUPPORTED_PROVIDERS, WALLET_PROVIDERS } from "../lib/providers";
 
 export const list = query({
   args: {
@@ -24,7 +23,7 @@ export const list = query({
 
     return integrations.map((integration) => {
       let publicAddress: string | null = null;
-      if (["kaspa", "ethereum", "solana", "bitcoin", "tao"].includes(integration.provider)) {
+      if (WALLET_PROVIDERS.has(integration.provider)) {
         try {
           publicAddress = decryptSecret(integration.encryptedCredentials.apiKey);
         } catch {
@@ -42,6 +41,8 @@ export const list = query({
         lastSyncedAt: integration.lastSyncedAt ?? null,
         syncStatus: integration.syncStatus ?? "idle",
         accountCreatedAt: integration.accountCreatedAt ?? null,
+        // Absent = actif : le champ n'existe pas sur les comptes antérieurs.
+        syncEnabled: integration.syncEnabled ?? true,
         publicAddress,
       };
     });
@@ -416,5 +417,31 @@ export const updateMetadata = internalMutation({
     if (Object.keys(payload).length === 0) return { status: "noop" };
     await ctx.db.patch(args.integrationId, payload);
     return { status: "ok" };
+  },
+});
+
+/**
+ * Active ou suspend la synchronisation automatique d'un compte.
+ *
+ * Suspendre ne supprime rien : l'historique reste en base et continue
+ * d'alimenter le portefeuille et la déclaration fiscale. Seules les
+ * interrogations automatiques de l'API cessent, ce qui est le comportement
+ * attendu d'un compte devenu dormant.
+ */
+export const setSyncEnabled = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    enabled: v.boolean(),
+  },
+  handler: async (ctx, { integrationId, enabled }) => {
+    const clerkUserId = await requireUserId(ctx);
+
+    const integration = await ctx.db.get(integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    await ctx.db.patch(integrationId, { syncEnabled: enabled, updatedAt: Date.now() });
+    return { syncEnabled: enabled };
   },
 });

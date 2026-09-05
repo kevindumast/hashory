@@ -74,19 +74,6 @@ type SyncScopeRecord = {
   updatedAt: number;
 };
 
-export type OverviewCard = {
-  label: string;
-  value: string;
-  description: string;
-};
-
-export type AnalyticsStat = {
-  label: string;
-  value: string;
-  trend: string;
-  negative?: boolean;
-};
-
 export type TrackedScope = {
   integrationId: Id<"integrations">;
   symbols: string[];
@@ -205,9 +192,22 @@ export type TokenTimelineEvent = {
   vsStablecoin?: boolean;
 };
 
+/** Quantité détenue sur une source, après réconciliation. */
+export type SourceQuantity = {
+  integrationId: string;
+  provider: string;
+  providerDisplayName: string;
+  quantity: number;
+};
+
 export type PortfolioToken = {
   symbol: string;
   currentQuantity: number;
+  /**
+   * Détail du stock par plateforme. Issu de la même réconciliation que
+   * `currentQuantity` : la somme des sources égale toujours le total.
+   */
+  quantityBySource: SourceQuantity[];
   buyQuantity: number;
   sellQuantity: number;
   depositQuantity: number;
@@ -515,124 +515,6 @@ export function useDashboardMetrics(refreshToken: number) {
   const uniqueAssets = trackedAssets.size;
   const lastTradeAt = tradesList[0]?.executedAt ?? null;
 
-  const overviewCards = useMemo<OverviewCard[]>(
-    () => [
-      {
-        label: "Imported trades",
-        value: tradeCount.toString(),
-        description: tradeCount === 0 ? "No transaction imported yet." : "Aggregated across all providers.",
-      },
-      {
-        label: "Traded volume (USD)",
-        value: currencyFormatter.format(totalVolume || 0),
-        description:
-          uniqueAssets > 0
-            ? `${uniqueAssets} tracked asset${uniqueAssets > 1 ? "s" : ""}`
-            : "Import your first Binance trades to populate the dashboard.",
-      },
-      {
-        label: "Total fees",
-        value: currencyFormatter.format(totalFees || 0),
-        description: totalFees === 0 ? "No fee recorded so far." : "Sum of all reported commissions.",
-      },
-      {
-        label: "Last transaction",
-        value: lastTradeAt ? dateFormatter.format(new Date(lastTradeAt)) : "Never",
-        description:
-          tradeCount > 0 ? "Sync successful." : "Run a sync to import your trading history.",
-      },
-    ],
-    [lastTradeAt, totalFees, totalVolume, tradeCount, uniqueAssets]
-  );
-
-  const navSeries = useMemo(() => {
-    if (tradesList.length === 0) {
-      return [];
-    }
-    const byDay = new Map<string, number>();
-    const sortedAsc = [...tradesList].sort((a, b) => a.executedAt - b.executedAt);
-    sortedAsc.forEach((trade) => {
-      const date = new Date(trade.executedAt);
-      const key = date.toISOString().slice(0, 10);
-      const value = trade.quoteQuantity ?? trade.price * trade.quantity;
-      byDay.set(key, (byDay.get(key) ?? 0) + value);
-    });
-    let cumulative = 0;
-    return Array.from(byDay.entries())
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([key, value]) => {
-        cumulative += value;
-        const [year, month, day] = key.split("-").map((part) => Number(part));
-        const timestamp = Date.UTC(year, month - 1, day);
-        return {
-          timestamp,
-          label: dayLabelFormatter.format(new Date(timestamp)),
-          nav: cumulative,
-        };
-      });
-  }, [tradesList]);
-
-  const allocation = useMemo(() => {
-    if (tradesList.length === 0) {
-      return [];
-    }
-
-    const byAsset = new Map<string, number>();
-    tradesList.forEach((trade) => {
-      const baseAsset = extractBaseAsset(trade.symbol);
-      const value = trade.quoteQuantity ?? trade.price * trade.quantity;
-      byAsset.set(baseAsset, (byAsset.get(baseAsset) ?? 0) + value);
-    });
-
-    const total = Array.from(byAsset.values()).reduce((sum, value) => sum + value, 0);
-    if (total === 0) {
-      return [];
-    }
-
-    return Array.from(byAsset.entries())
-      .map(([symbol, value]) => ({
-        symbol,
-        share: (value / total) * 100,
-        value,
-      }))
-      .sort((a, b) => b.share - a.share);
-  }, [tradesList]);
-
-  const latestTrades = useMemo(() => tradesList.slice(0, 20), [tradesList]);
-
-  const analyticsStats = useMemo<AnalyticsStat[]>(
-    () => [
-      {
-        label: "Active providers",
-        value: new Set(tradesList.map((trade) => trade.providerDisplayName)).size.toString(),
-        trend:
-          tradeCount > 0
-            ? `${tradeCount} imported trade${tradeCount > 1 ? "s" : ""}`
-            : "No provider connected",
-        negative: tradeCount === 0,
-      },
-      {
-        label: "Tracked transactions",
-        value: tradeCount.toString(),
-        trend: tradeCount > 0 ? "Activity detected" : "Import your data",
-        negative: tradeCount === 0,
-      },
-      {
-        label: "Last activity",
-        value: lastTradeAt ? dateFormatter.format(new Date(lastTradeAt)) : "Never",
-        trend: lastTradeAt ? "Sync completed" : "No data yet",
-        negative: !lastTradeAt,
-      },
-      {
-        label: "Tracked assets",
-        value: uniqueAssets.toString(),
-        trend: "Distinct symbols",
-        negative: tradeCount === 0,
-      },
-    ],
-    [lastTradeAt, tradeCount, tradesList, uniqueAssets]
-  );
-
   const trackedScopes = useMemo<TrackedScope[]>(() => {
     const map = new Map<Id<"integrations">, Set<string>>();
 
@@ -868,6 +750,37 @@ export function useDashboardMetrics(refreshToken: number) {
       entry.quantityByIntegration.set(key, (entry.quantityByIntegration.get(key) ?? 0) + delta);
     };
 
+    // Identité des plateformes, reconstituée depuis les soldes et les
+    // événements : les deux portent provider et providerDisplayName.
+    const integrationMeta = new Map<string, { provider: string; providerDisplayName: string }>();
+    const rememberIntegration = (
+      integrationId: Id<"integrations">,
+      provider: string,
+      providerDisplayName: string
+    ) => {
+      const key = String(integrationId);
+      if (!integrationMeta.has(key)) {
+        integrationMeta.set(key, { provider, providerDisplayName });
+      }
+    };
+
+    balanceList.forEach((balance) =>
+      rememberIntegration(balance.integrationId, balance.provider, balance.providerDisplayName)
+    );
+    portfolioTradesList.forEach((trade) =>
+      rememberIntegration(trade.integrationId, trade.provider, trade.providerDisplayName)
+    );
+    depositList.forEach((deposit) =>
+      rememberIntegration(deposit.integrationId, deposit.provider, deposit.providerDisplayName)
+    );
+    withdrawalList.forEach((withdrawal) =>
+      rememberIntegration(
+        withdrawal.integrationId,
+        withdrawal.provider,
+        withdrawal.providerDisplayName
+      )
+    );
+
     balanceSymbols.forEach((symbol) => {
       ensureEntry(symbol);
     });
@@ -1096,22 +1009,41 @@ export function useDashboardMetrics(refreshToken: number) {
         // Seul Binance alimente aujourd'hui la table `balances`, donc tout le
         // reste du portefeuille disparaissait du compte.
         let reconciled = 0;
+        const quantityBySource: SourceQuantity[] = [];
+
+        const pushSource = (integrationId: string, quantity: number) => {
+          // Le bruit de flottant ne doit pas créer de ligne fantôme.
+          if (Math.abs(quantity) < 1e-12) return;
+          const meta = integrationMeta.get(integrationId);
+          quantityBySource.push({
+            integrationId,
+            provider: meta?.provider ?? "inconnu",
+            providerDisplayName: meta?.providerDisplayName ?? "Source inconnue",
+            quantity,
+          });
+          reconciled += quantity;
+        };
 
         quantityByIntegration.forEach((quantity, integrationId) => {
           // Les sources sans solde publié (wallets on-chain, imports CSV)
           // restent calculées à partir de leurs événements.
           if (!integrationsReportingBalances.has(integrationId)) {
-            reconciled += quantity;
+            pushSource(integrationId, quantity);
           }
         });
 
         integrationsReportingBalances.forEach((integrationId) => {
           // Absent de la liste des soldes = plus détenu sur cette plateforme :
           // `upsertBatch` purge les actifs que l'API ne renvoie plus.
-          reconciled += balanceByIntegrationAsset.get(`${integrationId}:${entry.symbol}`) ?? 0;
+          pushSource(
+            integrationId,
+            balanceByIntegrationAsset.get(`${integrationId}:${entry.symbol}`) ?? 0
+          );
         });
 
-        return { ...entry, currentQuantity: reconciled };
+        quantityBySource.sort((a, b) => b.quantity - a.quantity);
+
+        return { ...entry, currentQuantity: reconciled, quantityBySource };
       })
       .sort((a, b) => b.investedUsd - a.investedUsd);
 
@@ -1253,11 +1185,6 @@ export function useDashboardMetrics(refreshToken: number) {
       balances === undefined);
 
   return {
-    overviewCards,
-    navSeries,
-    allocation,
-    latestTrades,
-    analyticsStats,
     trades: tradesList,
     deposits: depositList,
     withdrawals: withdrawalList,

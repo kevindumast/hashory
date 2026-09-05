@@ -114,6 +114,12 @@ export default defineSchema({
     lastSyncedAt: v.optional(v.number()),
     syncStatus: v.optional(v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error"))),
     accountCreatedAt: v.optional(v.number()),
+    /**
+     * Synchronisation automatique. Absent ou vrai = active : les comptes
+     * existants ne changent pas de comportement. Mise à faux pour un compte
+     * dormant, dont on veut garder l'historique sans plus l'interroger.
+     */
+    syncEnabled: v.optional(v.boolean()),
   })
     .index("by_user", ["clerkUserId"])
     .index("by_user_provider", ["clerkUserId", "provider"]),
@@ -208,6 +214,20 @@ export default defineSchema({
     network: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_coin", ["coin"]),
+  /**
+   * Taux de change EUR/USD quotidien, source BCE.
+   *
+   * Le produit calcule en dollars mais la déclaration française se fait en
+   * euros, au cours du jour de chaque opération. Un taux figé décalerait la
+   * plus-value déclarée de la variation annuelle de l'euro.
+   */
+  fxRateHistory: defineTable({
+    dayUtc: v.number(),
+    /** Euros par dollar. */
+    eurPerUsd: v.number(),
+    source: v.union(v.literal("ecb"), v.literal("manual")),
+    updatedAt: v.number(),
+  }).index("by_day", ["dayUtc"]),
   tokenPriceHistory: defineTable({
     symbol: v.string(),
     dayUtc: v.number(),
