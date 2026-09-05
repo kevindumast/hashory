@@ -19,6 +19,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import type { ProviderId } from "@/lib/providers";
+import { providerIcon } from "@/lib/provider-icons";
 import { errorMessage, toast } from "@/lib/toast";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
@@ -188,10 +190,9 @@ const CATEGORY_LABELS: Record<ProviderCategory, string> = {
 };
 
 type ProviderConfig = {
-  value: string;
+  value: ProviderId;
   label: string;
   description: string;
-  iconUrl: string;
   category: ProviderCategory;
   disabled?: boolean;
   fileImport?: boolean;
@@ -206,10 +207,31 @@ type ProviderConfig = {
 
 const providerConfigs: ProviderConfig[] = [
   {
+    value: "kraken",
+    label: "Kraken",
+    description: "Connexion par clé API avec permissions lecture seule.",
+    category: "platform",
+    fields: [
+      {
+        name: "apiKey",
+        label: "API Key",
+        placeholder: "Ex: aBcD1234...",
+        helper: "Depuis Kraken > Paramètres > API > Ajouter une clé.",
+      },
+      {
+        name: "apiSecret",
+        label: "Private Key",
+        placeholder: "Ex: zYxW9876...",
+        helper:
+          "Cochez uniquement « Query Funds » et « Query Ledger Entries ». La clé est chiffrée immédiatement côté serveur.",
+        secret: true,
+      },
+    ],
+  },
+  {
     value: "binance",
     label: "Binance",
     description: "Connexion par clé API avec permissions lecture seule.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
     category: "platform",
     fields: [
       {
@@ -231,7 +253,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "kaspa",
     label: "Kaspa",
     description: "Connexion par adresse publique Kaspa.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
     category: "blockchain",
     fields: [
       {
@@ -246,7 +267,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "ethereum",
     label: "Ethereum",
     description: "Connexion par adresse publique Ethereum.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
     category: "blockchain",
     fields: [
       {
@@ -261,7 +281,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "solana",
     label: "Solana",
     description: "Connexion par adresse publique Solana.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
     category: "blockchain",
     fields: [
       {
@@ -276,7 +295,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "bitcoin",
     label: "Bitcoin",
     description: "Connexion par adresse publique Bitcoin.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
     category: "blockchain",
     fields: [
       {
@@ -291,7 +309,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "tao",
     label: "Bittensor / TAO",
     description: "Connexion par adresse publique (SS58) Bittensor.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png",
     category: "blockchain",
     fields: [
       {
@@ -306,7 +323,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "bitstack",
     label: "Bitstack",
     description: "Importez votre historique via un export CSV.",
-    iconUrl: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
     category: "platform",
     fileImport: true,
     fields: [],
@@ -315,7 +331,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "finary",
     label: "Finary",
     description: "Importez votre historique via un export CSV Finary.",
-    iconUrl: "",
     category: "platform",
     fileImport: true,
     fields: [],
@@ -324,7 +339,6 @@ const providerConfigs: ProviderConfig[] = [
     value: "kucoin",
     label: "KuCoin",
     description: "Connexion par clé API avec passphrase.",
-    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
     category: "platform",
     fields: [
       {
@@ -599,8 +613,8 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 <SelectValue placeholder="Choisir un provider">
                   <div className="flex items-center gap-2.5">
                     <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
-                      {provider.iconUrl ? (
-                        <Image src={provider.iconUrl} alt="" fill sizes="24px" className="object-cover" />
+                      {providerIcon(provider.value) ? (
+                        <Image src={providerIcon(provider.value)} alt="" fill sizes="24px" className="object-cover" />
                       ) : (
                         <FileText className="size-3.5 text-muted-foreground" />
                       )}
@@ -616,9 +630,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                     <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
                       <div className="flex items-center gap-2.5">
                         <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
-                          {config.iconUrl ? (
+                          {providerIcon(config.value) ? (
                             <Image
-                              src={config.iconUrl}
+                              src={providerIcon(config.value)}
                               alt=""
                               fill
                               sizes="24px"

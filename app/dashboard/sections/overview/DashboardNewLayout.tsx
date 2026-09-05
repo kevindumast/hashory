@@ -19,22 +19,15 @@ import {
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
-import { Reveal } from "@/components/motion";
+import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
+import { PROVIDER_ICONS } from "@/lib/provider-icons";
+import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
 
 type ChartFilter =
   | { type: "all" }
   | { type: "token"; symbol: string }
   | { type: "platform"; provider: string };
 
-const PROVIDER_ICONS: Record<string, string> = {
-  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
-  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
-  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
-  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
-  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
-  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
-  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
-};
 
 function ProviderAvatar({ provider, name }: { provider: string; name: string }) {
   const src = PROVIDER_ICONS[provider.toLowerCase()];
@@ -47,6 +40,15 @@ function ProviderAvatar({ provider, name }: { provider: string; name: string }) 
     </div>
   );
 }
+
+/** Couleurs de pile, empruntées aux jetons de graphique du thème. */
+const PLATFORM_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 function formatAxisValue(v: number): string {
   const abs = Math.abs(v);
@@ -167,17 +169,65 @@ export function DashboardNewLayout({
   const profitPercent = totalCostBasis > 0
     ? (totalProfit / totalCostBasis) * 100
     : profitSummary.profitPercentage || 0;
-  const isPositive = totalProfit >= 0;
   const unrealizedPnl = hasCurrentPrices ? totalCurrentValue - totalCostBasis : null;
 
-  // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
-  function makeXTick(series: { timestamp: number }[]) {
-    return function XTick(props: { x?: string | number; y?: string | number; payload?: { value: string | number }; index?: number }) {
-      const { x = 0, y = 0, payload, index = 0 } = props;
-      const point = series[index];
-      if (!point) return <g />;
+  /** Clé d'axe unique : une journée ne peut pas apparaître deux fois. */
+  function axisKeyOf(timestamp: number): string {
+    return new Date(timestamp).toISOString().slice(0, 10);
+  }
+
+  /** Reconvertit la clé d'axe en date lisible pour l'infobulle. */
+  function axisKeyToLabel(value: string | number): string {
+    const parsed = Date.parse(String(value));
+    if (Number.isNaN(parsed)) return String(value);
+    return new Intl.DateTimeFormat("fr-FR", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(parsed);
+  }
+
+  /** Libellé court affiché sous une graduation. */
+  const tickLabelFormatter = new Intl.DateTimeFormat("fr-FR", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+  /**
+   * Graduation de l'axe : le mois sur la première ligne, l'année et un
+   * séparateur sur la seconde au changement d'année.
+   *
+   * Tout est dérivé de la valeur portée par la graduation elle-même. L'indice
+   * fourni par Recharts est celui de la graduation affichée, pas celui de la
+   * donnée : avec `interval="preserveStartEnd"`, s'en servir pour indexer la
+   * série revient à lire les premiers points au lieu des bons.
+   */
+  function makeXTick(series: { timestamp: number; axisKey: string }[]) {
+    // Premier point de chaque année : c'est là que se place le séparateur.
+    const firstOfYear = new Set<string>();
+    let previousYear: number | null = null;
+    for (const point of series) {
       const year = new Date(point.timestamp).getUTCFullYear();
-      const isYearStart = index === 0 || new Date(series[index - 1].timestamp).getUTCFullYear() !== year;
+      if (year !== previousYear) {
+        firstOfYear.add(point.axisKey);
+        previousYear = year;
+      }
+    }
+
+    return function XTick(props: {
+      x?: string | number;
+      y?: string | number;
+      payload?: { value: string | number };
+    }) {
+      const { x = 0, y = 0, payload } = props;
+      const axisKey = String(payload?.value ?? "");
+      const timestamp = Date.parse(axisKey);
+      if (Number.isNaN(timestamp)) return <g />;
+
+      const year = new Date(timestamp).getUTCFullYear();
+      const isYearStart = firstOfYear.has(axisKey);
 
       return (
         <g transform={`translate(${x},${y})`}>
@@ -189,7 +239,7 @@ export function DashboardNewLayout({
             fill="var(--muted-foreground)"
             fontSize={11}
           >
-            {payload?.value}
+            {tickLabelFormatter.format(timestamp)}
           </text>
 
           {/* Year boundary */}
@@ -258,7 +308,11 @@ export function DashboardNewLayout({
   }, [holdingsSeries]);
 
   const filteredHoldings = useMemo(
-    () => aggregateHoldingsByPeriod(holdingsSeries, activePeriod),
+    () =>
+      aggregateHoldingsByPeriod(holdingsSeries, activePeriod).map((point) => ({
+        ...point,
+        axisKey: axisKeyOf(point.timestamp),
+      })),
     [holdingsSeries, activePeriod]
   );
 
@@ -295,6 +349,24 @@ export function DashboardNewLayout({
     return { buys, sells };
   }, [portfolioTokens, chartFilter]);
 
+  const [chartMode, setChartMode] = useState<"total" | "platform">("total");
+
+  const chartDays = useMemo(
+    () => filteredHoldings.map((point) => point.timestamp),
+    [filteredHoldings]
+  );
+  const platformHistory = usePlatformValueHistory(portfolioTokens, chartDays);
+
+  /** Série empilée : une clé par plateforme, alignée sur l'axe commun. */
+  const stackedSeries = useMemo(() => {
+    if (platformHistory.points.length !== filteredHoldings.length) return [];
+    return filteredHoldings.map((point, index) => ({
+      axisKey: point.axisKey,
+      timestamp: point.timestamp,
+      ...platformHistory.points[index].byPlatform,
+    }));
+  }, [filteredHoldings, platformHistory.points]);
+
   const holdingsWithMarkers = useMemo(
     () =>
       filteredHoldings.map((p) => ({
@@ -309,81 +381,19 @@ export function DashboardNewLayout({
   return (
     <div className="space-y-5">
 
-      {/* ── Hero Metrics ── */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* ── Relevé de position ── */}
+      <PortfolioStatement
+        tokens={portfolioTokens}
+        currentPrices={currentPrices}
+        hasPrices={hasCurrentPrices}
+        totalValueUsd={totalCurrentValue}
+        costBasisUsd={totalCostBasis}
+        unrealizedPnlUsd={unrealizedPnl}
+        realizedPnlUsd={totalRealizedPnl}
+        totalProfitUsd={totalProfit}
+        profitPercent={profitPercent}
+      />
 
-        {/* Performance totale */}
-        <Reveal className="h-full" delay={0}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5 relative overflow-hidden group">
-            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
-              Performance totale
-            </h3>
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="num text-3xl font-normal tracking-tight text-foreground">
-                {currencyFormatter.format(totalProfit)}
-              </span>
-              <span className={`num text-sm font-bold ${isPositive ? "text-positive" : "text-negative"}`}>
-                {isPositive ? "+" : ""}{profitPercent.toFixed(2)}%
-              </span>
-            </div>
-            <div className="mt-4 h-px bg-border/60">
-              <div
-                className={`h-px transition-all ${isPositive ? "bg-positive" : "bg-negative"}`}
-                style={{ width: `${Math.min(Math.abs(profitPercent), 100)}%` }}
-              />
-            </div>
-            <p className="num mt-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">PnL réalisé + latent</p>
-          </div>
-        </Reveal>
-
-        {/* Valeur actuelle */}
-        <Reveal className="h-full" delay={60}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
-              Valeur du portefeuille
-            </h3>
-            <span className="num text-3xl font-normal tracking-tight text-foreground">
-              {hasCurrentPrices ? currencyFormatter.format(totalCurrentValue) : "—"}
-            </span>
-            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-              <span className="text-muted-foreground">Coût total investi</span>
-              <span className="num font-bold text-foreground">{currencyFormatter.format(totalCostBasis)}</span>
-            </div>
-          </div>
-        </Reveal>
-
-        {/* PnL latent */}
-        <Reveal className="h-full" delay={120}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-            <div className="flex justify-between items-start mb-3">
-              <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL latent</h3>
-              {hasCurrentPrices && unrealizedPnl !== null && (
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                  unrealizedPnl >= 0
-                    ? "bg-positive/10 text-positive"
-                    : "bg-negative/10 text-negative"
-                }`}>
-                  {unrealizedPnl >= 0 ? "PROFIT" : "PERTE"}
-                </span>
-              )}
-            </div>
-            <span className={`num text-3xl font-semibold tracking-tight ${
-              unrealizedPnl === null ? "text-muted-foreground" :
-              unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-            }`}>
-              {unrealizedPnl !== null
-                ? `${unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(unrealizedPnl)}`
-                : "—"}
-            </span>
-            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-              <span className="text-muted-foreground">PnL réalisé</span>
-              <span className={`num font-bold ${totalRealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
-                {totalRealizedPnl >= 0 ? "+" : ""}{currencyFormatter.format(totalRealizedPnl)}
-              </span>
-            </div>
-          </div>
-        </Reveal>
-      </section>
 
       {/* ── Period selector + filter pill ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -456,6 +466,27 @@ export function DashboardNewLayout({
               </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
+              <div className="flex border border-border/60" role="group" aria-label="Mode d'affichage">
+                {([
+                  { id: "total" as const, label: "Total" },
+                  { id: "platform" as const, label: "Par plateforme" },
+                ]).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setChartMode(option.id)}
+                    aria-pressed={chartMode === option.id}
+                    className={`num cursor-pointer px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors ${
+                      chartMode === option.id
+                        ? "bg-muted/40 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-4 bg-border/40" />
               <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
                 <input
                   type="checkbox"
@@ -478,7 +509,68 @@ export function DashboardNewLayout({
           </div>
 
           <div className="h-[260px] w-full">
-            {holdingsWithMarkers.length >= 2 ? (
+            {chartMode === "platform" ? (
+              platformHistory.isLoading ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  Reconstitution de la valeur par plateforme…
+                </div>
+              ) : stackedSeries.length >= 2 && platformHistory.platforms.length > 0 ? (
+                <ChartContainer config={{}} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={stackedSeries} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis
+                        dataKey="axisKey"
+                        tickLine={false}
+                        axisLine={false}
+                        height={46}
+                        tick={makeXTick(filteredHoldings)}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        stroke="var(--muted-foreground)"
+                        tickLine={false}
+                        axisLine={false}
+                        width={62}
+                        tickFormatter={(v) => formatAxisValue(v)}
+                        style={{ fontSize: "11px" }}
+                        tick={{ fill: "var(--muted-foreground)", className: "num" }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload, label }) => (
+                          <ChartTooltipContent
+                            className="num"
+                            active={active}
+                            payload={payload}
+                            label={axisKeyToLabel(label as string | number)}
+                            formatter={(value) => currencyFormatter.format(Number(value))}
+                          />
+                        )}
+                      />
+                      {platformHistory.platforms.map((platform, index) => (
+                        <Area
+                          key={platform}
+                          type="monotone"
+                          dataKey={platform}
+                          // Une seule pile : les aires s'additionnent pour
+                          // reconstituer la valeur totale du portefeuille.
+                          stackId="platforms"
+                          stroke={PLATFORM_COLORS[index % PLATFORM_COLORS.length]}
+                          fill={PLATFORM_COLORS[index % PLATFORM_COLORS.length]}
+                          fillOpacity={0.35}
+                          strokeWidth={1.5}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  Pas assez d&apos;historique de cours pour ventiler par plateforme.
+                </div>
+              )
+            ) : holdingsWithMarkers.length >= 2 ? (
               <ChartContainer
                 config={{ valueUsd: { label: "Valeur USD", color: chartIsPositive ? "var(--positive)" : "var(--negative)" } }}
                 className="h-full w-full"
@@ -493,7 +585,7 @@ export function DashboardNewLayout({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
-                      dataKey="label"
+                      dataKey="axisKey"
                       tickLine={false}
                       axisLine={false}
                       height={46}
@@ -515,7 +607,7 @@ export function DashboardNewLayout({
                           className="num"
                           active={active}
                           payload={payload}
-                          label={label}
+                          label={axisKeyToLabel(label as string | number)}
                           formatter={(value) => currencyFormatter.format(Number(value))}
                         />
                       }
@@ -648,7 +740,7 @@ export function DashboardNewLayout({
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
                     <XAxis
-                      dataKey="label"
+                      dataKey="axisKey"
                       tickLine={false}
                       axisLine={false}
                       height={46}
@@ -670,7 +762,7 @@ export function DashboardNewLayout({
                           className="num"
                           active={active}
                           payload={payload}
-                          label={label}
+                          label={axisKeyToLabel(label as string | number)}
                           formatter={(value) => {
                             const n = Number(value);
                             return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
@@ -835,6 +927,9 @@ export function DashboardNewLayout({
                             {pricesLoading && <LoaderCircle className="w-3 h-3 animate-spin text-primary" />}
                           </span>
                         </th>
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                          Écart au PRU
+                        </th>
                         <SortTh col="value" label="Valeur" />
                         <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">% portefeuille</th>
                         <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL réalisé</th>
@@ -924,6 +1019,21 @@ export function DashboardNewLayout({
                             <td className="num px-4 py-3 text-right font-bold text-primary">
                               {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
                             </td>
+                            <td className="num px-4 py-3 text-right">
+                              {currentPrice && token.avgCostBasis > 0 ? (
+                                (() => {
+                                  const gap = currentPrice / token.avgCostBasis - 1;
+                                  return (
+                                    <span className={gap >= 0 ? "text-positive" : "text-negative"}>
+                                      {gap >= 0 ? "+" : ""}
+                                      {(gap * 100).toFixed(1)} %
+                                    </span>
+                                  );
+                                })()
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
                             <td className="num px-4 py-3 text-right font-bold text-foreground">
                               {currentValue !== null ? currencyFormatter.format(currentValue) : "—"}
                             </td>
@@ -962,7 +1072,7 @@ export function DashboardNewLayout({
                           </tr>
                           {isExpanded && (
                             <tr className="bg-muted/10 border-t border-border/30">
-                              <td colSpan={9} className="px-4 py-4">
+                              <td colSpan={10} className="px-4 py-4">
                                 <TokenHistoryChart symbol={token.symbol} events={token.events} />
                               </td>
                             </tr>
@@ -1289,6 +1399,7 @@ export function DashboardNewLayout({
                                     <th className="px-3 py-1.5 text-left text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Jeton</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Quantité</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Coût investi</th>
+                                    <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PRU</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">Valeur</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL réalisé</th>
                                     <th className="px-3 py-1.5 text-right text-[9px] font-bold uppercase tracking-widest text-muted-foreground/70">PnL latent</th>
@@ -1320,6 +1431,11 @@ export function DashboardNewLayout({
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.costBasis > 0 ? currencyFormatter.format(t.costBasis) : "—"}
+                                      </td>
+                                      <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
+                                        {t.qty > 0 && t.costBasis > 0
+                                          ? currencyFormatter.format(t.costBasis / t.qty)
+                                          : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
                                         {t.currentValue !== null ? currencyFormatter.format(t.currentValue) : "—"}

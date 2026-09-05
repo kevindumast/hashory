@@ -28,6 +28,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -44,26 +45,18 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
+import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
+import { PROVIDER_ICONS } from "@/lib/provider-icons"
 import { toast, withToast } from "@/lib/toast"
 import type { Id } from "@/convex/_generated/dataModel"
 
 // Types pour les données
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
-const PROVIDER_ICONS: Record<string, string> = {
-  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
-  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
-  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
-  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
-  arbitrum: "https://s2.coinmarketcap.com/static/img/coins/64x64/11841.png",
-  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
-  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
-  tao: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png",
-  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
-}
 
 const PROVIDER_NAMES: Record<string, string> = {
   binance: "Binance",
+  kraken: "Kraken",
   kucoin: "KuCoin",
   ethereum: "Ethereum",
   bitcoin: "Bitcoin",
@@ -75,7 +68,6 @@ const PROVIDER_NAMES: Record<string, string> = {
   finary: "Finary",
 }
 
-const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"])
 
 type AccountType = "All" | "API" | "File"
 
@@ -100,6 +92,7 @@ export function AccountsView() {
   const resetAllCursors = useAction(api.resetCursors.resetAllCursors)
   const syncAccount = useAction(api.binance.syncAccount)
   const syncKucoin = useAction(api.kucoin.syncAccount)
+  const syncKraken = useAction(api.kraken.syncAccount)
   const syncKucoinConverts = useAction(api.kucoin.syncConvertsOnly)
   const syncFiatOnly = useAction(api.binance.syncFiatOrdersOnly)
   const syncDustOnly = useAction(api.binance.syncDustOnly)
@@ -112,6 +105,7 @@ export function AccountsView() {
   const syncTaoWallet = useAction(api.tao.syncTaoWallet)
   const purgeAllData = useMutation(api.integrations.purgeAllData)
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
+  const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -142,12 +136,30 @@ export function AccountsView() {
         subAccountsCount: 1,
         addressOrId: integration.publicAddress || integration.displayName || integration.provider,
         transactionCount: integrationTransactions.length,
+        syncEnabled: integration.syncEnabled,
         lastSync,
         status,
         accountCreatedAt,
       }
     })
   }, [integrations, transactions])
+
+  const handleToggleSync = React.useCallback(
+    async (accountId: Id<"integrations">, enabled: boolean, label: string) => {
+      if (!isConvexConfigured) {
+        toast.error("Convex n'est pas configuré, l'action est indisponible.")
+        return
+      }
+      await withToast(() => setSyncEnabled({ integrationId: accountId, enabled }), {
+        loading: enabled ? `Réactivation de ${label}…` : `Mise en pause de ${label}…`,
+        success: enabled
+          ? `${label} sera de nouveau synchronisé automatiquement`
+          : `${label} ne sera plus synchronisé — son historique est conservé`,
+      })
+      handleRefresh()
+    },
+    [setSyncEnabled, handleRefresh]
+  )
 
   const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">, provider?: string) => {
     if (!isConvexConfigured) {
@@ -180,6 +192,12 @@ export function AccountsView() {
           await syncAccount({ integrationId: accountId })
         } else if (providerKey === "kucoin") {
           await syncKucoin({ integrationId: accountId })
+        } else if (providerKey === "kraken") {
+          // Comme pour Binance, le bouton manuel relit tout : les curseurs
+          // sont effacés d'abord. Les insertions étant dédupliquées, une
+          // relecture ne crée aucun doublon.
+          await resetAllCursors({ integrationId: accountId })
+          await syncKraken({ integrationId: accountId })
         } else {
           throw new Error(`Synchronisation non prise en charge pour ${providerName}.`)
         }
@@ -197,7 +215,7 @@ export function AccountsView() {
     // Wait a brief moment before refreshing
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -573,8 +591,31 @@ export function AccountsView() {
                     {/* Status & Actions */}
                     <div className="flex items-center justify-end gap-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">{account.lastSync}</span>
-                        <StatusBadge status={account.status} showText />
+                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">
+                          {account.syncEnabled === false ? "En pause" : account.lastSync}
+                        </span>
+                        {account.syncEnabled === false ? (
+                          <span className="num border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Non synchronisé
+                          </span>
+                        ) : (
+                          <StatusBadge status={account.status} showText />
+                        )}
+                        {/* Les imports de fichiers n'ont pas d'API à interroger. */}
+                        {account.type === "API" && (
+                          <Switch
+                            checked={account.syncEnabled !== false}
+                            onCheckedChange={(checked) =>
+                              void handleToggleSync(
+                                account.id as Id<"integrations">,
+                                checked,
+                                account.name
+                              )
+                            }
+                            aria-label={`Synchronisation automatique de ${account.name}`}
+                            className="cursor-pointer"
+                          />
+                        )}
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

@@ -188,6 +188,13 @@ export const syncKaspaWallet = action({
         integrationId: args.integrationId,
         syncStatus: "synced",
       });
+
+      // Date de dernière réussite : c'est elle qui permet de savoir quand
+      // une source doit être resynchronisée.
+      await ctx.runMutation(internal.integrations.updateMetadata, {
+        integrationId: args.integrationId,
+        lastSyncedAt: Date.now(),
+      });
     } catch (error) {
       await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,

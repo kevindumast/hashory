@@ -7,6 +7,7 @@ import { ConnectProviderDialog } from "./connect-provider-dialog";
 import { ProviderDialogProvider } from "./provider-dialog-context";
 import { DashboardDataProvider } from "./dashboard-data-context";
 import { CommandPalette } from "./command-palette";
+import { useAutoSync } from "@/hooks/dashboard/useAutoSync";
 import { cn } from "@/lib/utils";
 
 interface DashboardShellProps {
@@ -14,6 +15,15 @@ interface DashboardShellProps {
 }
 
 const SIDEBAR_STORAGE_KEY = "hashory:sidebar-open";
+
+/**
+ * Déclencheur de la mise à jour automatique. Sans rendu : il existe
+ * uniquement pour être monté à l'intérieur du fournisseur de données.
+ */
+function AutoSync() {
+  useAutoSync();
+  return null;
+}
 
 export function DashboardShell({ children }: DashboardShellProps) {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
@@ -64,6 +74,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
       }}
     >
       <DashboardDataProvider>
+        <AutoSync />
         <div className="flex h-screen overflow-hidden bg-background">
           {/* Sidebar — scroll indépendant */}
           <div

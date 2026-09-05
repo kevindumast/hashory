@@ -7,6 +7,7 @@ import { useClerk } from "@clerk/nextjs";
 import {
   ArrowLeftRight,
   CalendarDays,
+  Activity,
   Coins,
   CornerDownLeft,
   FileText,
@@ -62,6 +63,7 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
     const base: CommandItem[] = [
       { id: "nav-overview", label: "Portefeuille", group: "Navigation", icon: LayoutDashboard, run: go("/dashboard"), keywords: "overview accueil" },
       { id: "nav-accounts", label: "Mes comptes", group: "Navigation", icon: Wallet, run: go("/dashboard/accounts"), keywords: "integrations plateformes" },
+      { id: "nav-performance", label: "Performance et risque", group: "Navigation", icon: Activity, run: go("/dashboard/performance"), keywords: "sharpe drawdown volatilite risque benchmark" },
       { id: "nav-seasonal", label: "Saisonnalité", group: "Navigation", icon: CalendarDays, run: go("/dashboard/seasonal"), keywords: "saison mensuel" },
       { id: "nav-tax", label: "Déclaration fiscale", group: "Navigation", icon: FileText, run: go("/dashboard/tax-report"), keywords: "impots 2086 fisc" },
       { id: "nav-transactions", label: "Transactions", group: "Navigation", icon: ArrowLeftRight, run: go("/dashboard/transactions"), keywords: "trades historique" },

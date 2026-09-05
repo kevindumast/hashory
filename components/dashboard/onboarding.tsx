@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/button";
 import { GlowCard, Magnetic, Reveal } from "@/components/motion";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
+import { providerIcon } from "@/lib/provider-icons";
 import { cn } from "@/lib/utils";
 
 const QUICK_PROVIDERS = [
-  { id: "binance", label: "Binance", kind: "API", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png" },
-  { id: "kucoin", label: "KuCoin", kind: "API", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png" },
-  { id: "bitcoin", label: "Bitcoin", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png" },
-  { id: "ethereum", label: "Ethereum", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png" },
-  { id: "solana", label: "Solana", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png" },
-  { id: "kaspa", label: "Kaspa", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png" },
+  { id: "binance", label: "Binance", kind: "API" },
+  { id: "kucoin", label: "KuCoin", kind: "API" },
+  { id: "kraken", label: "Kraken", kind: "API" },
+  { id: "bitcoin", label: "Bitcoin", kind: "Wallet" },
+  { id: "ethereum", label: "Ethereum", kind: "Wallet" },
+  { id: "solana", label: "Solana", kind: "Wallet" },
 ];
 
 const TAX_VISITED_KEY = "hashory:onboarding:tax-seen";
@@ -136,7 +137,7 @@ export function OnboardingHero() {
                 className="flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/20"
               >
                 <Image
-                  src={provider.icon}
+                  src={providerIcon(provider.id)}
                   alt=""
                   width={24}
                   height={24}

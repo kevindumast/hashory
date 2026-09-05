@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
-  Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays,
+  Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays, Activity,
   User, Settings, LogOut, Menu, MoreHorizontal, Plug,
 } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
@@ -30,6 +30,7 @@ const navSections = [
     links: [
       { href: "/dashboard/accounts", label: "Mes comptes", badge: null, icon: Wallet },
       { href: "/dashboard", label: "Portefeuille", badge: null, icon: LayoutDashboard },
+      { href: "/dashboard/performance", label: "Performance", badge: null, icon: Activity },
       { href: "/dashboard/seasonal", label: "Saisonnalité", badge: null, icon: CalendarDays },
     ],
   },
