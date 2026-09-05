@@ -6,6 +6,8 @@
 ### Bug Fixes
 
 * **kraken:** commissions manquantes sur les entrées et les conversions ([eed8cc8](https://github.com/kevindumast/hashory/commit/eed8cc8657ac43914657a1daf2ff1816a8f5cc2d))
+* **prices:** resolve any listed asset instead of a hardcoded map ([8a761de](https://github.com/kevindumast/hashory/commit/8a761deb8786eb6520371c95cb1f88ca6bb5b897))
+* **prices:** resolve any listed asset instead of a hardcoded map ([c06bd71](https://github.com/kevindumast/hashory/commit/c06bd71648ac21f64ce83455c128c64c135092bd))
 * **sync:** débloquer les étapes de fond, et rendre l'attente lisible ([3e817fd](https://github.com/kevindumast/hashory/commit/3e817fd43400fccfa13bc7a94883ad28a5f410a3))
 * **sync:** débloquer les étapes de fond, et rendre l'attente lisible ([eed8cc8](https://github.com/kevindumast/hashory/commit/eed8cc8657ac43914657a1daf2ff1816a8f5cc2d))
 
