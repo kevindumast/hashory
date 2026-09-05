@@ -205,9 +205,22 @@ export type TokenTimelineEvent = {
   vsStablecoin?: boolean;
 };
 
+/** Quantité détenue sur une source, après réconciliation. */
+export type SourceQuantity = {
+  integrationId: string;
+  provider: string;
+  providerDisplayName: string;
+  quantity: number;
+};
+
 export type PortfolioToken = {
   symbol: string;
   currentQuantity: number;
+  /**
+   * Détail du stock par plateforme. Issu de la même réconciliation que
+   * `currentQuantity` : la somme des sources égale toujours le total.
+   */
+  quantityBySource: SourceQuantity[];
   buyQuantity: number;
   sellQuantity: number;
   depositQuantity: number;
@@ -868,6 +881,37 @@ export function useDashboardMetrics(refreshToken: number) {
       entry.quantityByIntegration.set(key, (entry.quantityByIntegration.get(key) ?? 0) + delta);
     };
 
+    // Identité des plateformes, reconstituée depuis les soldes et les
+    // événements : les deux portent provider et providerDisplayName.
+    const integrationMeta = new Map<string, { provider: string; providerDisplayName: string }>();
+    const rememberIntegration = (
+      integrationId: Id<"integrations">,
+      provider: string,
+      providerDisplayName: string
+    ) => {
+      const key = String(integrationId);
+      if (!integrationMeta.has(key)) {
+        integrationMeta.set(key, { provider, providerDisplayName });
+      }
+    };
+
+    balanceList.forEach((balance) =>
+      rememberIntegration(balance.integrationId, balance.provider, balance.providerDisplayName)
+    );
+    portfolioTradesList.forEach((trade) =>
+      rememberIntegration(trade.integrationId, trade.provider, trade.providerDisplayName)
+    );
+    depositList.forEach((deposit) =>
+      rememberIntegration(deposit.integrationId, deposit.provider, deposit.providerDisplayName)
+    );
+    withdrawalList.forEach((withdrawal) =>
+      rememberIntegration(
+        withdrawal.integrationId,
+        withdrawal.provider,
+        withdrawal.providerDisplayName
+      )
+    );
+
     balanceSymbols.forEach((symbol) => {
       ensureEntry(symbol);
     });
@@ -1096,22 +1140,41 @@ export function useDashboardMetrics(refreshToken: number) {
         // Seul Binance alimente aujourd'hui la table `balances`, donc tout le
         // reste du portefeuille disparaissait du compte.
         let reconciled = 0;
+        const quantityBySource: SourceQuantity[] = [];
+
+        const pushSource = (integrationId: string, quantity: number) => {
+          // Le bruit de flottant ne doit pas créer de ligne fantôme.
+          if (Math.abs(quantity) < 1e-12) return;
+          const meta = integrationMeta.get(integrationId);
+          quantityBySource.push({
+            integrationId,
+            provider: meta?.provider ?? "inconnu",
+            providerDisplayName: meta?.providerDisplayName ?? "Source inconnue",
+            quantity,
+          });
+          reconciled += quantity;
+        };
 
         quantityByIntegration.forEach((quantity, integrationId) => {
           // Les sources sans solde publié (wallets on-chain, imports CSV)
           // restent calculées à partir de leurs événements.
           if (!integrationsReportingBalances.has(integrationId)) {
-            reconciled += quantity;
+            pushSource(integrationId, quantity);
           }
         });
 
         integrationsReportingBalances.forEach((integrationId) => {
           // Absent de la liste des soldes = plus détenu sur cette plateforme :
           // `upsertBatch` purge les actifs que l'API ne renvoie plus.
-          reconciled += balanceByIntegrationAsset.get(`${integrationId}:${entry.symbol}`) ?? 0;
+          pushSource(
+            integrationId,
+            balanceByIntegrationAsset.get(`${integrationId}:${entry.symbol}`) ?? 0
+          );
         });
 
-        return { ...entry, currentQuantity: reconciled };
+        quantityBySource.sort((a, b) => b.quantity - a.quantity);
+
+        return { ...entry, currentQuantity: reconciled, quantityBySource };
       })
       .sort((a, b) => b.investedUsd - a.investedUsd);
 
