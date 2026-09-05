@@ -38,6 +38,10 @@ type PriceResult = {
   error: string | null;
   /** Relancer le fetch manuellement */
   refresh: () => void;
+  /** Relancer le fetch pour un seul actif. */
+  refreshSymbol: (symbol: string) => Promise<void>;
+  /** Actifs dont le cours est en cours de rechargement individuel. */
+  refreshingSymbols: Set<string>;
 };
 
 /**
@@ -49,6 +53,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
+  const [refreshingSymbols, setRefreshingSymbols] = useState<Set<string>>(new Set());
 
   // Construire la map paire → symbole token pour le mapping inverse
   const pairToSymbol = useMemo(() => {
@@ -137,5 +142,43 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
 
   const refresh = () => setFetchTrigger((n) => n + 1);
 
-  return { currentPrices, loading, error, refresh };
+  /**
+   * Recharge le cours d'un seul actif.
+   *
+   * Utile quand une valeur manque : une requête portant sur une poignée de
+   * paires aboutit là où un lot de plusieurs dizaines peut être écourté par
+   * la place de marché. Elle sert donc autant à réparer l'affichage qu'à
+   * distinguer un actif réellement inconnu d'un appel qui n'a pas abouti.
+   */
+  const refreshSymbol = async (symbol: string) => {
+    const token = tokens.find((entry) => entry.symbol === symbol);
+    if (!token) return;
+
+    setRefreshingSymbols((current) => new Set(current).add(symbol));
+    try {
+      const response = await fetch("/api/prices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols: buildCandidatePairs(token) }),
+      });
+      if (!response.ok) throw new Error(`Erreur serveur: ${response.status}`);
+
+      const data = (await response.json()) as Array<{ symbol: string; price: string }>;
+      const price = data.map((item) => parseFloat(item.price)).find((value) => !isNaN(value));
+
+      if (price !== undefined) {
+        setCurrentPrices((current) => ({ ...current, [symbol]: price }));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Impossible de récupérer le cours.");
+    } finally {
+      setRefreshingSymbols((current) => {
+        const next = new Set(current);
+        next.delete(symbol);
+        return next;
+      });
+    }
+  };
+
+  return { currentPrices, loading, error, refresh, refreshSymbol, refreshingSymbols };
 }
