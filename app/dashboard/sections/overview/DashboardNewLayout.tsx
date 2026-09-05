@@ -127,7 +127,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
+  const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices, refreshSymbol, refreshingSymbols } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
 
@@ -1029,7 +1029,27 @@ export function DashboardNewLayout({
                               {token.avgCostBasis > 0 ? currencyFormatter.format(token.avgCostBasis) : "—"}
                             </td>
                             <td className="num px-4 py-3 text-right font-bold text-primary">
-                              {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
+                              {/* Recharger une seule ligne : une requête isolée
+                                  aboutit là où un lot de plusieurs dizaines de
+                                  paires peut être écourté par la place de marché. */}
+                              <span className="inline-flex items-center justify-end gap-1.5">
+                                {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void refreshSymbol(token.symbol);
+                                  }}
+                                  disabled={refreshingSymbols.has(token.symbol)}
+                                  aria-label={`Recharger le cours de ${token.symbol}`}
+                                  title={`Recharger le cours de ${token.symbol}`}
+                                  className="cursor-pointer text-muted-foreground/40 transition-colors hover:text-foreground disabled:cursor-wait"
+                                >
+                                  <RefreshCw
+                                    className={`size-3 ${refreshingSymbols.has(token.symbol) ? "animate-spin" : ""}`}
+                                  />
+                                </button>
+                              </span>
                             </td>
                             <td className="num px-4 py-3 text-right">
                               {currentPrice && token.avgCostBasis > 0 ? (
