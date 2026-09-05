@@ -697,6 +697,18 @@ export function DashboardNewLayout({
               </div>
             )}
           </div>
+
+          {/* Écarter des actifs sans le dire fausserait la lecture des
+              proportions : on nomme ce qui manque. */}
+          {chartMode === "platform" && platformHistory.omittedSymbols.length > 0 && (
+            <p className="num mt-3 border-t border-border/40 pt-3 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
+              {platformHistory.omittedSymbols.length} actif
+              {platformHistory.omittedSymbols.length > 1 ? "s" : ""} de faible poids écarté
+              {platformHistory.omittedSymbols.length > 1 ? "s" : ""} de la ventilation ·{" "}
+              {platformHistory.omittedSymbols.slice(0, 6).join(" ")}
+              {platformHistory.omittedSymbols.length > 6 ? " …" : ""}
+            </p>
+          )}
         </div>
 
         {/* Performance — portfolio profit% vs BTC trend% */}

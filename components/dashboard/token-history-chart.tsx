@@ -60,17 +60,46 @@ export function TokenHistoryChart({
   );
 
   const buySellDays = useMemo(() => {
-    const buys = new Set<number>();
-    const sells = new Set<number>();
+    // Montant échangé par jour : plusieurs opérations d'un même jour
+    // s'additionnent, sans quoi la taille du marqueur mentirait.
+    const buys = new Map<number, number>();
+    const sells = new Map<number, number>();
+    let largest = 0;
+
     for (const event of events) {
       if (event.type !== "BUY" && event.type !== "SELL") continue;
       const d = new Date(event.timestamp);
       const dayTs = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-      if (event.type === "BUY") buys.add(dayTs);
-      else sells.add(dayTs);
+      const amount = event.valueUsd ?? event.quantity * (event.price ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        // Montant inconnu : on marque le jour sans le faire peser.
+        const target = event.type === "BUY" ? buys : sells;
+        if (!target.has(dayTs)) target.set(dayTs, 0);
+        continue;
+      }
+
+      const target = event.type === "BUY" ? buys : sells;
+      const total = (target.get(dayTs) ?? 0) + amount;
+      target.set(dayTs, total);
+      largest = Math.max(largest, total);
     }
-    return { buys, sells };
+
+    return { buys, sells, largest };
   }, [events]);
+
+  /**
+   * Rayon d'un marqueur, proportionné au montant échangé.
+   *
+   * C'est l'aire du disque qui doit suivre le montant, pas son rayon : à
+   * l'œil, un disque de rayon double paraît quatre fois plus gros. On passe
+   * donc par la racine carrée, sinon un achat important écraserait le reste.
+   */
+  const markerRadius = (amount: number | null | undefined): number => {
+    const MIN = 3;
+    const MAX = 11;
+    if (!amount || amount <= 0 || buySellDays.largest <= 0) return MIN;
+    return MIN + (MAX - MIN) * Math.sqrt(Math.min(amount, buySellDays.largest) / buySellDays.largest);
+  };
 
   const data = useMemo(() => {
     if (!priceHistory) return [];
@@ -83,6 +112,8 @@ export function TokenHistoryChart({
         price: p.closeUsd,
         buyMarker: buySellDays.buys.has(p.dayUtc) ? p.closeUsd : null,
         sellMarker: buySellDays.sells.has(p.dayUtc) ? p.closeUsd : null,
+        buyAmount: buySellDays.buys.get(p.dayUtc) ?? null,
+        sellAmount: buySellDays.sells.get(p.dayUtc) ?? null,
       }));
   }, [priceHistory, buySellDays]);
 
@@ -110,7 +141,7 @@ export function TokenHistoryChart({
             Historique {symbol} / USD
           </h3>
           <p className="text-[9px] text-muted-foreground uppercase tracking-widest mt-0.5">
-            Cours quotidien · marqueurs Achat / Vente
+            Cours quotidien · marqueurs Achat / Vente · taille selon le montant
           </p>
         </div>
         <div className="flex items-center gap-3 text-[10px] font-bold">
@@ -188,7 +219,7 @@ export function TokenHistoryChart({
                       key={props.key}
                       cx={props.cx}
                       cy={props.cy}
-                      r={4}
+                      r={markerRadius(props.payload?.buyAmount)}
                       fill="var(--positive)"
                       stroke="white"
                       strokeWidth={1.5}
@@ -212,7 +243,7 @@ export function TokenHistoryChart({
                       key={props.key}
                       cx={props.cx}
                       cy={props.cy}
-                      r={4}
+                      r={markerRadius(props.payload?.sellAmount)}
                       fill="var(--negative)"
                       stroke="white"
                       strokeWidth={1.5}

@@ -7,14 +7,22 @@ import { isConvexConfigured } from "@/convex/client";
 import { USD_STABLECOINS, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 
 /**
- * Plafond de symboles interrogés.
+ * Budget de lecture d'une requête, en documents.
  *
- * L'historique de cours est lu jour par jour et par symbole : sans borne, un
- * portefeuille très fragmenté ferait exploser le volume lu par la requête.
- * Les symboles retenus sont les plus lourds, ceux qui décident de la forme
- * de la courbe.
+ * L'historique de cours est lu jour par jour et par symbole : le volume
+ * dépend donc du produit des deux, pas du seul nombre de symboles. Une
+ * requête Convex ne peut lire qu'un nombre borné de documents ; au-delà,
+ * elle échoue au lieu de se dégrader.
+ *
+ * Mesuré sur un historique réel : un symbole couvert coûte une ligne par
+ * jour, soit environ 730 sur deux ans. Un plafond exprimé en symboles seuls
+ * ne protégeait donc de rien — trente symboles sur deux ans dépassaient déjà
+ * la limite. La marge retenue laisse de la place au reste de la requête.
  */
-const MAX_SYMBOLS = 30;
+const READ_BUDGET = 12_000;
+
+/** Au-delà, la lecture des légendes devient illisible de toute façon. */
+const MAX_SYMBOLS = 12;
 
 export type PlatformValuePoint = {
   dayUtc: number;
@@ -51,15 +59,23 @@ export function usePlatformValueHistory(
   tokens: PortfolioToken[],
   days: number[]
 ): PlatformValueHistory {
+  // Nombre de jours couverts : il conditionne le coût par symbole.
+  const dayCount = days.length;
+
   // ── Mouvements, tous symboles et plateformes confondus ────────
   const { movements, symbols, platforms, omittedSymbols } = useMemo(() => {
     const all: Movement[] = [];
     const platformSet = new Set<string>();
 
-    // On garde les symboles les plus lourds : ce sont eux qui portent la forme.
+    // On garde les symboles les plus lourds : ce sont eux qui portent la
+    // forme de la courbe. Leur nombre s'ajuste à la longueur de la période,
+    // puisque c'est le produit des deux qui détermine le volume lu.
+    const affordable = dayCount > 0 ? Math.floor(READ_BUDGET / dayCount) : MAX_SYMBOLS;
+    const limit = Math.max(1, Math.min(MAX_SYMBOLS, affordable));
+
     const ranked = [...tokens]
       .sort((a, b) => Math.abs(b.investedUsd) - Math.abs(a.investedUsd))
-      .slice(0, MAX_SYMBOLS);
+      .slice(0, limit);
     const kept = new Set(ranked.map((token) => token.symbol));
     const omitted = tokens.filter((token) => !kept.has(token.symbol)).map((token) => token.symbol);
 
@@ -85,7 +101,7 @@ export function usePlatformValueHistory(
       platforms: Array.from(platformSet).sort(),
       omittedSymbols: omitted,
     };
-  }, [tokens]);
+  }, [tokens, dayCount]);
 
   const range = useMemo(() => {
     if (days.length === 0) return null;
