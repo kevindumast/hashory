@@ -25,7 +25,6 @@ import {
   type DrawdownProfile,
   type ValuePoint,
 } from "@/lib/performance";
-import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 
@@ -126,9 +125,8 @@ const EMPTY_DRAWDOWN: DrawdownProfile = {
  * fenêtre, la valorisation des positions et la mise en forme.
  */
 export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): PortfolioAnalytics {
-  const { portfolioTokens, isLoading: isLoadingPortfolio } = useDashboardData();
+  const { portfolioTokens, isLoading: isLoadingPortfolio, currentPrices } = useDashboardData();
   const { snapshots, isComputing } = usePortfolioSnapshots();
-  const { currentPrices } = useCurrentPrices(portfolioTokens);
 
   // ── Valorisation des positions ────────────────────────────────
   const holdings = useMemo(() => {
