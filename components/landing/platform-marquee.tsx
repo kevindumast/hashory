@@ -1,17 +1,18 @@
 import Image from "next/image";
+import { providerIcon } from "@/lib/provider-icons";
 
 /** Plateformes réellement branchées côté backend (convex/). */
 const PLATFORMS = [
-  { name: "Binance", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png", kind: "API" },
-  { name: "KuCoin", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png", kind: "API" },
-  { name: "Kraken", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png", kind: "API" },
-  { name: "Bitcoin", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png", kind: "Wallet" },
-  { name: "Ethereum", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png", kind: "Wallet" },
-  { name: "Solana", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png", kind: "Wallet" },
-  { name: "Kaspa", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png", kind: "Wallet" },
-  { name: "Bittensor", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png", kind: "Wallet" },
-  { name: "Bitstack", icon: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg", kind: "CSV" },
-  { name: "Finary", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png", kind: "CSV" },
+  { name: "Binance", id: "binance", kind: "API" },
+  { name: "KuCoin", id: "kucoin", kind: "API" },
+  { name: "Kraken", id: "kraken", kind: "API" },
+  { name: "Bitcoin", id: "bitcoin", kind: "Wallet" },
+  { name: "Ethereum", id: "ethereum", kind: "Wallet" },
+  { name: "Solana", id: "solana", kind: "Wallet" },
+  { name: "Kaspa", id: "kaspa", kind: "Wallet" },
+  { name: "Bittensor", id: "tao", kind: "Wallet" },
+  { name: "Bitstack", id: "bitstack", kind: "CSV" },
+  { name: "Finary", id: "finary", kind: "CSV" },
 ];
 
 /**
@@ -32,7 +33,7 @@ export function PlatformMarquee() {
                 className="flex shrink-0 items-center gap-2.5 border-r border-border/50 px-6 py-3"
               >
                 <Image
-                  src={platform.icon}
+                  src={providerIcon(platform.id)}
                   alt=""
                   width={18}
                   height={18}

@@ -20,22 +20,14 @@ import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSumma
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
 import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
+import { PROVIDER_ICONS } from "@/lib/provider-icons";
+import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
 
 type ChartFilter =
   | { type: "all" }
   | { type: "token"; symbol: string }
   | { type: "platform"; provider: string };
 
-const PROVIDER_ICONS: Record<string, string> = {
-  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
-  kraken: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png",
-  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
-  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
-  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
-  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
-  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
-  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
-};
 
 function ProviderAvatar({ provider, name }: { provider: string; name: string }) {
   const src = PROVIDER_ICONS[provider.toLowerCase()];
@@ -48,6 +40,15 @@ function ProviderAvatar({ provider, name }: { provider: string; name: string }) 
     </div>
   );
 }
+
+/** Couleurs de pile, empruntées aux jetons de graphique du thème. */
+const PLATFORM_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5)",
+];
 
 function formatAxisValue(v: number): string {
   const abs = Math.abs(v);
@@ -348,6 +349,24 @@ export function DashboardNewLayout({
     return { buys, sells };
   }, [portfolioTokens, chartFilter]);
 
+  const [chartMode, setChartMode] = useState<"total" | "platform">("total");
+
+  const chartDays = useMemo(
+    () => filteredHoldings.map((point) => point.timestamp),
+    [filteredHoldings]
+  );
+  const platformHistory = usePlatformValueHistory(portfolioTokens, chartDays);
+
+  /** Série empilée : une clé par plateforme, alignée sur l'axe commun. */
+  const stackedSeries = useMemo(() => {
+    if (platformHistory.points.length !== filteredHoldings.length) return [];
+    return filteredHoldings.map((point, index) => ({
+      axisKey: point.axisKey,
+      timestamp: point.timestamp,
+      ...platformHistory.points[index].byPlatform,
+    }));
+  }, [filteredHoldings, platformHistory.points]);
+
   const holdingsWithMarkers = useMemo(
     () =>
       filteredHoldings.map((p) => ({
@@ -447,6 +466,27 @@ export function DashboardNewLayout({
               </p>
             </div>
             <div className="flex items-center gap-3 text-[10px] font-bold">
+              <div className="flex border border-border/60" role="group" aria-label="Mode d'affichage">
+                {([
+                  { id: "total" as const, label: "Total" },
+                  { id: "platform" as const, label: "Par plateforme" },
+                ]).map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    onClick={() => setChartMode(option.id)}
+                    aria-pressed={chartMode === option.id}
+                    className={`num cursor-pointer px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors ${
+                      chartMode === option.id
+                        ? "bg-muted/40 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-4 bg-border/40" />
               <label className="flex items-center gap-1.5 text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
                 <input
                   type="checkbox"
@@ -469,7 +509,68 @@ export function DashboardNewLayout({
           </div>
 
           <div className="h-[260px] w-full">
-            {holdingsWithMarkers.length >= 2 ? (
+            {chartMode === "platform" ? (
+              platformHistory.isLoading ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  Reconstitution de la valeur par plateforme…
+                </div>
+              ) : stackedSeries.length >= 2 && platformHistory.platforms.length > 0 ? (
+                <ChartContainer config={{}} className="h-full w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={stackedSeries} margin={{ top: 4, right: 4, left: 0, bottom: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+                      <XAxis
+                        dataKey="axisKey"
+                        tickLine={false}
+                        axisLine={false}
+                        height={46}
+                        tick={makeXTick(filteredHoldings)}
+                        interval="preserveStartEnd"
+                      />
+                      <YAxis
+                        stroke="var(--muted-foreground)"
+                        tickLine={false}
+                        axisLine={false}
+                        width={62}
+                        tickFormatter={(v) => formatAxisValue(v)}
+                        style={{ fontSize: "11px" }}
+                        tick={{ fill: "var(--muted-foreground)", className: "num" }}
+                      />
+                      <ChartTooltip
+                        content={({ active, payload, label }) => (
+                          <ChartTooltipContent
+                            className="num"
+                            active={active}
+                            payload={payload}
+                            label={axisKeyToLabel(label as string | number)}
+                            formatter={(value) => currencyFormatter.format(Number(value))}
+                          />
+                        )}
+                      />
+                      {platformHistory.platforms.map((platform, index) => (
+                        <Area
+                          key={platform}
+                          type="monotone"
+                          dataKey={platform}
+                          // Une seule pile : les aires s'additionnent pour
+                          // reconstituer la valeur totale du portefeuille.
+                          stackId="platforms"
+                          stroke={PLATFORM_COLORS[index % PLATFORM_COLORS.length]}
+                          fill={PLATFORM_COLORS[index % PLATFORM_COLORS.length]}
+                          fillOpacity={0.35}
+                          strokeWidth={1.5}
+                          isAnimationActive={false}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  Pas assez d&apos;historique de cours pour ventiler par plateforme.
+                </div>
+              )
+            ) : holdingsWithMarkers.length >= 2 ? (
               <ChartContainer
                 config={{ valueUsd: { label: "Valeur USD", color: chartIsPositive ? "var(--positive)" : "var(--negative)" } }}
                 className="h-full w-full"
