@@ -56,6 +56,13 @@ export type TaxReportResult = {
   availableYears: number[];
   tradeCountByYear: Record<number, number>;
   hasOnlyStablecoinTrades: boolean;
+  /**
+   * Prix total d'acquisition restant, net des réintégrations déjà opérées.
+   * C'est le terme « prix total d'acquisition » du 150 VH bis pour une
+   * prochaine cession : le simulateur s'appuie dessus plutôt que de le
+   * ré-estimer de son côté.
+   */
+  currentAcquisitionCost: number;
 };
 
 // PFU flat tax rate (Prélèvement Forfaitaire Unique)
@@ -72,6 +79,7 @@ export const computeTaxReport = query({
       availableYears: [],
       tradeCountByYear: {},
       hasOnlyStablecoinTrades: false,
+      currentAcquisitionCost: 0,
     };
     const clerkId = await optionalUserId(ctx);
     if (!clerkId) return empty;
@@ -232,7 +240,17 @@ export const computeTaxReport = query({
         if (ev.isTaxableSell && soldQty > 0) {
           const P = ev.valueUsd;
 
-          // Approximate V_résiduel as cost basis of remaining portfolio after this sale
+          // APPROXIMATION CONNUE — le texte retient la *valeur globale* du
+          // portefeuille au jour de la cession. On lui substitue ici le prix
+          // de revient des positions restantes, faute d'historique de prix
+          // par actif à chaque date de cession.
+          //
+          // Conséquence : sur un portefeuille en plus-value latente, ce
+          // dénominateur est sous-estimé, donc le prix de revient imputé est
+          // surestimé et la plus-value déclarée est INFÉRIEURE à la réalité.
+          // Le montant affiché est donc un plancher, jamais un plafond.
+          // Le simulateur de cession, lui, dispose des prix courants et
+          // applique la formule exacte (voir lib/tax.ts).
           const soldCost = soldQty * prev.avgCostUsd;
           const residualCost = Math.max(0, totalAcquisitionCost - soldCost);
 
@@ -308,6 +326,7 @@ export const computeTaxReport = query({
       availableYears: allYears,
       tradeCountByYear,
       hasOnlyStablecoinTrades,
+      currentAcquisitionCost: totalAcquisitionCost,
     };
   },
 });

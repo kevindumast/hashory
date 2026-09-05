@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import {
   annualize,
+  attribution,
   beta,
   calmarRatio,
   cashFlowsFromPoints,
@@ -19,6 +20,7 @@ import {
   shockImpact,
   sortinoRatio,
   volatility,
+  type AttributionReport,
   type ConcentrationProfile,
   type DrawdownProfile,
   type ValuePoint,
@@ -79,6 +81,8 @@ export type PortfolioAnalytics = {
   venueConcentration: ConcentrationProfile;
   /** Part du portefeuille en stablecoins — la réserve mobilisable. */
   stablecoinWeight: number;
+  /** Décomposition du résultat ligne par ligne. */
+  attribution: AttributionReport;
   /** Perte encourue si la première position chute de 30 %. */
   topAssetShock: { key: string; impact: number } | null;
 
@@ -133,6 +137,8 @@ export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): Portf
         symbol: token.symbol,
         quantity: token.currentQuantity,
         valueUsd: token.currentQuantity * (currentPrices[token.symbol] ?? 0),
+        costBasisUsd: token.currentQuantity * token.avgCostBasis,
+        realizedPnlUsd: token.realizedPnlAvco,
         bySource: token.quantityBySource,
       }))
       .filter((holding) => holding.valueUsd > 0);
@@ -200,6 +206,14 @@ export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): Portf
 
     const base = {
       isLoading: isLoadingPortfolio || isComputing,
+      attribution: attribution(
+        holdings.map((holding) => ({
+          key: holding.symbol,
+          costBasisUsd: holding.costBasisUsd,
+          valueUsd: holding.valueUsd,
+          realizedPnlUsd: holding.realizedPnlUsd,
+        }))
+      ),
       assetConcentration,
       venueConcentration,
       stablecoinWeight: totalValueUsd > 0 ? stableValue / totalValueUsd : 0,

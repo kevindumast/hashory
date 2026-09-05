@@ -250,6 +250,22 @@ export function TaxReportView() {
 
         {report && (
           <>
+            {/* Le calcul historique repose sur une approximation qui minore
+                la plus-value : l'utilisateur déclare sur cette base, il doit
+                le savoir. */}
+            <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+              <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <span className="font-medium text-chart-4">Estimation prudente :</span>{" "}
+                <span className="text-muted-foreground">
+                  la valeur globale du portefeuille à chaque cession passée est approchée par le
+                  prix de revient des positions restantes, faute d&apos;historique de prix complet.
+                  Sur un portefeuille en plus-value, cette approximation <strong className="font-medium text-foreground">minore</strong>{" "}
+                  la plus-value imposable. Faites vérifier ces montants avant de les déclarer.
+                </span>
+              </div>
+            </div>
+
             {/* Threshold alert */}
             {report.isBelowThreshold && (
               <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">

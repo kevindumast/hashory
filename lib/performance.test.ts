@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import {
   annualize,
+  attribution,
   beta,
   calmarRatio,
   cashFlowsFromPoints,
@@ -356,5 +357,66 @@ describe("concentration", () => {
     // BTC pèse 60 % : une chute de 30 % coûte 18 % du portefeuille.
     close(shockImpact(holdings, "BTC", 0.3), 0.18, 1e-12);
     assert.equal(shockImpact(holdings, "DOGE", 0.3), 0);
+  });
+});
+
+describe("attribution de performance", () => {
+  it("confronte le poids d'une ligne à sa contribution", () => {
+    // ALT pèse peu mais a produit l'essentiel du résultat.
+    const report = attribution([
+      { key: "BTC", costBasisUsd: 9000, valueUsd: 9500, realizedPnlUsd: 0 },
+      { key: "ALT", costBasisUsd: 1000, valueUsd: 4000, realizedPnlUsd: 0 },
+    ]);
+
+    const alt = report.rows.find((row) => row.key === "ALT")!;
+    const btc = report.rows.find((row) => row.key === "BTC")!;
+
+    close(report.totalPnlUsd, 3500, 1e-9);
+    // ALT : 30 % du portefeuille, mais 86 % du résultat.
+    close(alt.weight, 4000 / 13500, 1e-9);
+    close(alt.shareOfResult, 3000 / 3500, 1e-9);
+    assert.ok(alt.shareOfResult > alt.weight * 2, "contribution très supérieure au poids");
+    close(alt.ownReturn, 3, 1e-9);
+    close(btc.ownReturn, 500 / 9000, 1e-9);
+  });
+
+  it("intègre le résultat déjà encaissé", () => {
+    const report = attribution([
+      { key: "SOL", costBasisUsd: 1000, valueUsd: 1200, realizedPnlUsd: 800 },
+    ]);
+    // 200 de latent plus 800 de réalisé.
+    close(report.rows[0].pnlUsd, 1000, 1e-9);
+    close(report.rows[0].contribution, 1, 1e-9);
+  });
+
+  it("classe les gagnants avant les perdants", () => {
+    const report = attribution([
+      { key: "PERDANT", costBasisUsd: 1000, valueUsd: 400, realizedPnlUsd: 0 },
+      { key: "GAGNANT", costBasisUsd: 1000, valueUsd: 2500, realizedPnlUsd: 0 },
+      { key: "NEUTRE", costBasisUsd: 1000, valueUsd: 1000, realizedPnlUsd: 0 },
+    ]);
+    assert.deepEqual(
+      report.rows.map((row) => row.key),
+      ["GAGNANT", "NEUTRE", "PERDANT"]
+    );
+    assert.ok(report.rows[2].pnlUsd < 0);
+    assert.ok(report.rows[2].shareOfResult < 0, "une perte retire du résultat");
+  });
+
+  it("n'attribue aucune part quand les gains annulent les pertes", () => {
+    // Résultat total nul : un ratio y serait explosif et dénué de sens.
+    const report = attribution([
+      { key: "A", costBasisUsd: 1000, valueUsd: 1500, realizedPnlUsd: 0 },
+      { key: "B", costBasisUsd: 1000, valueUsd: 500, realizedPnlUsd: 0 },
+    ]);
+    close(report.totalPnlUsd, 0, 1e-9);
+    assert.equal(report.rows[0].shareOfResult, 0);
+    assert.equal(report.rows[1].shareOfResult, 0);
+  });
+
+  it("reste neutre sur un portefeuille vide", () => {
+    const report = attribution([]);
+    assert.equal(report.rows.length, 0);
+    assert.equal(report.totalPnlUsd, 0);
   });
 });
