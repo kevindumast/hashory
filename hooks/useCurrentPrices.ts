@@ -4,17 +4,32 @@ import { useState, useEffect, useMemo } from "react";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 
 /**
- * Retourne la paire la plus importante pour un token (ou USDT par défaut).
+ * Paires candidates pour valoriser un actif, par ordre de préférence.
+ *
+ * Les paires adossées au dollar viennent d'abord, pour deux raisons. Elles
+ * existent chez la plupart des places, là où la paire réellement tradée peut
+ * être propre à une seule — Kraken cote en USD et en EUR quand Binance ne
+ * connaît que USDT et USDC. Surtout, le reste de l'application raisonne en
+ * dollars : retenir une paire en euros donnerait un cours juste dans la
+ * mauvaise devise, ce qui est pire qu'une valeur absente.
+ *
+ * La paire tradée reste en dernier recours, pour les actifs sans marché
+ * adossé au dollar.
  */
 function buildCandidatePairs(token: PortfolioToken): string[] {
-  // Prendre la première paire réelle (la plus tradée)
-  if (token.tradeSymbols && token.tradeSymbols.length > 0) {
-    return [token.tradeSymbols[0].toUpperCase()];
+  const symbol = token.symbol.toUpperCase();
+  const candidates = [`${symbol}USDT`, `${symbol}USDC`];
+
+  for (const traded of token.tradeSymbols ?? []) {
+    const pair = traded.toUpperCase();
+    if (!candidates.includes(pair)) candidates.push(pair);
   }
 
-  // Fallback : utiliser USDT
-  return [`${token.symbol.toUpperCase()}USDT`];
+  return candidates;
 }
+
+/** Intervalle de rafraîchissement, aligné sur le cache de la route de prix. */
+const REFRESH_INTERVAL_MS = 60_000;
 
 type PriceResult = {
   /** Prix actuel par symbole de token (ex: { "ETH": 3200, "BTC": 95000 }) */
@@ -109,10 +124,16 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
 
     fetchBatch();
 
+    // Les cours ne se figeaient qu'au montage : l'écran restait sur la
+    // valeur du premier chargement. La route de prix garde un cache d'une
+    // minute, donc interroger à ce rythme ne coûte rien de plus.
+    const timer = window.setInterval(fetchBatch, REFRESH_INTERVAL_MS);
+
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
-  }, [tokens.length, fetchTrigger]);
+  }, [allPairs, pairToSymbol, tokens.length, fetchTrigger]);
 
   const refresh = () => setFetchTrigger((n) => n + 1);
 

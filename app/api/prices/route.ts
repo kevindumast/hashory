@@ -133,7 +133,9 @@ export async function POST(request: NextRequest) {
     const geckoIdsToFetch: string[] = [];
 
     for (const pair of missingPairs) {
-      const base = pair.replace(/(USDT|USDC|BUSD|USD|FDUSD|TUSD|DAI)$/, '');
+      // Kraken cote en EUR et en GBP : sans ces suffixes, la base ne peut pas
+      // être isolée et le repli échoue silencieusement.
+      const base = pair.replace(/(USDT|USDC|BUSD|FDUSD|TUSD|DAI|USD|EUR|GBP)$/, '');
       const geckoId = GECKO_IDS[base];
       if (geckoId) {
         pairToBase[pair] = geckoId;
