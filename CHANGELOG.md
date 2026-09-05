@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.9](https://github.com/kevindumast/hashory/compare/hashory-v0.1.8...hashory-v0.1.9) (2026-09-05)
+
+
+### Bug Fixes
+
+* **kraken:** commissions manquantes sur les entrées et les conversions ([eed8cc8](https://github.com/kevindumast/hashory/commit/eed8cc8657ac43914657a1daf2ff1816a8f5cc2d))
+* **sync:** débloquer les étapes de fond, et rendre l'attente lisible ([3e817fd](https://github.com/kevindumast/hashory/commit/3e817fd43400fccfa13bc7a94883ad28a5f410a3))
+* **sync:** débloquer les étapes de fond, et rendre l'attente lisible ([eed8cc8](https://github.com/kevindumast/hashory/commit/eed8cc8657ac43914657a1daf2ff1816a8f5cc2d))
+
 ## [0.1.8](https://github.com/kevindumast/hashory/compare/hashory-v0.1.7...hashory-v0.1.8) (2026-09-05)
 
 
