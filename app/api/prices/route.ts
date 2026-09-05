@@ -1,23 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Symbol → CoinGecko coin id (fallback si Binance n'a pas la paire)
-const GECKO_IDS: Record<string, string> = {
-  KAS: 'kaspa',
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  SOL: 'solana',
-  BNB: 'binancecoin',
-  XRP: 'ripple',
-  ADA: 'cardano',
-  DOGE: 'dogecoin',
-  DOT: 'polkadot',
-  MATIC: 'matic-network',
-  AVAX: 'avalanche-2',
-  TRX: 'tron',
-  LINK: 'chainlink',
-  LTC: 'litecoin',
-  TON: 'the-open-network',
-};
+
+/** Devises de cotation à retirer pour retrouver l'actif de base. */
+const QUOTE_SUFFIXES = /(USDT|USDC|BUSD|FDUSD|TUSD|DAI|USD|EUR|GBP)$/;
 
 /* ─── Cache mémoire ───────────────────────────────────────────────
    Le dashboard redemande les mêmes symboles à chaque rafraîchissement.
@@ -109,6 +94,47 @@ async function fetchBinanceSnapshot(now: number): Promise<Map<string, string>> {
   }
 }
 
+/** Au-delà, CoinGecko tronque la réponse : on découpe la demande. */
+const COINGECKO_BATCH = 50;
+
+/**
+ * Cours en dollars pour une liste de symboles, via CoinGecko.
+ *
+ * Le premier résultat rendu pour un symbole donné est retenu : l'endpoint
+ * classe par capitalisation décroissante, donc c'est la pièce dominante qui
+ * l'emporte lorsque plusieurs partagent le même symbole.
+ */
+async function fetchCoinGeckoBySymbols(symbols: string[]): Promise<Map<string, number>> {
+  const prices = new Map<string, number>();
+  if (symbols.length === 0) return prices;
+
+  for (let index = 0; index < symbols.length; index += COINGECKO_BATCH) {
+    const chunk = symbols.slice(index, index + COINGECKO_BATCH);
+    const query = chunk.map((symbol) => symbol.toLowerCase()).join(',');
+
+    try {
+      const response = await fetch(
+        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&symbols=${query}`,
+        { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }
+      );
+      if (!response.ok) continue;
+
+      const rows = (await response.json()) as Array<{ symbol?: string; current_price?: number }>;
+      if (!Array.isArray(rows)) continue;
+
+      for (const row of rows) {
+        if (!row.symbol || typeof row.current_price !== 'number') continue;
+        const symbol = row.symbol.toUpperCase();
+        if (!prices.has(symbol)) prices.set(symbol, row.current_price);
+      }
+    } catch (error) {
+      console.error('[prices] repli CoinGecko indisponible', error);
+    }
+  }
+
+  return prices;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const { symbols } = await request.json();
@@ -149,40 +175,41 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 2. Fallback CoinGecko pour les paires non résolues
+    // 2. Repli CoinGecko, interrogé par symbole.
+    //
+    // Binance est injoignable depuis la plupart des hébergeurs, dont les
+    // plages d'adresses sont filtrées : en production, ce repli n'est pas un
+    // secours mais la source principale. Il ne pouvait donc pas reposer sur
+    // une liste de pièces écrite à la main — c'est ce qui privait de cours
+    // tout actif absent de cette liste, quinze en tout.
+    //
+    // L'endpoint accepte directement des symboles et trie par capitalisation,
+    // ce qui tranche naturellement le cas des symboles homonymes.
+    //
+    // Il rend par ailleurs toujours des dollars, quelle que soit la devise de
+    // cotation de la paire d'origine. C'est ce que le reste de l'application
+    // attend, et cela corrige au passage les paires libellées en euros, dont
+    // le cours aurait autrement été pris pour des dollars.
     const missingPairs = symbolsToFetch.filter((pair) => !resolvedPairs.has(pair));
-    const pairToBase: Record<string, string> = {};
-    const geckoIdsToFetch: string[] = [];
 
-    for (const pair of missingPairs) {
-      // Kraken cote en EUR et en GBP : sans ces suffixes, la base ne peut pas
-      // être isolée et le repli échoue silencieusement.
-      const base = pair.replace(/(USDT|USDC|BUSD|FDUSD|TUSD|DAI|USD|EUR|GBP)$/, '');
-      const geckoId = GECKO_IDS[base];
-      if (geckoId) {
-        pairToBase[pair] = geckoId;
-        geckoIdsToFetch.push(geckoId);
+    if (missingPairs.length > 0) {
+      const baseBySymbol = new Map<string, string[]>();
+      for (const pair of missingPairs) {
+        const base = pair.replace(QUOTE_SUFFIXES, '');
+        if (!base) continue;
+        const pairs = baseBySymbol.get(base) ?? [];
+        pairs.push(pair);
+        baseBySymbol.set(base, pairs);
       }
-    }
 
-    if (geckoIdsToFetch.length > 0) {
-      const geckoResponse = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${Array.from(new Set(geckoIdsToFetch)).join(',')}&vs_currencies=usd`,
-        {
-          headers: { Accept: 'application/json' },
-          signal: AbortSignal.timeout(5000),
-        }
-      ).catch(() => null);
+      const prices = await fetchCoinGeckoBySymbols(Array.from(baseBySymbol.keys()));
 
-      if (geckoResponse?.ok) {
-        const geckoData = (await geckoResponse.json()) as Record<string, { usd: number }>;
-        for (const [pair, geckoId] of Object.entries(pairToBase)) {
-          const entry = geckoData[geckoId];
-          if (entry && typeof entry.usd === 'number') {
-            const price = String(entry.usd);
-            allResults.push({ symbol: pair, price });
-            rememberPrice(pair, price, now);
-          }
+      for (const [base, pairs] of baseBySymbol) {
+        const price = prices.get(base);
+        if (price === undefined) continue;
+        for (const pair of pairs) {
+          allResults.push({ symbol: pair, price: String(price) });
+          rememberPrice(pair, String(price), now);
         }
       }
     }
