@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const QUICK_PROVIDERS = [
   { id: "binance", label: "Binance", kind: "API", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png" },
   { id: "kucoin", label: "KuCoin", kind: "API", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png" },
+  { id: "kraken", label: "Kraken", kind: "API", icon: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png" },
   { id: "bitcoin", label: "Bitcoin", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png" },
   { id: "ethereum", label: "Ethereum", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png" },
   { id: "solana", label: "Solana", kind: "Wallet", icon: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png" },

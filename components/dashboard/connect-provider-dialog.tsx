@@ -206,6 +206,29 @@ type ProviderConfig = {
 
 const providerConfigs: ProviderConfig[] = [
   {
+    value: "kraken",
+    label: "Kraken",
+    description: "Connexion par clé API avec permissions lecture seule.",
+    iconUrl: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png",
+    category: "platform",
+    fields: [
+      {
+        name: "apiKey",
+        label: "API Key",
+        placeholder: "Ex: aBcD1234...",
+        helper: "Depuis Kraken > Paramètres > API > Ajouter une clé.",
+      },
+      {
+        name: "apiSecret",
+        label: "Private Key",
+        placeholder: "Ex: zYxW9876...",
+        helper:
+          "Cochez uniquement « Query Funds » et « Query Ledger Entries ». La clé est chiffrée immédiatement côté serveur.",
+        secret: true,
+      },
+    ],
+  },
+  {
     value: "binance",
     label: "Binance",
     description: "Connexion par clé API avec permissions lecture seule.",

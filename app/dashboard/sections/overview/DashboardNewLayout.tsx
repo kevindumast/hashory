@@ -28,6 +28,7 @@ type ChartFilter =
 
 const PROVIDER_ICONS: Record<string, string> = {
   binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
+  kraken: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png",
   kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
   ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
   bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",

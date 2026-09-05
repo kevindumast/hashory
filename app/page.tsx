@@ -45,7 +45,7 @@ const capabilities = [
     index: "01",
     title: "Exchanges et wallets unifiés",
     description:
-      "Binance et KuCoin par API, vos adresses Bitcoin, Ethereum, Solana, Kaspa et Bittensor par clé publique. Une seule interface pour l'ensemble.",
+      "Binance, Kraken et KuCoin par API, vos adresses Bitcoin, Ethereum, Solana, Kaspa et Bittensor par clé publique. Une seule interface pour l'ensemble.",
   },
   {
     index: "02",
@@ -103,7 +103,7 @@ const workflow = [
 const metrics = [
   {
     label: "Sources connectables",
-    value: 9,
+    value: 10,
     suffix: "",
     description: "Exchanges, blockchains et imports de fichiers.",
   },
@@ -153,7 +153,7 @@ const faqItems = [
   {
     question: "Quelles plateformes sont réellement supportées ?",
     answer:
-      "Aujourd'hui : Binance et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack et Finary sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
+      "Aujourd'hui : Binance, Kraken et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack et Finary sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
   },
   {
     question: "La déclaration fiscale couvre-t-elle mon cas ?",
