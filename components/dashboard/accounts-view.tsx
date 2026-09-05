@@ -204,6 +204,10 @@ export function AccountsView() {
         } else if (providerKey === "kucoin") {
           await syncKucoin({ integrationId: accountId })
         } else if (providerKey === "kraken") {
+          // Comme pour Binance, le bouton manuel relit tout : les curseurs
+          // sont effacés d'abord. Les insertions étant dédupliquées, une
+          // relecture ne crée aucun doublon.
+          await resetAllCursors({ integrationId: accountId })
           await syncKraken({ integrationId: accountId })
         } else {
           throw new Error(`Synchronisation non prise en charge pour ${providerName}.`)
