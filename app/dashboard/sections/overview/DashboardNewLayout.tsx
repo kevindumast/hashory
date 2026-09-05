@@ -19,7 +19,7 @@ import {
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
-import { Reveal } from "@/components/motion";
+import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
 
 type ChartFilter =
   | { type: "all" }
@@ -167,7 +167,6 @@ export function DashboardNewLayout({
   const profitPercent = totalCostBasis > 0
     ? (totalProfit / totalCostBasis) * 100
     : profitSummary.profitPercentage || 0;
-  const isPositive = totalProfit >= 0;
   const unrealizedPnl = hasCurrentPrices ? totalCurrentValue - totalCostBasis : null;
 
   // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
@@ -309,81 +308,19 @@ export function DashboardNewLayout({
   return (
     <div className="space-y-5">
 
-      {/* ── Hero Metrics ── */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* ── Relevé de position ── */}
+      <PortfolioStatement
+        tokens={portfolioTokens}
+        currentPrices={currentPrices}
+        hasPrices={hasCurrentPrices}
+        totalValueUsd={totalCurrentValue}
+        costBasisUsd={totalCostBasis}
+        unrealizedPnlUsd={unrealizedPnl}
+        realizedPnlUsd={totalRealizedPnl}
+        totalProfitUsd={totalProfit}
+        profitPercent={profitPercent}
+      />
 
-        {/* Performance totale */}
-        <Reveal className="h-full" delay={0}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5 relative overflow-hidden group">
-            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
-              Performance totale
-            </h3>
-            <div className="flex items-baseline gap-2 flex-wrap">
-              <span className="num text-3xl font-normal tracking-tight text-foreground">
-                {currencyFormatter.format(totalProfit)}
-              </span>
-              <span className={`num text-sm font-bold ${isPositive ? "text-positive" : "text-negative"}`}>
-                {isPositive ? "+" : ""}{profitPercent.toFixed(2)}%
-              </span>
-            </div>
-            <div className="mt-4 h-px bg-border/60">
-              <div
-                className={`h-px transition-all ${isPositive ? "bg-positive" : "bg-negative"}`}
-                style={{ width: `${Math.min(Math.abs(profitPercent), 100)}%` }}
-              />
-            </div>
-            <p className="num mt-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">PnL réalisé + latent</p>
-          </div>
-        </Reveal>
-
-        {/* Valeur actuelle */}
-        <Reveal className="h-full" delay={60}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-            <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground mb-3">
-              Valeur du portefeuille
-            </h3>
-            <span className="num text-3xl font-normal tracking-tight text-foreground">
-              {hasCurrentPrices ? currencyFormatter.format(totalCurrentValue) : "—"}
-            </span>
-            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-              <span className="text-muted-foreground">Coût total investi</span>
-              <span className="num font-bold text-foreground">{currencyFormatter.format(totalCostBasis)}</span>
-            </div>
-          </div>
-        </Reveal>
-
-        {/* PnL latent */}
-        <Reveal className="h-full" delay={120}>
-          <div className="h-full bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-            <div className="flex justify-between items-start mb-3">
-              <h3 className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL latent</h3>
-              {hasCurrentPrices && unrealizedPnl !== null && (
-                <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                  unrealizedPnl >= 0
-                    ? "bg-positive/10 text-positive"
-                    : "bg-negative/10 text-negative"
-                }`}>
-                  {unrealizedPnl >= 0 ? "PROFIT" : "PERTE"}
-                </span>
-              )}
-            </div>
-            <span className={`num text-3xl font-semibold tracking-tight ${
-              unrealizedPnl === null ? "text-muted-foreground" :
-              unrealizedPnl >= 0 ? "text-positive" : "text-negative"
-            }`}>
-              {unrealizedPnl !== null
-                ? `${unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(unrealizedPnl)}`
-                : "—"}
-            </span>
-            <div className="mt-5 flex items-center justify-between text-xs border-t border-border/40 pt-4">
-              <span className="text-muted-foreground">PnL réalisé</span>
-              <span className={`num font-bold ${totalRealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
-                {totalRealizedPnl >= 0 ? "+" : ""}{currencyFormatter.format(totalRealizedPnl)}
-              </span>
-            </div>
-          </div>
-        </Reveal>
-      </section>
 
       {/* ── Period selector + filter pill ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -835,6 +772,9 @@ export function DashboardNewLayout({
                             {pricesLoading && <LoaderCircle className="w-3 h-3 animate-spin text-primary" />}
                           </span>
                         </th>
+                        <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                          Écart au PRU
+                        </th>
                         <SortTh col="value" label="Valeur" />
                         <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">% portefeuille</th>
                         <th className="px-4 py-3 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">PnL réalisé</th>
@@ -924,6 +864,21 @@ export function DashboardNewLayout({
                             <td className="num px-4 py-3 text-right font-bold text-primary">
                               {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
                             </td>
+                            <td className="num px-4 py-3 text-right">
+                              {currentPrice && token.avgCostBasis > 0 ? (
+                                (() => {
+                                  const gap = currentPrice / token.avgCostBasis - 1;
+                                  return (
+                                    <span className={gap >= 0 ? "text-positive" : "text-negative"}>
+                                      {gap >= 0 ? "+" : ""}
+                                      {(gap * 100).toFixed(1)} %
+                                    </span>
+                                  );
+                                })()
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
                             <td className="num px-4 py-3 text-right font-bold text-foreground">
                               {currentValue !== null ? currencyFormatter.format(currentValue) : "—"}
                             </td>
@@ -962,7 +917,7 @@ export function DashboardNewLayout({
                           </tr>
                           {isExpanded && (
                             <tr className="bg-muted/10 border-t border-border/30">
-                              <td colSpan={9} className="px-4 py-4">
+                              <td colSpan={10} className="px-4 py-4">
                                 <TokenHistoryChart symbol={token.symbol} events={token.events} />
                               </td>
                             </tr>
