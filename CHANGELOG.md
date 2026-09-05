@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/kevindumast/hashory/compare/hashory-v0.1.4...hashory-v0.1.5) (2026-09-05)
+
+
+### Bug Fixes
+
+* borne la ventilation par plateforme au budget de lecture d'une requête ([74250a0](https://github.com/kevindumast/hashory/commit/74250a0b93f7c14d0549acec126887583d1ce18f))
+* cours absents pour les actifs venus de Kraken, et prix figés ([0b82004](https://github.com/kevindumast/hashory/commit/0b82004f680a4f2c23ef32e7221678347c92e9e1))
+
 ## [0.1.4](https://github.com/kevindumast/hashory/compare/hashory-v0.1.3...hashory-v0.1.4) (2026-09-05)
 
 
