@@ -187,14 +187,46 @@ export function DashboardNewLayout({
     }).format(parsed);
   }
 
-  // Custom XAxis tick: month on row 1, year label + separator on row 2 at year boundaries
-  function makeXTick(series: { timestamp: number; label: string }[]) {
-    return function XTick(props: { x?: string | number; y?: string | number; payload?: { value: string | number }; index?: number }) {
-      const { x = 0, y = 0, index = 0 } = props;
-      const point = series[index];
-      if (!point) return <g />;
+  /** Libellé court affiché sous une graduation. */
+  const tickLabelFormatter = new Intl.DateTimeFormat("fr-FR", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
+  /**
+   * Graduation de l'axe : le mois sur la première ligne, l'année et un
+   * séparateur sur la seconde au changement d'année.
+   *
+   * Tout est dérivé de la valeur portée par la graduation elle-même. L'indice
+   * fourni par Recharts est celui de la graduation affichée, pas celui de la
+   * donnée : avec `interval="preserveStartEnd"`, s'en servir pour indexer la
+   * série revient à lire les premiers points au lieu des bons.
+   */
+  function makeXTick(series: { timestamp: number; axisKey: string }[]) {
+    // Premier point de chaque année : c'est là que se place le séparateur.
+    const firstOfYear = new Set<string>();
+    let previousYear: number | null = null;
+    for (const point of series) {
       const year = new Date(point.timestamp).getUTCFullYear();
-      const isYearStart = index === 0 || new Date(series[index - 1].timestamp).getUTCFullYear() !== year;
+      if (year !== previousYear) {
+        firstOfYear.add(point.axisKey);
+        previousYear = year;
+      }
+    }
+
+    return function XTick(props: {
+      x?: string | number;
+      y?: string | number;
+      payload?: { value: string | number };
+    }) {
+      const { x = 0, y = 0, payload } = props;
+      const axisKey = String(payload?.value ?? "");
+      const timestamp = Date.parse(axisKey);
+      if (Number.isNaN(timestamp)) return <g />;
+
+      const year = new Date(timestamp).getUTCFullYear();
+      const isYearStart = firstOfYear.has(axisKey);
 
       return (
         <g transform={`translate(${x},${y})`}>
@@ -206,7 +238,7 @@ export function DashboardNewLayout({
             fill="var(--muted-foreground)"
             fontSize={11}
           >
-            {point.label}
+            {tickLabelFormatter.format(timestamp)}
           </text>
 
           {/* Year boundary */}
