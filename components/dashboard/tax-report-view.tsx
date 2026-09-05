@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { TaxYearReport, TaxableEvent, TaxReportResult } from "@/convex/taxReport";
+import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
+import { taxSheet } from "@/lib/export";
+import { downloadCsv } from "@/lib/download";
 
 const usd = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -18,27 +20,6 @@ const usd = new Intl.NumberFormat("fr-FR", {
 });
 const qty = new Intl.NumberFormat("fr-FR", { maximumSignificantDigits: 6 });
 const pct = new Intl.NumberFormat("fr-FR", { style: "percent", minimumFractionDigits: 1 });
-
-function exportCsv(report: TaxYearReport) {
-  const header = ["Date", "Actif", "Quantité vendue", "Prix de cession (USD)", "Prix de revient (USD)", "Plus/Moins-value (USD)", "Source"];
-  const rows = report.events.map((e) => [
-    new Date(e.date).toLocaleDateString("fr-FR"),
-    e.asset,
-    e.quantity.toString(),
-    e.proceedsUsd.toFixed(2),
-    e.costBasisUsd.toFixed(2),
-    e.gainLossUsd.toFixed(2),
-    e.source,
-  ]);
-  const csv = [header, ...rows].map((r) => r.join(";")).join("\n");
-  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `declaration-fiscale-${report.year}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function SummaryCard({
   label,
@@ -189,7 +170,7 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportCsv(report)}
+              onClick={() => downloadCsv(taxSheet(report.year, report.events))}
               className="shrink-0"
             >
               <Download className="w-3.5 h-3.5 mr-2" />

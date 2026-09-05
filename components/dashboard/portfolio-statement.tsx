@@ -6,6 +6,10 @@ import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { Reveal } from "@/components/motion";
 import { PFU_RATE, taxOnSale } from "@/lib/tax";
+import { portfolioSheet } from "@/lib/export";
+import { downloadCsv } from "@/lib/download";
+import { Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { cn } from "@/lib/utils";
 
@@ -110,6 +114,34 @@ export function PortfolioStatement({
 
   const stablecoinShare = totalValueUsd > 0 ? stablecoinValueUsd / totalValueUsd : 0;
 
+  const handleExport = () => {
+    const positions = tokens
+      .filter((token) => token.currentQuantity > 0)
+      .map((token) => {
+        const price = currentPrices[token.symbol] ?? null;
+        const value = price !== null ? token.currentQuantity * price : null;
+        const cost = token.currentQuantity * token.avgCostBasis;
+        return {
+          symbol: token.symbol,
+          quantity: token.currentQuantity,
+          avgCostBasis: token.avgCostBasis,
+          currentPrice: price,
+          valueUsd: value,
+          costUsd: cost,
+          realizedPnlUsd: token.realizedPnlAvco,
+          unrealizedPnlUsd: value === null ? null : value - cost,
+          weight: totalValueUsd > 0 && value !== null ? value / totalValueUsd : 0,
+          // Le détail par source est déjà réconcilié : on l'emporte tel quel.
+          sources: token.quantityBySource
+            .map((source) => source.providerDisplayName)
+            .join(" · "),
+        };
+      })
+      .sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
+
+    downloadCsv(portfolioSheet(positions, Date.now()));
+  };
+
   return (
     <section className="border-y border-border/60">
       {/* Valeur totale, en tête */}
@@ -125,6 +157,16 @@ export function PortfolioStatement({
           </div>
 
           <div className="text-right">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExport}
+              disabled={tokens.length === 0}
+              className="num mb-2 h-7 cursor-pointer px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+            >
+              <Download className="mr-1.5 size-3" />
+              Exporter
+            </Button>
             <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
               Résultat total
             </p>
