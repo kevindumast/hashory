@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/kevindumast/hashory/compare/hashory-v0.1.3...hashory-v0.1.4) (2026-09-05)
+
+
+### Features
+
+* vue empilée par plateforme sur le graphique des avoirs ([4b226b3](https://github.com/kevindumast/hashory/commit/4b226b349f1158ce75cc66989825a79675f0ee51))
+
 ## [0.1.3](https://github.com/kevindumast/hashory/compare/hashory-v0.1.2...hashory-v0.1.3) (2026-09-05)
 
 
