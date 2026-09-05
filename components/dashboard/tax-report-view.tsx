@@ -250,21 +250,24 @@ export function TaxReportView() {
 
         {report && (
           <>
-            {/* Le calcul historique repose sur une approximation qui minore
-                la plus-value : l'utilisateur déclare sur cette base, il doit
-                le savoir. */}
-            <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
-              <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
-              <div className="text-sm">
-                <span className="font-medium text-chart-4">Estimation prudente :</span>{" "}
-                <span className="text-muted-foreground">
-                  la valeur globale du portefeuille à chaque cession passée est approchée par le
-                  prix de revient des positions restantes, faute d&apos;historique de prix complet.
-                  Sur un portefeuille en plus-value, cette approximation <strong className="font-medium text-foreground">minore</strong>{" "}
-                  la plus-value imposable. Faites vérifier ces montants avant de les déclarer.
-                </span>
+            {/* La valeur globale du portefeuille est établie au cours du
+                marché. Quand l'historique ne couvre pas tout, le repli sur le
+                prix de revient minore la plus-value : il faut le dire. */}
+            {result?.hasIncompleteValuation && (
+              <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+                <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-chart-4">Historique de cours incomplet :</span>{" "}
+                  <span className="text-muted-foreground">
+                    certaines cessions ont été valorisées en partie au prix de revient, faute de
+                    cours connu à leur date. Cette substitution{" "}
+                    <strong className="font-medium text-foreground">minore</strong> la plus-value
+                    imposable : les montants ci-dessous sont un plancher. Lancez une
+                    resynchronisation des prix, puis faites-les vérifier avant de déclarer.
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Threshold alert */}
             {report.isBelowThreshold && (

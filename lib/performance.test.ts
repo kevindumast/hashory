@@ -10,6 +10,7 @@ import {
   compound,
   concentration,
   correlation,
+  correlationMatrix,
   dailyReturns,
   downsideDeviation,
   drawdownProfile,
@@ -418,5 +419,54 @@ describe("attribution de performance", () => {
     const report = attribution([]);
     assert.equal(report.rows.length, 0);
     assert.equal(report.totalPnlUsd, 0);
+  });
+});
+
+describe("matrice de corrélation", () => {
+  it("porte une diagonale de 1 et reste symétrique", () => {
+    const matrix = correlationMatrix({
+      A: [0.01, -0.02, 0.03, -0.01],
+      B: [0.02, -0.01, 0.01, 0.005],
+    });
+
+    assert.deepEqual(matrix.keys, ["A", "B"]);
+    close(matrix.values[0][0], 1, 1e-12);
+    close(matrix.values[1][1], 1, 1e-12);
+    close(matrix.values[0][1], matrix.values[1][0], 1e-12);
+  });
+
+  it("révèle une diversification illusoire", () => {
+    // Trois jetons qui bougent ensemble : une seule position en trois copies.
+    const market = [0.02, -0.03, 0.04, -0.01, 0.015];
+    const matrix = correlationMatrix({
+      A: market,
+      B: market.map((value) => value * 1.2),
+      C: market.map((value) => value * 0.8),
+    });
+    close(matrix.averagePairwise, 1, 1e-9);
+  });
+
+  it("reconnaît une vraie décorrélation", () => {
+    const matrix = correlationMatrix({
+      A: [0.02, -0.03, 0.04, -0.01],
+      B: [-0.02, 0.03, -0.04, 0.01],
+    });
+    close(matrix.averagePairwise, -1, 1e-9);
+  });
+
+  it("aligne les séries sur les observations les plus récentes", () => {
+    const matrix = correlationMatrix({
+      LONGUE: [0.5, -0.5, 0.01, -0.02, 0.03],
+      COURTE: [0.01, -0.02, 0.03],
+    });
+    assert.equal(matrix.observations, 3);
+    // Les deux séries se terminent identiquement : corrélation parfaite.
+    close(matrix.values[0][1], 1, 1e-9);
+  });
+
+  it("écarte les séries trop courtes et les cas vides", () => {
+    const matrix = correlationMatrix({ A: [0.01, 0.02], B: [0.5] });
+    assert.deepEqual(matrix.keys, ["A"]);
+    assert.equal(correlationMatrix({}).observations, 0);
   });
 });

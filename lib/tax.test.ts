@@ -5,6 +5,7 @@ import {
   ANNUAL_EXEMPTION_EUR,
   PFU_RATE,
   capitalShareOfSale,
+  computeCessionChain,
   compareStates,
   isBelowAnnualExemption,
   proceedsForNetTarget,
@@ -157,5 +158,142 @@ describe("lecture du portefeuille", () => {
     assert.ok(comparison.taxDelta > 0);
     close(comparison.before.tax, 10_000 * (1 - 0.5) * PFU_RATE);
     close(comparison.after.tax, 10_000 * (1 - 0.2) * PFU_RATE);
+  });
+});
+
+describe("chaîne des cessions", () => {
+  const day = (index: number) => Date.UTC(2025, 0, 1) + index * 86_400_000;
+
+  /** Historique de prix complet pour les cas nominaux. */
+  const fullPrices: Record<string, number> = { BTC: 40_000, ETH: 10_000 };
+  const priceAt = (asset: string) => fullPrices[asset] ?? null;
+
+  const baseEvents = [
+    { timestamp: day(0), asset: "BTC", qtyDelta: 1, valueUsd: 10_000, isTaxableSell: false, source: "trade" as const },
+    { timestamp: day(1), asset: "ETH", qtyDelta: 1, valueUsd: 5_000, isTaxableSell: false, source: "trade" as const },
+  ];
+
+  it("retient la valeur de marché du portefeuille, pas son prix de revient", () => {
+    // Portefeuille : 1 BTC à 40 000 + 1 ETH à 10 000 = 50 000 de valeur,
+    // pour 15 000 de prix d'acquisition. Cession de 0,5 BTC à 20 000.
+    const chain = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(10), asset: "BTC", qtyDelta: -0.5, valueUsd: 20_000, isTaxableSell: true, source: "trade" },
+      ],
+      priceAt
+    );
+
+    assert.equal(chain.cessions.length, 1);
+    const cession = chain.cessions[0];
+
+    close(cession.portfolioValueUsd, 50_000, 1e-6);
+    // 15 000 × 20 000 / 50 000 = 6 000
+    close(cession.costBasisUsd, 6_000, 1e-6);
+    close(cession.gainLossUsd, 14_000, 1e-6);
+    close(cession.valuationCoverage, 1, 1e-9);
+
+    // L'ancienne approximation retenait le prix de revient résiduel (10 000)
+    // au lieu de la valeur de marché résiduelle (30 000), soit un
+    // dénominateur de 30 000 et une plus-value de seulement 10 000.
+    const approximatedCostBasis = (15_000 * 20_000) / (20_000 + 10_000);
+    const approximatedGain = 20_000 - approximatedCostBasis;
+    assert.ok(
+      cession.gainLossUsd > approximatedGain,
+      "la valeur de marché révèle une plus-value supérieure à l'approximation"
+    );
+    close(approximatedGain, 10_000, 1e-6);
+  });
+
+  it("valorise l'actif cédé au prix implicite de sa propre vente", () => {
+    // Le cours de clôture dit 40 000, la vente s'est faite à 60 000 :
+    // c'est le prix réellement obtenu qui fait foi pour la ligne cédée.
+    const chain = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(10), asset: "BTC", qtyDelta: -0.5, valueUsd: 30_000, isTaxableSell: true, source: "trade" },
+      ],
+      priceAt
+    );
+    // 1 BTC valorisé à 60 000 + 1 ETH à 10 000 = 70 000
+    close(chain.cessions[0].portfolioValueUsd, 70_000, 1e-6);
+  });
+
+  it("signale un repli et reste conservateur quand un cours manque", () => {
+    // Aucun historique : tout se replie sur le prix de revient.
+    const chain = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(10), asset: "BTC", qtyDelta: -0.5, valueUsd: 20_000, isTaxableSell: true, source: "trade" },
+      ],
+      () => null
+    );
+
+    const cession = chain.cessions[0];
+    assert.equal(chain.hasIncompleteValuation, true);
+    assert.ok(cession.valuationCoverage < 1);
+
+    // Le repli minore la valeur globale, donc la plus-value : c'est un plancher.
+    const complete = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(10), asset: "BTC", qtyDelta: -0.5, valueUsd: 20_000, isTaxableSell: true, source: "trade" },
+      ],
+      priceAt
+    );
+    assert.ok(cession.gainLossUsd < complete.cessions[0].gainLossUsd);
+  });
+
+  it("n'impose pas une conversion crypto contre crypto", () => {
+    const chain = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(5), asset: "BTC", qtyDelta: -0.5, valueUsd: 20_000, isTaxableSell: false, source: "convert" },
+        { timestamp: day(5), asset: "ETH", qtyDelta: 2, valueUsd: 20_000, isTaxableSell: false, source: "convert" },
+      ],
+      priceAt
+    );
+    assert.equal(chain.cessions.length, 0);
+    // 15 000 acquis, 5 000 sortis avec le BTC converti, 20 000 réacquis.
+    close(chain.finalAcquisitionCost, 30_000, 1e-6);
+  });
+
+  it("réintègre le prix de revient d'une cession à la suivante", () => {
+    const chain = computeCessionChain(
+      [
+        ...baseEvents,
+        { timestamp: day(10), asset: "BTC", qtyDelta: -0.5, valueUsd: 20_000, isTaxableSell: true, source: "trade" },
+        { timestamp: day(20), asset: "ETH", qtyDelta: -0.5, valueUsd: 5_000, isTaxableSell: true, source: "trade" },
+      ],
+      priceAt
+    );
+
+    assert.equal(chain.cessions.length, 2);
+    // Après la première cession : 15 000 − 6 000 = 9 000 restants.
+    // Portefeuille : 0,5 BTC à 40 000 + 1 ETH à 10 000 = 30 000.
+    // Prix de revient : 9 000 × 5 000 / 30 000 = 1 500.
+    close(chain.cessions[1].portfolioValueUsd, 30_000, 1e-6);
+    close(chain.cessions[1].costBasisUsd, 1_500, 1e-6);
+    close(chain.finalAcquisitionCost, 7_500, 1e-6);
+  });
+
+  it("ne cède pas plus que ce qui est détenu", () => {
+    const chain = computeCessionChain(
+      [
+        { timestamp: day(0), asset: "BTC", qtyDelta: 1, valueUsd: 10_000, isTaxableSell: false, source: "trade" },
+        { timestamp: day(10), asset: "BTC", qtyDelta: -5, valueUsd: 40_000, isTaxableSell: true, source: "trade" },
+      ],
+      priceAt
+    );
+    close(chain.cessions[0].quantity, 1, 1e-9);
+  });
+
+  it("ignore une cession sur un actif jamais détenu", () => {
+    const chain = computeCessionChain(
+      [{ timestamp: day(0), asset: "DOGE", qtyDelta: -100, valueUsd: 500, isTaxableSell: true, source: "trade" }],
+      priceAt
+    );
+    assert.equal(chain.cessions.length, 0);
+    assert.equal(chain.finalAcquisitionCost, 0);
   });
 });

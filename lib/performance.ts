@@ -553,3 +553,58 @@ export function attribution(positions: PositionResult[]): AttributionReport {
 
   return { rows, totalPnlUsd, totalCostBasisUsd, totalValueUsd };
 }
+
+/* ─── Corrélations ─────────────────────────────────────────────── */
+
+export type CorrelationMatrix = {
+  keys: string[];
+  /** `values[i][j]` = corrélation entre `keys[i]` et `keys[j]`. */
+  values: number[][];
+  /** Moyenne des corrélations deux à deux, hors diagonale. */
+  averagePairwise: number;
+  /** Nombre d'observations réellement communes à toutes les séries. */
+  observations: number;
+};
+
+/**
+ * Matrice de corrélation entre séries de rendements.
+ *
+ * La plupart des portefeuilles crypto affichent des corrélations proches de
+ * 0,9 : détenir dix jetons qui montent et descendent ensemble n'est pas de la
+ * diversification, c'est une seule position en dix exemplaires. La moyenne
+ * hors diagonale résume cette réalité en un chiffre.
+ *
+ * Les séries sont alignées sur leur longueur commune, en conservant les
+ * observations les plus récentes — un actif détenu depuis peu ne doit pas
+ * tronquer l'historique des autres au-delà du nécessaire.
+ */
+export function correlationMatrix(returnsByKey: Record<string, number[]>): CorrelationMatrix {
+  const keys = Object.keys(returnsByKey).filter((key) => returnsByKey[key].length >= 2);
+
+  if (keys.length === 0) {
+    return { keys: [], values: [], averagePairwise: 0, observations: 0 };
+  }
+
+  const observations = Math.min(...keys.map((key) => returnsByKey[key].length));
+  const aligned = keys.map((key) => returnsByKey[key].slice(-observations));
+
+  const values = aligned.map((rowSeries) =>
+    aligned.map((columnSeries) => correlation(rowSeries, columnSeries))
+  );
+
+  let sum = 0;
+  let pairs = 0;
+  for (let row = 0; row < keys.length; row += 1) {
+    for (let column = row + 1; column < keys.length; column += 1) {
+      sum += values[row][column];
+      pairs += 1;
+    }
+  }
+
+  return {
+    keys,
+    values,
+    averagePairwise: pairs > 0 ? sum / pairs : 0,
+    observations,
+  };
+}
