@@ -46,24 +46,13 @@ import { useAction, useMutation } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
 import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
+import { PROVIDER_ICONS } from "@/lib/provider-icons"
 import { toast, withToast } from "@/lib/toast"
 import type { Id } from "@/convex/_generated/dataModel"
 
 // Types pour les données
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
-const PROVIDER_ICONS: Record<string, string> = {
-  binance: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/270.png",
-  kraken: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/24.png",
-  kucoin: "https://s2.coinmarketcap.com/static/img/exchanges/64x64/311.png",
-  ethereum: "https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png",
-  bitcoin: "https://s2.coinmarketcap.com/static/img/coins/64x64/1.png",
-  arbitrum: "https://s2.coinmarketcap.com/static/img/coins/64x64/11841.png",
-  solana: "https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png",
-  kaspa: "https://s2.coinmarketcap.com/static/img/coins/64x64/20396.png",
-  tao: "https://s2.coinmarketcap.com/static/img/coins/64x64/22974.png",
-  bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
-}
 
 const PROVIDER_NAMES: Record<string, string> = {
   binance: "Binance",
