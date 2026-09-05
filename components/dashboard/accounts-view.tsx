@@ -737,7 +737,7 @@ function CopyableAddress({ address }: { address: string }) {
     >
       <span className="truncate">{address}</span>
       {copied ? (
-        <Check className="w-3 h-3 text-emerald-500 shrink-0" />
+        <Check className="w-3 h-3 text-positive shrink-0" />
       ) : (
         <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
       )}
@@ -766,7 +766,7 @@ function FilterChip({ label, active, onClick }: { label: string; active?: boolea
 function StatusBadge({ status, showText }: { status: AccountStatus, showText?: boolean }) {
   if (status === 'synced') {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+      <div className="num flex items-center gap-1.5 border border-positive/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-positive">
         <Check className="w-3.5 h-3.5" />
         {showText && <span className="text-[12px] font-medium">Synchronisé</span>}
       </div>
@@ -774,7 +774,7 @@ function StatusBadge({ status, showText }: { status: AccountStatus, showText?: b
   }
   if (status === 'syncing') {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
+      <div className="num flex items-center gap-1.5 border border-chart-4/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-chart-4">
         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
         {showText && <span className="text-[12px] font-medium">Synchronisation…</span>}
       </div>

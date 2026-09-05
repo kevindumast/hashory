@@ -534,7 +534,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle>Connecter une plateforme</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Connecter une plateforme</DialogTitle>
           <DialogDescription className="text-xs">
             Saisissez les identifiants pour activer la synchronisation.
           </DialogDescription>
@@ -542,11 +542,11 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
         {/* Rassurance sécurité */}
         {!provider.fileImport && (
-          <div className="flex items-start gap-2.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
-            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+          <div className="flex items-start gap-2.5 border-y border-border/60 py-2.5 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-positive" />
             <span className="leading-snug">
-              Accès <span className="font-semibold">lecture seule</span> — aucun ordre ne peut être passé.
-              Vos clés sont chiffrées immédiatement côté serveur.
+              Accès <span className="text-positive">lecture seule</span> — aucun ordre ne peut être
+              passé. Vos clés sont chiffrées immédiatement côté serveur.
             </span>
           </div>
         )}
@@ -554,7 +554,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="space-y-1.5">
             <Label className="text-sm">Type de connexion</Label>
-            <div className="grid grid-cols-2 gap-1.5 rounded-md bg-muted/50 p-1">
+            <div className="grid grid-cols-2 border border-border/60">
               {(Object.keys(CATEGORY_LABELS) as ProviderCategory[]).map((category) => (
                 <button
                   key={category}
@@ -569,10 +569,10 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                     }
                   }}
                   className={cn(
-                    "h-8 rounded-sm text-sm font-medium transition-colors cursor-pointer",
+                    "num h-9 cursor-pointer text-[11px] uppercase tracking-[0.16em] transition-colors",
                     categoryTab === category
-                      ? "bg-background text-foreground"
-                      : "text-muted-foreground hover:text-foreground"
+                      ? "bg-muted/40 text-foreground"
+                      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
                   )}
                 >
                   {CATEGORY_LABELS[category]}
@@ -693,16 +693,16 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                   </label>
 
                   {csvParsed && !completed && (
-                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                    <div className="space-y-1 border-l-2 border-border py-2.5 pl-3 text-xs">
                       <p className="font-medium text-foreground">Aperçu</p>
                       <p className="text-muted-foreground">{csvParsed.trades.length} achat{csvParsed.trades.length > 1 ? "s" : ""} par carte</p>
                       <p className="text-muted-foreground">{csvParsed.deposits.length} dépôt{csvParsed.deposits.length > 1 ? "s" : ""} fiat</p>
-                      {csvParsed.skipped > 0 && <p className="text-amber-600 dark:text-amber-500">{csvParsed.skipped} ligne{csvParsed.skipped > 1 ? "s" : ""} ignorée{csvParsed.skipped > 1 ? "s" : ""}</p>}
+                      {csvParsed.skipped > 0 && <p className="text-chart-4">{csvParsed.skipped} ligne{csvParsed.skipped > 1 ? "s" : ""} ignorée{csvParsed.skipped > 1 ? "s" : ""}</p>}
                     </div>
                   )}
 
                   {finaryParsed && !completed && (
-                    <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2.5 text-xs space-y-1">
+                    <div className="space-y-1 border-l-2 border-border py-2.5 pl-3 text-xs">
                       <p className="font-medium text-foreground">Aperçu</p>
                       {finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 0 && (
                         <p className="text-muted-foreground">{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length} achat{finaryParsed.trades.filter(t => t.description.toLowerCase() !== "swap").length > 1 ? "s" : ""} crypto</p>
@@ -713,12 +713,12 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                       {finaryParsed.withdrawals.length > 0 && (
                         <p className="text-muted-foreground">{finaryParsed.withdrawals.length} retrait{finaryParsed.withdrawals.length > 1 ? "s" : ""}</p>
                       )}
-                      {finaryParsed.skipped > 0 && <p className="text-amber-600 dark:text-amber-500">{finaryParsed.skipped} ligne{finaryParsed.skipped > 1 ? "s" : ""} ignorée{finaryParsed.skipped > 1 ? "s" : ""}</p>}
+                      {finaryParsed.skipped > 0 && <p className="text-chart-4">{finaryParsed.skipped} ligne{finaryParsed.skipped > 1 ? "s" : ""} ignorée{finaryParsed.skipped > 1 ? "s" : ""}</p>}
                     </div>
                   )}
 
                   {completed && csvImportResult && (
-                    <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-700 dark:text-emerald-400">
+                    <div className="border-l-2 border-positive py-2 pl-3 text-xs text-positive">
                       <p className="font-semibold flex items-center gap-1.5"><Check className="size-3.5" />Import réussi</p>
                       <p>{csvImportResult.tradesInserted} transaction{csvImportResult.tradesInserted > 1 ? "s" : ""} · {csvImportResult.depositsInserted} autre{csvImportResult.depositsInserted > 1 ? "s" : ""} ajouté{csvImportResult.tradesInserted + csvImportResult.depositsInserted > 1 ? "s" : ""}</p>
                     </div>
@@ -779,7 +779,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
           )}
 
           {error ? (
-            <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+            <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive" role="alert">
               {error}
             </div>
           ) : null}
@@ -833,7 +833,7 @@ function ConnectProviderDialogPlaceholder({ open, onOpenChange }: ConnectProvide
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Intégrations indisponibles</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Intégrations indisponibles</DialogTitle>
           <DialogDescription>
             Configurez `NEXT_PUBLIC_CONVEX_URL` et déployez Convex pour activer la connexion des plateformes dans
             Hashory.
