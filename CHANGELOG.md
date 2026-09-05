@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/kevindumast/hashory/compare/hashory-v0.1.5...hashory-v0.1.6) (2026-09-05)
+
+
+### Bug Fixes
+
+* cours manquants dès que le portefeuille compte plusieurs actifs ([aea9c73](https://github.com/kevindumast/hashory/commit/aea9c738c8066cea679ddb56e836ca40fef4a3f3))
+* divergence d'hydratation sur le bouton de thème ([e3456b3](https://github.com/kevindumast/hashory/commit/e3456b307a046c5f1e4d6bdfdfd66a3e226bdc5a))
+
 ## [0.1.5](https://github.com/kevindumast/hashory/compare/hashory-v0.1.4...hashory-v0.1.5) (2026-09-05)
 
 
