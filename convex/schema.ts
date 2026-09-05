@@ -114,6 +114,12 @@ export default defineSchema({
     lastSyncedAt: v.optional(v.number()),
     syncStatus: v.optional(v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error"))),
     accountCreatedAt: v.optional(v.number()),
+    /**
+     * Synchronisation automatique. Absent ou vrai = active : les comptes
+     * existants ne changent pas de comportement. Mise à faux pour un compte
+     * dormant, dont on veut garder l'historique sans plus l'interroger.
+     */
+    syncEnabled: v.optional(v.boolean()),
   })
     .index("by_user", ["clerkUserId"])
     .index("by_user_provider", ["clerkUserId", "provider"]),

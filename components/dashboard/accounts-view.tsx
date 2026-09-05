@@ -28,6 +28,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
+import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
@@ -112,6 +113,7 @@ export function AccountsView() {
   const syncTaoWallet = useAction(api.tao.syncTaoWallet)
   const purgeAllData = useMutation(api.integrations.purgeAllData)
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
+  const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -142,12 +144,30 @@ export function AccountsView() {
         subAccountsCount: 1,
         addressOrId: integration.publicAddress || integration.displayName || integration.provider,
         transactionCount: integrationTransactions.length,
+        syncEnabled: integration.syncEnabled,
         lastSync,
         status,
         accountCreatedAt,
       }
     })
   }, [integrations, transactions])
+
+  const handleToggleSync = React.useCallback(
+    async (accountId: Id<"integrations">, enabled: boolean, label: string) => {
+      if (!isConvexConfigured) {
+        toast.error("Convex n'est pas configuré, l'action est indisponible.")
+        return
+      }
+      await withToast(() => setSyncEnabled({ integrationId: accountId, enabled }), {
+        loading: enabled ? `Réactivation de ${label}…` : `Mise en pause de ${label}…`,
+        success: enabled
+          ? `${label} sera de nouveau synchronisé automatiquement`
+          : `${label} ne sera plus synchronisé — son historique est conservé`,
+      })
+      handleRefresh()
+    },
+    [setSyncEnabled, handleRefresh]
+  )
 
   const handleSyncAccount = React.useCallback(async (accountId: Id<"integrations">, provider?: string) => {
     if (!isConvexConfigured) {
@@ -573,8 +593,31 @@ export function AccountsView() {
                     {/* Status & Actions */}
                     <div className="flex items-center justify-end gap-3">
                       <div className="flex items-center gap-2.5">
-                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">{account.lastSync}</span>
-                        <StatusBadge status={account.status} showText />
+                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">
+                          {account.syncEnabled === false ? "En pause" : account.lastSync}
+                        </span>
+                        {account.syncEnabled === false ? (
+                          <span className="num border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Non synchronisé
+                          </span>
+                        ) : (
+                          <StatusBadge status={account.status} showText />
+                        )}
+                        {/* Les imports de fichiers n'ont pas d'API à interroger. */}
+                        {account.type === "API" && (
+                          <Switch
+                            checked={account.syncEnabled !== false}
+                            onCheckedChange={(checked) =>
+                              void handleToggleSync(
+                                account.id as Id<"integrations">,
+                                checked,
+                                account.name
+                              )
+                            }
+                            aria-label={`Synchronisation automatique de ${account.name}`}
+                            className="cursor-pointer"
+                          />
+                        )}
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

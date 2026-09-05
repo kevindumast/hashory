@@ -17,6 +17,8 @@ export type IntegrationRecord = {
   lastSyncedAt?: number | null;
   syncStatus: "idle" | "syncing" | "synced" | "error";
   accountCreatedAt?: number | null;
+  /** Synchronisation automatique active. Vrai par défaut. */
+  syncEnabled: boolean;
   publicAddress?: string | null;
 };
 

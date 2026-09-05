@@ -106,6 +106,9 @@ export function useAutoSync() {
     }
 
     const stale = integrations.filter((integration) => {
+      // Compte volontairement mis en pause : son historique reste exploité,
+      // mais on cesse d'interroger son API.
+      if (integration.syncEnabled === false) return false;
       if (FILE_IMPORT_PROVIDERS.has(integration.provider)) return false;
       // Une synchronisation déjà en cours ne doit pas être doublée.
       if (integration.syncStatus === "syncing") return false;
