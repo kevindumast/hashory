@@ -428,7 +428,7 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle>Importer des exports KuCoin</DialogTitle>
+          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Importer des exports KuCoin</DialogTitle>
           <DialogDescription className="text-xs">
             KuCoin → Orders → Order Records → Export → <span className="font-medium text-foreground">choisir CSV</span>
           </DialogDescription>
@@ -448,19 +448,19 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
                   onDragLeave={() => setDragOver(null)}
                   onDrop={(e) => handleDrop(e, type)}
                   className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
-                    slot ? "border-emerald-500/40 bg-emerald-500/5"
+                    slot ? "border-positive/50 bg-positive/5"
                       : isOver ? "border-primary bg-primary/5"
                       : error ? "border-destructive/40 bg-destructive/5"
                       : "border-border/60 bg-muted/20 hover:border-border hover:bg-muted/30"
                   }`}
                 >
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                    {slot ? <FileText className="size-4 text-emerald-600 dark:text-emerald-400" /> : <Upload className="size-4 text-muted-foreground" />}
+                    {slot ? <FileText className="size-4 text-positive" /> : <Upload className="size-4 text-muted-foreground" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{label}<span className="text-muted-foreground font-normal">.csv</span></p>
                     {slot ? (
-                      <p className="text-xs text-emerald-600 dark:text-emerald-400">
+                      <p className="text-xs text-positive">
                         {slotHint(type, { spotTrades: parsed.spotTrades, converts: parsed.converts, deposits: parsed.deposits, withdrawals: parsed.withdrawals, transfers: parsed.transfers, skipped: slot.skipped })}
                         {slot.skipped > 0 ? ` · ${slot.skipped} ignorée${slot.skipped > 1 ? "s" : ""}` : ""}
                       </p>
@@ -483,18 +483,18 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
         </div>
 
         {completed && importResult && (
-          <div className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm space-y-1">
-            <p className="font-medium text-emerald-700 dark:text-emerald-400 flex items-center gap-2"><Check className="size-4" /> Import réussi</p>
-            {importResult.spotInserted > 0 && <p className="text-emerald-700 dark:text-emerald-400 text-xs">{importResult.spotInserted} spot trade{importResult.spotInserted > 1 ? "s" : ""}</p>}
-            {importResult.convertsInserted > 0 && <p className="text-emerald-700 dark:text-emerald-400 text-xs">{importResult.convertsInserted} convert{importResult.convertsInserted > 1 ? "s" : ""}</p>}
-            {importResult.depositsInserted > 0 && <p className="text-emerald-700 dark:text-emerald-400 text-xs">{importResult.depositsInserted} dépôt{importResult.depositsInserted > 1 ? "s" : ""}</p>}
-            {importResult.withdrawalsInserted > 0 && <p className="text-emerald-700 dark:text-emerald-400 text-xs">{importResult.withdrawalsInserted} retrait{importResult.withdrawalsInserted > 1 ? "s" : ""}</p>}
-            {importResult.transfersInserted > 0 && <p className="text-emerald-700 dark:text-emerald-400 text-xs">{importResult.transfersInserted} transfert{importResult.transfersInserted > 1 ? "s" : ""} entre comptes</p>}
+          <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
+            <p className="font-medium text-positive flex items-center gap-2"><Check className="size-4" /> Import réussi</p>
+            {importResult.spotInserted > 0 && <p className="text-positive text-xs">{importResult.spotInserted} spot trade{importResult.spotInserted > 1 ? "s" : ""}</p>}
+            {importResult.convertsInserted > 0 && <p className="text-positive text-xs">{importResult.convertsInserted} convert{importResult.convertsInserted > 1 ? "s" : ""}</p>}
+            {importResult.depositsInserted > 0 && <p className="text-positive text-xs">{importResult.depositsInserted} dépôt{importResult.depositsInserted > 1 ? "s" : ""}</p>}
+            {importResult.withdrawalsInserted > 0 && <p className="text-positive text-xs">{importResult.withdrawalsInserted} retrait{importResult.withdrawalsInserted > 1 ? "s" : ""}</p>}
+            {importResult.transfersInserted > 0 && <p className="text-positive text-xs">{importResult.transfersInserted} transfert{importResult.transfersInserted > 1 ? "s" : ""} entre comptes</p>}
           </div>
         )}
 
         {Object.values(errors).some((e) => e) && !completed && (
-          <div className="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive flex items-start gap-2">
+          <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive flex items-start gap-2">
             <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
             {Object.values(errors).find((e) => e)}
           </div>
