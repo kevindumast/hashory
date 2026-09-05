@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
+import { computeCostBasis } from "@/lib/cost-basis";
 
 const DATASET_SPOT_TRADES = "spot_trades";
 
@@ -283,45 +284,6 @@ export const USD_STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD",
  * Calcule le prix d'achat moyen pondéré (AVCO) et le PnL réalisé.
  * Identique à la méthode "Prix garanti" de Binance.
  */
-function computeAvco(sortedEvents: TokenTimelineEvent[], baseSymbol: string): {
-  avgCostBasis: number;
-  realizedPnlAvco: number;
-} {
-  let avgCost = 0;
-  let holdingQty = 0;
-  let realizedPnl = 0;
-  const upperSymbol = baseSymbol.toUpperCase();
-
-  for (const event of sortedEvents) {
-    // Fee paid in the base asset reduces the effective quantity
-    const feeInBase =
-      event.fee && event.feeAsset?.toUpperCase() === upperSymbol
-        ? event.fee
-        : 0;
-
-    if (event.type === "BUY" && event.valueUsd) {
-      const effectiveQty = event.quantity - feeInBase;
-      const newQty = holdingQty + effectiveQty;
-      avgCost = newQty > 0
-        ? (holdingQty * avgCost + event.valueUsd) / newQty
-        : 0;
-      holdingQty = newQty;
-    } else if (event.type === "SELL") {
-      const saleProceeds = event.valueUsd ?? event.quantity * (event.price ?? avgCost);
-      const costOfSold = event.quantity * avgCost;
-      realizedPnl += saleProceeds - costOfSold;
-      holdingQty = Math.max(0, holdingQty - event.quantity - feeInBase);
-    } else if (event.type === "DEPOSIT") {
-      // Dépôt externe : augmente la quantité sans changer le coût moyen
-      holdingQty += event.quantity;
-    } else if (event.type === "WITHDRAWAL") {
-      holdingQty = Math.max(0, holdingQty - event.quantity);
-    }
-  }
-
-  return { avgCostBasis: avgCost, realizedPnlAvco: realizedPnl };
-}
-
 function extractBaseAsset(symbol: string) {
   const upper = symbol.toUpperCase();
   for (const quote of QUOTE_ASSETS) {
@@ -936,7 +898,7 @@ export function useDashboardMetrics(refreshToken: number) {
         const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
 
         // AVCO : prix d'achat moyen pondéré (même méthode que Binance "Prix garanti")
-        const { avgCostBasis, realizedPnlAvco } = computeAvco(sortedEvents, entry.symbol);
+        const { avgCostBasis, realizedPnlAvco } = computeCostBasis(sortedEvents, entry.symbol);
 
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;

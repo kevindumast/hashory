@@ -22,6 +22,7 @@ import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
 import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
 import { PROVIDER_ICONS } from "@/lib/provider-icons";
 import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
+import { useFxRates } from "@/hooks/useFxRates";
 
 type ChartFilter =
   | { type: "all" }
@@ -49,6 +50,13 @@ const PLATFORM_COLORS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ];
+
+const eurFormatter = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 function formatAxisValue(v: number): string {
   const abs = Math.abs(v);
@@ -127,7 +135,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices } = useCurrentPrices(portfolioTokens);
+  const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices, refreshSymbol, refreshingSymbols } = useCurrentPrices(portfolioTokens);
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
 
@@ -350,6 +358,21 @@ export function DashboardNewLayout({
   }, [portfolioTokens, chartFilter]);
 
   const [chartMode, setChartMode] = useState<"total" | "platform">("total");
+  const [displayCurrency, setDisplayCurrency] = useState<"USD" | "EUR">("USD");
+  const { rateAt: fxRateAt } = useFxRates();
+
+  /**
+   * Montant dans la devise choisie.
+   *
+   * La conversion applique le taux du jour, y compris aux montants investis
+   * par le passé : c'est une lecture en euros de valeurs tenues en dollars,
+   * pas un recalcul du coût historique dans cette devise.
+   */
+  const money = (value: number): string => {
+    const rate = displayCurrency === "EUR" ? fxRateAt(Date.now())?.eurPerUsd : null;
+    if (!rate) return currencyFormatter.format(value);
+    return eurFormatter.format(value * rate);
+  };
 
   const chartDays = useMemo(
     () => filteredHoldings.map((point) => point.timestamp),
@@ -847,6 +870,28 @@ export function DashboardNewLayout({
           </div>
           <div className="flex items-center gap-3">
             {pricesError && <span className="text-[10px] text-negative">{pricesError}</span>}
+            <div className="flex border border-border/60" role="group" aria-label="Devise d'affichage">
+              {(["USD", "EUR"] as const).map((currency) => (
+                <button
+                  key={currency}
+                  type="button"
+                  onClick={() => setDisplayCurrency(currency)}
+                  aria-pressed={displayCurrency === currency}
+                  title={
+                    currency === "EUR"
+                      ? "Converti au taux du jour publié par la BCE"
+                      : "Devise de référence des calculs"
+                  }
+                  className={`num cursor-pointer px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] transition-colors ${
+                    displayCurrency === currency
+                      ? "bg-muted/40 text-foreground"
+                      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                  }`}
+                >
+                  {currency}
+                </button>
+              ))}
+            </div>
             <button
               onClick={refreshPrices}
               disabled={pricesLoading}
@@ -1026,10 +1071,30 @@ export function DashboardNewLayout({
                                 : "—"}
                             </td>
                             <td className="num px-4 py-3 text-right text-muted-foreground">
-                              {token.avgCostBasis > 0 ? currencyFormatter.format(token.avgCostBasis) : "—"}
+                              {token.avgCostBasis > 0 ? money(token.avgCostBasis) : "—"}
                             </td>
                             <td className="num px-4 py-3 text-right font-bold text-primary">
-                              {currentPrice ? currencyFormatter.format(currentPrice) : "—"}
+                              {/* Recharger une seule ligne : une requête isolée
+                                  aboutit là où un lot de plusieurs dizaines de
+                                  paires peut être écourté par la place de marché. */}
+                              <span className="inline-flex items-center justify-end gap-1.5">
+                                {currentPrice ? money(currentPrice) : "—"}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void refreshSymbol(token.symbol);
+                                  }}
+                                  disabled={refreshingSymbols.has(token.symbol)}
+                                  aria-label={`Recharger le cours de ${token.symbol}`}
+                                  title={`Recharger le cours de ${token.symbol}`}
+                                  className="cursor-pointer text-muted-foreground/40 transition-colors hover:text-foreground disabled:cursor-wait"
+                                >
+                                  <RefreshCw
+                                    className={`size-3 ${refreshingSymbols.has(token.symbol) ? "animate-spin" : ""}`}
+                                  />
+                                </button>
+                              </span>
                             </td>
                             <td className="num px-4 py-3 text-right">
                               {currentPrice && token.avgCostBasis > 0 ? (
@@ -1047,7 +1112,7 @@ export function DashboardNewLayout({
                               )}
                             </td>
                             <td className="num px-4 py-3 text-right font-bold text-foreground">
-                              {currentValue !== null ? currencyFormatter.format(currentValue) : "—"}
+                              {currentValue !== null ? money(currentValue) : "—"}
                             </td>
                             <td className="px-4 py-3 text-right">
                               {currentValue !== null && totalTokensValue > 0 ? (
@@ -1068,18 +1133,18 @@ export function DashboardNewLayout({
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
-                                ? `${realized >= 0 ? "+" : ""}${currencyFormatter.format(realized)}`
+                                ? `${realized >= 0 ? "+" : ""}${money(realized)}`
                                 : <span className="text-muted-foreground/70">—</span>}
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
-                                ? `${unrealized >= 0 ? "+" : ""}${currencyFormatter.format(unrealized)}`
+                                ? `${unrealized >= 0 ? "+" : ""}${money(unrealized)}`
                                 : "—"}
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
-                                ? `${totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(totalPnl)}`
-                                : currencyFormatter.format(realized)}
+                                ? `${totalPnl >= 0 ? "+" : ""}${money(totalPnl)}`
+                                : money(realized)}
                             </td>
                           </tr>
                           {isExpanded && (
@@ -1348,12 +1413,12 @@ export function DashboardNewLayout({
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground">{s.tokenCount}</td>
                       <td className="num px-4 py-3 text-right text-muted-foreground">
-                        {s.costBasisUsd > 0 ? currencyFormatter.format(s.costBasisUsd) : "—"}
+                        {s.costBasisUsd > 0 ? money(s.costBasisUsd) : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right font-bold text-foreground">
                         {hasCurrentPrices && s.currentValueUsd > 0 ? (
                           <span className="inline-flex items-center gap-1">
-                            {currencyFormatter.format(s.currentValueUsd)}
+                            {money(s.currentValueUsd)}
                             {!s.hasAllPrices && (
                               <span title="Certains tokens n'ont pas de prix courant disponible" className="text-muted-foreground/60">*</span>
                             )}
@@ -1379,17 +1444,17 @@ export function DashboardNewLayout({
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                         {s.realizedPnl !== 0
-                          ? `${s.realizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.realizedPnl)}`
+                          ? `${s.realizedPnl >= 0 ? "+" : ""}${money(s.realizedPnl)}`
                           : "—"}
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.unrealizedPnl !== null
-                          ? `${s.unrealizedPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.unrealizedPnl)}`
+                          ? `${s.unrealizedPnl >= 0 ? "+" : ""}${money(s.unrealizedPnl)}`
                           : "—"}
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.totalPnl !== null
-                          ? `${s.totalPnl >= 0 ? "+" : ""}${currencyFormatter.format(s.totalPnl)}`
+                          ? `${s.totalPnl >= 0 ? "+" : ""}${money(s.totalPnl)}`
                           : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground text-[11px]">
@@ -1442,24 +1507,24 @@ export function DashboardNewLayout({
                                         {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
-                                        {t.costBasis > 0 ? currencyFormatter.format(t.costBasis) : "—"}
+                                        {t.costBasis > 0 ? money(t.costBasis) : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.qty > 0 && t.costBasis > 0
-                                          ? currencyFormatter.format(t.costBasis / t.qty)
+                                          ? money(t.costBasis / t.qty)
                                           : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
-                                        {t.currentValue !== null ? currencyFormatter.format(t.currentValue) : "—"}
+                                        {t.currentValue !== null ? money(t.currentValue) : "—"}
                                       </td>
                                       <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                                         {t.realized !== 0
-                                          ? `${t.realized >= 0 ? "+" : ""}${currencyFormatter.format(t.realized)}`
+                                          ? `${t.realized >= 0 ? "+" : ""}${money(t.realized)}`
                                           : "—"}
                                       </td>
                                       <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                                         {t.unrealized !== null
-                                          ? `${t.unrealized >= 0 ? "+" : ""}${currencyFormatter.format(t.unrealized)}`
+                                          ? `${t.unrealized >= 0 ? "+" : ""}${money(t.unrealized)}`
                                           : "—"}
                                       </td>
                                     </tr>
