@@ -223,6 +223,12 @@ export function TransactionsView({
       } else if (tx.type === 'withdrawal') {
         fee = tx.fee;
         feeAsset = tx.baseAsset;
+      } else if (tx.type === 'deposit') {
+        // Une entrée aussi peut coûter : virement en euros, achat par carte.
+        // La colonne restait vide faute d'être lue ici, alors même que la
+        // commission figurait dans le relevé de la plateforme.
+        fee = tx.fee ?? undefined;
+        feeAsset = tx.baseAsset;
       }
 
       return {

@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
+import type { SyncJob } from "@/lib/sync-health";
 
 export type IntegrationRecord = {
   _id: Id<"integrations">;
@@ -16,6 +17,10 @@ export type IntegrationRecord = {
   updatedAt: number;
   lastSyncedAt?: number | null;
   syncStatus: "idle" | "syncing" | "synced" | "error";
+  /** Début de la synchronisation en cours. */
+  syncStartedAt?: number | null;
+  /** Étapes planifiées encore suivies — vide hors synchronisation. */
+  syncJobs?: SyncJob[];
   accountCreatedAt?: number | null;
   /** Synchronisation automatique active. Vrai par défaut. */
   syncEnabled: boolean;

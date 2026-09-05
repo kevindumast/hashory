@@ -113,6 +113,23 @@ export default defineSchema({
     updatedAt: v.number(),
     lastSyncedAt: v.optional(v.number()),
     syncStatus: v.optional(v.union(v.literal("idle"), v.literal("syncing"), v.literal("synced"), v.literal("error"))),
+    /**
+     * Début de la synchronisation en cours. `updatedAt` ne pouvait pas jouer
+     * ce rôle : n'importe quelle écriture le déplace, y compris pendant la
+     * synchronisation, ce qui rajeunissait sans cesse une synchronisation
+     * bloquée.
+     */
+    syncStartedAt: v.optional(v.number()),
+    /**
+     * Tâches planifiées par la synchronisation en cours, dans l'ordre où
+     * elles ont été lancées. C'est ce qui permet de répondre à « est-ce
+     * normal que ça tourne encore ? » : leur état vient du planificateur,
+     * pas d'une supposition sur la durée. C'est aussi ce qu'un arrêt annule.
+     *
+     * Stockées en texte : le type d'identifiant des tables système n'est pas
+     * exposé par le schéma applicatif.
+     */
+    syncJobIds: v.optional(v.array(v.string())),
     accountCreatedAt: v.optional(v.number()),
     /**
      * Synchronisation automatique. Absent ou vrai = active : les comptes
@@ -142,6 +159,14 @@ export default defineSchema({
     addressTag: v.optional(v.string()),
     insertTime: v.number(),
     confirmedTime: v.optional(v.number()),
+    /**
+     * Commission prélevée sur l'entrée, dans la devise du dépôt.
+     *
+     * Un retrait en portait déjà une ; un dépôt n'en portait aucune, alors
+     * qu'un virement en euros ou un achat par carte en prélève bel et bien.
+     * Le montant crédité s'en trouvait surévalué d'autant.
+     */
+    fee: v.optional(v.number()),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })

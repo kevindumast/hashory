@@ -271,9 +271,10 @@ async function syncLedgers(
   // obtenu, réunies par un même refid. On les rassemble avant de les
   // convertir en opération, car rien ne garantit qu'elles tombent sur la
   // même page.
+  type SwapLeg = { asset: string; amount: number; fee: number };
   const swapLegs = new Map<
     string,
-    { spend?: { asset: string; amount: number }; receive?: { asset: string; amount: number }; timestamp: number }
+    { spend?: SwapLeg; receive?: SwapLeg; timestamp: number }
   >();
 
   for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -305,6 +306,7 @@ async function syncLedgers(
             status: "CONFIRMED",
             insertTime: timestamp,
             txId: entry.refid,
+            fee: Number(entry.fee) || 0,
             createdAt: timestamp,
           },
         });
@@ -329,10 +331,11 @@ async function syncLedgers(
         const reference = entry.refid ?? ledgerId;
         const leg = swapLegs.get(reference) ?? { timestamp };
         leg.timestamp = Math.max(leg.timestamp, timestamp);
+        const fee = Number(entry.fee) || 0;
         if (entry.type === "spend") {
-          leg.spend = { asset, amount: Math.abs(amount) };
+          leg.spend = { asset, amount: Math.abs(amount), fee };
         } else {
-          leg.receive = { asset, amount: Math.abs(amount) };
+          leg.receive = { asset, amount: Math.abs(amount), fee };
         }
         swapLegs.set(reference, leg);
       }
@@ -368,6 +371,7 @@ async function syncLedgers(
     const quote = toIsQuote ? to.asset : from.asset;
     const quantity = toIsQuote ? from.amount : to.amount;
     const quoteQuantity = toIsQuote ? to.amount : from.amount;
+    const feeLeg = [from, to].filter((candidate) => candidate.fee > 0).sort((a, b) => b.fee - a.fee)[0];
 
     return [
       {
@@ -384,6 +388,12 @@ async function syncLedgers(
         fromAmount: from.amount,
         toAsset: to.asset,
         toAmount: to.amount,
+        // Kraken ne prélève qu'une commission par conversion, sur l'une des
+        // deux écritures. Elle est reportée avec l'actif dans lequel elle a
+        // été prise : additionner deux actifs différents n'aurait aucun sens,
+        // aussi la plus élevée l'emporte dans le cas — non observé — où les
+        // deux en porteraient une.
+        ...(feeLeg ? { fee: feeLeg.fee, feeAsset: feeLeg.asset } : {}),
       },
     ];
   });
@@ -428,6 +438,14 @@ export const syncAccount = action({
     });
 
     try {
+      // Relecture complète à chaque synchronisation manuelle. Le compte tient
+      // sur quelques pages, et c'est le seul moyen pour qu'une correction de
+      // lecture — les commissions, par exemple — rattrape les opérations déjà
+      // enregistrées plutôt que de ne valoir que pour les suivantes.
+      await ctx.runMutation(internal.integrations.clearSyncStates, {
+        integrationId: args.integrationId,
+      });
+
       const pairs = await fetchPairMap();
 
       const trades = await syncTrades(ctx, args.integrationId, apiKey, apiSecret, pairs);
