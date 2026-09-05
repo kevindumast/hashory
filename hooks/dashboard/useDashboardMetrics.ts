@@ -795,16 +795,28 @@ export function useDashboardMetrics(refreshToken: number) {
   }, [depositList, fiatList, portfolioTradesList, withdrawalList]);
 
   const portfolioTokens = useMemo<PortfolioToken[]>(() => {
-    const balanceTotals = new Map<string, number>();
+    // Le solde publié par une plateforme fait autorité pour SA part du stock,
+    // et pour elle seule. On indexe donc par (intégration, actif) au lieu de
+    // collapser sur le seul symbole : un même actif peut être détenu sur
+    // plusieurs sources, et la table `balances` a une ligne par couple.
+    const balanceByIntegrationAsset = new Map<string, number>();
+    const integrationsReportingBalances = new Set<string>();
+    const balanceSymbols = new Set<string>();
+
     balanceList.forEach((balance) => {
       const symbol = balance.asset.toUpperCase();
+      const integrationId = String(balance.integrationId);
       const total = balance.totalPosition ?? balance.free ?? "0";
-      balanceTotals.set(symbol, parseAmount(total));
+      balanceByIntegrationAsset.set(`${integrationId}:${symbol}`, parseAmount(total));
+      integrationsReportingBalances.add(integrationId);
+      balanceSymbols.add(symbol);
     });
 
     const map = new Map<string, {
       symbol: string;
       currentQuantity: number;
+      /** Quantité dérivée des événements, ventilée par intégration. */
+      quantityByIntegration: Map<string, number>;
       buyQuantity: number;
       sellQuantity: number;
       depositQuantity: number;
@@ -825,6 +837,7 @@ export function useDashboardMetrics(refreshToken: number) {
         map.set(upper, {
           symbol: upper,
           currentQuantity: 0,
+          quantityByIntegration: new Map<string, number>(),
           buyQuantity: 0,
           sellQuantity: 0,
           depositQuantity: 0,
@@ -842,7 +855,20 @@ export function useDashboardMetrics(refreshToken: number) {
       return map.get(upper)!;
     };
 
-    balanceTotals.forEach((_, symbol) => {
+    type TokenEntry = ReturnType<typeof ensureEntry>;
+
+    /** Applique un mouvement de stock, au global et pour son intégration. */
+    const addQuantity = (
+      entry: TokenEntry,
+      integrationId: Id<"integrations">,
+      delta: number
+    ) => {
+      entry.currentQuantity += delta;
+      const key = String(integrationId);
+      entry.quantityByIntegration.set(key, (entry.quantityByIntegration.get(key) ?? 0) + delta);
+    };
+
+    balanceSymbols.forEach((symbol) => {
       ensureEntry(symbol);
     });
 
@@ -864,7 +890,7 @@ export function useDashboardMetrics(refreshToken: number) {
         if (trade.fromAsset && trade.fromAmount !== undefined) {
           const fromEntry = ensureEntry(trade.fromAsset);
           fromEntry.convertQuantity -= trade.fromAmount;
-          fromEntry.currentQuantity -= trade.fromAmount;
+          addQuantity(fromEntry, trade.integrationId, -trade.fromAmount);
           fromEntry.sellQuantity += trade.fromAmount;
           fromEntry.sellValueUsd += convertValueUsd;
           fromEntry.realizedUsd += convertValueUsd;
@@ -890,7 +916,7 @@ export function useDashboardMetrics(refreshToken: number) {
         if (trade.toAsset && trade.toAmount !== undefined) {
           const toEntry = ensureEntry(trade.toAsset);
           toEntry.convertQuantity += trade.toAmount;
-          toEntry.currentQuantity += trade.toAmount;
+          addQuantity(toEntry, trade.integrationId, trade.toAmount);
           toEntry.buyQuantity += trade.toAmount;
           toEntry.buyValueUsd += convertValueUsd;   // ← bug corrigé
           toEntry.investedUsd += convertValueUsd;   // ← bug corrigé
@@ -948,15 +974,14 @@ export function useDashboardMetrics(refreshToken: number) {
           entry.buyQuantity += trade.quantity;
           entry.buyValueUsd += valueUsd;
           entry.investedUsd += valueUsd;
-          entry.currentQuantity += trade.quantity - feeInBase;
+          addQuantity(entry, trade.integrationId, trade.quantity - feeInBase);
         } else {
           entry.sellQuantity += trade.quantity;
           entry.sellValueUsd += valueUsd;
           entry.realizedUsd += valueUsd;
-          entry.currentQuantity -= trade.quantity;
           // For SELL, fee is usually in quote asset, but if paid in base asset
           // it means additional base was deducted
-          entry.currentQuantity -= feeInBase;
+          addQuantity(entry, trade.integrationId, -(trade.quantity + feeInBase));
         }
       }
     });
@@ -973,7 +998,7 @@ export function useDashboardMetrics(refreshToken: number) {
         integrationId: deposit.integrationId,
       });
       entry.depositQuantity += deposit.amount;
-      entry.currentQuantity += deposit.amount;
+      addQuantity(entry, deposit.integrationId, deposit.amount);
       entry.lastActivityAt = Math.max(entry.lastActivityAt, deposit.insertTime);
     });
 
@@ -989,7 +1014,7 @@ export function useDashboardMetrics(refreshToken: number) {
         integrationId: withdrawal.integrationId,
       });
       entry.withdrawalQuantity += withdrawal.amount;
-      entry.currentQuantity -= withdrawal.amount;
+      addQuantity(entry, withdrawal.integrationId, -withdrawal.amount);
       entry.lastActivityAt = Math.max(entry.lastActivityAt, withdrawal.applyTime);
     });
 
@@ -1038,6 +1063,7 @@ export function useDashboardMetrics(refreshToken: number) {
         return {
           symbol: entry.symbol,
           currentQuantity: entry.currentQuantity,
+          quantityByIntegration: entry.quantityByIntegration,
           buyQuantity: entry.buyQuantity,
           sellQuantity: entry.sellQuantity,
           depositQuantity: entry.depositQuantity,
@@ -1057,16 +1083,35 @@ export function useDashboardMetrics(refreshToken: number) {
           events: sortedEvents,
         };
       })
-      .map((entry) => {
-        // Toujours faire confiance à la balance Binance pour le stock réel.
-        // Les transactions servent au calcul du PRU et du PnL, mais il peut
-        // manquer des opérations (dust conversion, staking, distributions…)
-        // donc la balance API est la source de vérité pour la quantité détenue.
-        const actualQuantity = balanceTotals.get(entry.symbol);
-        if (actualQuantity !== undefined) {
-          return { ...entry, currentQuantity: actualQuantity };
-        }
-        return entry;
+      .map(({ quantityByIntegration, ...entry }) => {
+        // Réconciliation du stock, source par source.
+        //
+        // Une plateforme qui publie ses soldes fait autorité pour SA part du
+        // stock : les transactions servent au PRU et au PnL, mais il peut
+        // manquer des opérations (poussière, staking, distributions…).
+        //
+        // En revanche elle ne dit rien des autres sources. Auparavant le solde
+        // Binance écrasait la quantité globale : un actif détenu à la fois sur
+        // Binance et sur un wallet on-chain n'affichait que la part Binance.
+        // Seul Binance alimente aujourd'hui la table `balances`, donc tout le
+        // reste du portefeuille disparaissait du compte.
+        let reconciled = 0;
+
+        quantityByIntegration.forEach((quantity, integrationId) => {
+          // Les sources sans solde publié (wallets on-chain, imports CSV)
+          // restent calculées à partir de leurs événements.
+          if (!integrationsReportingBalances.has(integrationId)) {
+            reconciled += quantity;
+          }
+        });
+
+        integrationsReportingBalances.forEach((integrationId) => {
+          // Absent de la liste des soldes = plus détenu sur cette plateforme :
+          // `upsertBatch` purge les actifs que l'API ne renvoie plus.
+          reconciled += balanceByIntegrationAsset.get(`${integrationId}:${entry.symbol}`) ?? 0;
+        });
+
+        return { ...entry, currentQuantity: reconciled };
       })
       .sort((a, b) => b.investedUsd - a.investedUsd);
 
