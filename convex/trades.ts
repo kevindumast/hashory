@@ -39,7 +39,16 @@ export const ingestBatch = internalMutation({
         )
         .first();
 
-      if (existing) continue;
+      if (existing) {
+        // Une opération déjà enregistrée n'est pas réécrite — sauf pour
+        // combler une commission absente. Sans cela, un correctif portant
+        // sur les frais ne profiterait qu'aux opérations à venir, et les
+        // anciennes resteraient définitivement incomplètes.
+        if (existing.fee === undefined && trade.fee !== undefined && trade.fee > 0) {
+          await ctx.db.patch(existing._id, { fee: trade.fee, feeAsset: trade.feeAsset });
+        }
+        continue;
+      }
 
       await ctx.db.insert("trades", {
         integrationId: args.integrationId,
