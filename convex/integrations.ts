@@ -2,8 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { v } from "convex/values";
 import { decryptSecret, encryptSecret } from "./utils/encryption";
 import { optionalUserId, requireUserId } from "./auth";
-
-const SUPPORTED_PROVIDERS = ["binance", "kucoin", "kaspa", "ethereum", "solana", "bitcoin", "tao", "bitstack", "finary"];
+import { SUPPORTED_PROVIDERS, WALLET_PROVIDERS } from "../lib/providers";
 
 export const list = query({
   args: {
@@ -24,7 +23,7 @@ export const list = query({
 
     return integrations.map((integration) => {
       let publicAddress: string | null = null;
-      if (["kaspa", "ethereum", "solana", "bitcoin", "tao"].includes(integration.provider)) {
+      if (WALLET_PROVIDERS.has(integration.provider)) {
         try {
           publicAddress = decryptSecret(integration.encryptedCredentials.apiKey);
         } catch {

@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
 import { Reveal } from "@/components/motion";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { usePortfolioAnalytics } from "@/hooks/dashboard/usePortfolioAnalytics";
@@ -13,8 +14,6 @@ import { useCorrelationMatrix } from "@/hooks/dashboard/useCorrelationMatrix";
 import { computeSignals, type SignalSeverity } from "@/lib/signals";
 import { cn } from "@/lib/utils";
 
-/** Sources issues d'un fichier : elles ne se mettent pas à jour seules. */
-const FILE_IMPORT_PROVIDERS = new Set(["bitstack", "finary"]);
 
 const SEVERITY_LABEL: Record<SignalSeverity, string> = {
   critical: "Critique",
