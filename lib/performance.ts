@@ -482,3 +482,74 @@ export function shockImpact(entries: Weighted[], key: string, shock: number): nu
   if (!target) return 0;
   return (Math.max(0, target.valueUsd) * shock) / total;
 }
+
+/* ─── Attribution de performance ───────────────────────────────── */
+
+export type PositionResult = {
+  key: string;
+  /** Prix de revient des quantités encore détenues. */
+  costBasisUsd: number;
+  /** Valeur de marché actuelle de la ligne. */
+  valueUsd: number;
+  /** Résultat déjà encaissé sur cette ligne. */
+  realizedPnlUsd: number;
+};
+
+export type AttributionRow = {
+  key: string;
+  /** Poids de la ligne dans le portefeuille actuel. */
+  weight: number;
+  /** Résultat total de la ligne : latent plus réalisé. */
+  pnlUsd: number;
+  /**
+   * Contribution au rendement du portefeuille : ce que cette seule ligne a
+   * ajouté à la performance d'ensemble.
+   */
+  contribution: number;
+  /** Part du résultat total imputable à cette ligne, positive ou négative. */
+  shareOfResult: number;
+  /** Rendement propre de la ligne, rapporté à son propre prix de revient. */
+  ownReturn: number;
+};
+
+export type AttributionReport = {
+  rows: AttributionRow[];
+  totalPnlUsd: number;
+  totalCostBasisUsd: number;
+  totalValueUsd: number;
+};
+
+/**
+ * Décompose le résultat du portefeuille ligne par ligne.
+ *
+ * L'intérêt n'est pas de classer les positions par gain — c'est de confronter
+ * leur **poids** à leur **contribution**. Une ligne qui pèse 5 % du
+ * portefeuille et produit 60 % du résultat dit une chose ; l'inverse en dit
+ * une autre, plus inconfortable.
+ */
+export function attribution(positions: PositionResult[]): AttributionReport {
+  const totalCostBasisUsd = positions.reduce((sum, entry) => sum + Math.max(0, entry.costBasisUsd), 0);
+  const totalValueUsd = positions.reduce((sum, entry) => sum + Math.max(0, entry.valueUsd), 0);
+
+  const withPnl = positions.map((entry) => ({
+    entry,
+    pnlUsd: entry.valueUsd - entry.costBasisUsd + entry.realizedPnlUsd,
+  }));
+
+  const totalPnlUsd = withPnl.reduce((sum, item) => sum + item.pnlUsd, 0);
+
+  const rows = withPnl
+    .map(({ entry, pnlUsd }) => ({
+      key: entry.key,
+      weight: totalValueUsd > 0 ? Math.max(0, entry.valueUsd) / totalValueUsd : 0,
+      pnlUsd,
+      contribution: totalCostBasisUsd > 0 ? pnlUsd / totalCostBasisUsd : 0,
+      // Le signe se perd si l'on rapporte à un total proche de zéro : on
+      // préfère alors n'attribuer aucune part plutôt qu'un ratio explosif.
+      shareOfResult: Math.abs(totalPnlUsd) > 1e-9 ? pnlUsd / totalPnlUsd : 0,
+      ownReturn: entry.costBasisUsd > 0 ? pnlUsd / entry.costBasisUsd : 0,
+    }))
+    .sort((a, b) => b.pnlUsd - a.pnlUsd);
+
+  return { rows, totalPnlUsd, totalCostBasisUsd, totalValueUsd };
+}

@@ -108,6 +108,7 @@ export function PerformanceClient() {
     venueConcentration,
     stablecoinWeight,
     topAssetShock,
+    attribution,
   } = analytics;
 
   const hasSeries = indexSeries.length >= 2;
@@ -439,10 +440,105 @@ export function PerformanceClient() {
         </div>
       </section>
 
-      {/* ─── 05 · Contrepartie ─── */}
+      {/* ─── 05 · Attribution ─── */}
       <section>
         <Reveal>
-          <SectionLabel index="05">Risque de contrepartie</SectionLabel>
+          <SectionLabel index="05">D&apos;où vient le résultat</SectionLabel>
+        </Reveal>
+
+        <Reveal delay={60}>
+          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            L&apos;intérêt n&apos;est pas le classement des gains, c&apos;est l&apos;écart entre le
+            poids d&apos;une ligne et sa contribution. Une position à 5 % du portefeuille qui
+            produit 60 % du résultat ne dit pas la même chose que l&apos;inverse.
+          </p>
+        </Reveal>
+
+        <Reveal delay={120}>
+          {attribution.rows.length === 0 ? (
+            <p className="mt-6 border-t border-border/60 py-6 text-sm text-muted-foreground">
+              Aucune position valorisée pour le moment.
+            </p>
+          ) : (
+            <div className="mt-6 overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse">
+                <thead>
+                  <tr className="border-y border-border/60">
+                    <th className="num py-3 pr-4 text-left text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Actif
+                    </th>
+                    <th className="num py-3 pr-4 text-right text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Poids
+                    </th>
+                    <th className="num py-3 pr-4 text-right text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Rendement propre
+                    </th>
+                    <th className="num py-3 pr-4 text-right text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Résultat
+                    </th>
+                    <th className="num py-3 text-right text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                      Part du résultat
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attribution.rows.slice(0, 12).map((row) => {
+                    // Une ligne dont la part de résultat dépasse nettement le
+                    // poids porte le portefeuille — ou le plombe.
+                    const isDriver = Math.abs(row.shareOfResult) > row.weight * 1.5;
+                    return (
+                      <tr
+                        key={row.key}
+                        className="border-b border-border/60 transition-colors hover:bg-muted/20"
+                      >
+                        <td className="py-3 pr-4 text-sm text-foreground">
+                          {row.key}
+                          {isDriver && (
+                            <span className="num ml-2 text-[10px] uppercase tracking-[0.16em] text-primary">
+                              moteur
+                            </span>
+                          )}
+                        </td>
+                        <td className="num py-3 pr-4 text-right text-sm text-muted-foreground">
+                          {(row.weight * 100).toFixed(1)} %
+                        </td>
+                        <td
+                          className={cn(
+                            "num py-3 pr-4 text-right text-sm",
+                            row.ownReturn >= 0 ? "text-positive" : "text-negative"
+                          )}
+                        >
+                          {percent(row.ownReturn)}
+                        </td>
+                        <td
+                          className={cn(
+                            "num py-3 pr-4 text-right text-sm",
+                            row.pnlUsd >= 0 ? "text-positive" : "text-negative"
+                          )}
+                        >
+                          {row.pnlUsd.toLocaleString("fr-FR", {
+                            style: "currency",
+                            currency: "USD",
+                            maximumFractionDigits: 0,
+                          })}
+                        </td>
+                        <td className="num py-3 text-right text-sm text-foreground">
+                          {(row.shareOfResult * 100).toFixed(0)} %
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Reveal>
+      </section>
+
+      {/* ─── 06 · Contrepartie ─── */}
+      <section>
+        <Reveal>
+          <SectionLabel index="06">Risque de contrepartie</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>
