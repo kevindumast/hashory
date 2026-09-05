@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8](https://github.com/kevindumast/hashory/compare/hashory-v0.1.7...hashory-v0.1.8) (2026-09-05)
+
+
+### Bug Fixes
+
+* source unique pour les cours, et retour visible sur le rechargement ([d8f2266](https://github.com/kevindumast/hashory/commit/d8f2266216e2eb48b42f04eb6979a9810c97b546))
+* source unique pour les cours, et retour visible sur le rechargement ([3f76630](https://github.com/kevindumast/hashory/commit/3f766302a71f6b3afc5d369eeaa6b261ec0c3f1c))
+
 ## [0.1.7](https://github.com/kevindumast/hashory/compare/hashory-v0.1.6...hashory-v0.1.7) (2026-09-05)
 
 
