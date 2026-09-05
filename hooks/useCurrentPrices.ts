@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { errorMessage, toast } from "@/lib/toast";
 
 /**
  * Paires candidates pour valoriser un actif, par ordre de préférence.
@@ -117,7 +118,10 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
           }
         }
 
-        setCurrentPrices(prices);
+        // Fusion, et non remplacement : un lot partiel — une paire refusée
+        // par la place de marché, par exemple — effacerait sinon des cours
+        // parfaitement valides, dont ceux rechargés ligne par ligne.
+        setCurrentPrices((current) => ({ ...current, ...prices }));
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -168,9 +172,18 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
 
       if (price !== undefined) {
         setCurrentPrices((current) => ({ ...current, [symbol]: price }));
+        toast.success(`${symbol} : ${price.toLocaleString("fr-FR")} $`);
+      } else {
+        // Sans retour visible, un échec était indiscernable d'une absence
+        // d'effet : impossible de savoir si l'actif est inconnu ou si
+        // l'appel n'a pas abouti.
+        toast.error(`Aucun cours trouvé pour ${symbol}`, {
+          description: "Cet actif n'est coté sur aucune des paires interrogées.",
+        });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Impossible de récupérer le cours.");
+      setError(errorMessage(err, "Impossible de récupérer le cours."));
+      toast.error(`Cours de ${symbol} indisponible`, { description: errorMessage(err) });
     } finally {
       setRefreshingSymbols((current) => {
         const next = new Set(current);

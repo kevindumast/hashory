@@ -23,6 +23,7 @@ import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
 import { PROVIDER_ICONS } from "@/lib/provider-icons";
 import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
 import { useFxRates } from "@/hooks/useFxRates";
+import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 
 type ChartFilter =
   | { type: "all" }
@@ -65,7 +66,6 @@ function formatAxisValue(v: number): string {
   if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k $`;
   return `${sign}${Math.round(abs)} $`;
 }
-import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
 import { LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
 
@@ -135,7 +135,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, loading: pricesLoading, error: pricesError, refresh: refreshPrices, refreshSymbol, refreshingSymbols } = useCurrentPrices(portfolioTokens);
+  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols } = useDashboardData();
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
 

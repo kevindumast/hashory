@@ -6,7 +6,6 @@ import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { Reveal } from "@/components/motion";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
-import { useCurrentPrices } from "@/hooks/useCurrentPrices";
 import {
   PFU_RATE,
   capitalShareOfSale,
@@ -38,8 +37,7 @@ export function TaxSimulator() {
   const [mode, setMode] = useState<Mode>("net");
   const [amount, setAmount] = useState<number>(10_000);
 
-  const { portfolioTokens } = useDashboardData();
-  const { currentPrices } = useCurrentPrices(portfolioTokens);
+  const { portfolioTokens, currentPrices } = useDashboardData();
   const report = useQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
 
   const portfolioValue = useMemo(
