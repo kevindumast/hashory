@@ -21,6 +21,9 @@ const money = (value: number) =>
 
 const NET_PRESETS = [1_000, 5_000, 10_000, 25_000];
 
+/** Actifs considérés comme réserve immédiatement mobilisable. */
+const STABLECOINS = new Set(["USDT", "USDC", "BUSD", "USD", "FDUSD", "TUSD", "DAI", "EUR", "EURC"]);
+
 type Mode = "net" | "gross";
 
 /**
@@ -60,6 +63,19 @@ export function TaxSimulator() {
     return mode === "net" ? proceedsForNetTarget(amount, state) : taxOnSale(amount, state);
   }, [mode, amount, state]);
 
+  // Ce qui est déjà dû au titre de l'année en cours : la mauvaise surprise
+  // de mai se prépare en décembre.
+  const currentYear = new Date().getUTCFullYear();
+  const yearToDate = report?.reports.find((entry) => entry.year === currentYear) ?? null;
+
+  const stablecoinReserve = useMemo(
+    () =>
+      portfolioTokens
+        .filter((token) => STABLECOINS.has(token.symbol))
+        .reduce((sum, token) => sum + token.currentQuantity * (currentPrices[token.symbol] ?? 0), 0),
+    [portfolioTokens, currentPrices]
+  );
+
   const capitalShare = capitalShareOfSale(state);
   const isLoading = report === undefined || portfolioValue <= 0;
 
@@ -93,6 +109,51 @@ export function TaxSimulator() {
           vente.
         </p>
       </Reveal>
+
+      {yearToDate && yearToDate.estimatedTaxUsd > 0 && (
+        <Reveal delay={90}>
+          <div className="border-y border-border/60">
+            <div className="grid sm:grid-cols-3">
+              {[
+                {
+                  label: `Cessions ${currentYear}`,
+                  value: money(yearToDate.totalProceedsUsd),
+                  hint: `${yearToDate.events.length} opération${yearToDate.events.length > 1 ? "s" : ""} imposable${yearToDate.events.length > 1 ? "s" : ""}`,
+                },
+                {
+                  label: "Plus-value imposable",
+                  value: money(yearToDate.netGainLossUsd),
+                  hint: "Cumul depuis le 1er janvier",
+                },
+                {
+                  label: "À provisionner",
+                  value: money(yearToDate.estimatedTaxUsd),
+                  hint:
+                    stablecoinReserve >= yearToDate.estimatedTaxUsd
+                      ? `Couvert par vos ${money(stablecoinReserve)} de stablecoins`
+                      : `Votre réserve (${money(stablecoinReserve)}) ne suffit pas`,
+                  alert: stablecoinReserve < yearToDate.estimatedTaxUsd,
+                },
+              ].map((item) => (
+                <div key={item.label} className="border-b border-border/60 px-6 py-5 sm:border-b-0 sm:border-r sm:last:border-r-0">
+                  <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
+                    {item.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "num mt-2 text-xl font-normal text-foreground",
+                      item.alert && "text-chart-4"
+                    )}
+                  >
+                    {item.value}
+                  </p>
+                  <p className="mt-1.5 text-xs text-muted-foreground">{item.hint}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Reveal>
+      )}
 
       {isLoading ? (
         <p className="border-t border-border/60 py-8 text-sm text-muted-foreground">

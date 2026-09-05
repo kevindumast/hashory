@@ -168,3 +168,152 @@ export function compareStates(
   const second = taxOnSale(proceeds, after, rate);
   return { before: first, after: second, taxDelta: second.tax - first.tax };
 }
+
+/* ─── Chaîne des cessions ──────────────────────────────────────── */
+
+export type TaxEvent = {
+  timestamp: number;
+  asset: string;
+  /** Positif pour une acquisition, négatif pour une sortie. */
+  qtyDelta: number;
+  /** Contre-valeur en dollars de l'opération. */
+  valueUsd: number;
+  /** Vrai seulement pour une cession contre monnaie ayant cours légal. */
+  isTaxableSell: boolean;
+  source: "trade" | "fiat" | "convert";
+};
+
+/**
+ * Fournit le cours d'un actif à une date. Retourne `null` lorsque
+ * l'historique ne couvre pas ce couple : l'appelant décide alors du repli.
+ */
+export type PriceResolver = (asset: string, timestamp: number) => number | null;
+
+export type Cession = {
+  date: number;
+  asset: string;
+  quantity: number;
+  proceedsUsd: number;
+  costBasisUsd: number;
+  gainLossUsd: number;
+  source: TaxEvent["source"];
+  /** Valeur globale du portefeuille retenue comme dénominateur. */
+  portfolioValueUsd: number;
+  /**
+   * Part de cette valeur réellement établie au cours du marché. Sous 1, le
+   * reste a été replié sur le prix de revient, faute d'historique — la
+   * plus-value calculée est alors un plancher.
+   */
+  valuationCoverage: number;
+};
+
+export type CessionChain = {
+  cessions: Cession[];
+  /** Prix total d'acquisition restant à la fin de la chaîne. */
+  finalAcquisitionCost: number;
+  /** Vrai si au moins une cession a dû se replier sur le prix de revient. */
+  hasIncompleteValuation: boolean;
+};
+
+/**
+ * Déroule la chaîne des cessions et calcule la plus-value de chacune.
+ *
+ * La valeur globale du portefeuille est établie **au cours du marché** à la
+ * date de la cession, comme l'exige le texte. L'actif cédé est valorisé au
+ * prix implicite de sa propre vente, qui est plus fidèle que le cours de
+ * clôture du jour.
+ *
+ * Lorsque l'historique ne couvre pas un actif détenu, sa ligne est repliée
+ * sur son prix de revient. Ce repli minore la valeur globale, donc minore la
+ * plus-value : le résultat reste un plancher, jamais un montant surestimé.
+ * `valuationCoverage` dit dans quelle mesure ce repli a joué.
+ */
+export function computeCessionChain(
+  events: TaxEvent[],
+  priceAt: PriceResolver
+): CessionChain {
+  const ordered = [...events].sort((a, b) => a.timestamp - b.timestamp);
+  const holdings = new Map<string, { qty: number; avgCostUsd: number }>();
+  let totalAcquisitionCost = 0;
+
+  const cessions: Cession[] = [];
+  let hasIncompleteValuation = false;
+
+  for (const event of ordered) {
+    const previous = holdings.get(event.asset) ?? { qty: 0, avgCostUsd: 0 };
+
+    if (event.qtyDelta > 0) {
+      const newQty = previous.qty + event.qtyDelta;
+      holdings.set(event.asset, {
+        qty: newQty,
+        avgCostUsd: newQty > 0 ? (previous.qty * previous.avgCostUsd + event.valueUsd) / newQty : 0,
+      });
+      totalAcquisitionCost += event.valueUsd;
+      continue;
+    }
+
+    if (event.qtyDelta === 0) continue;
+
+    const soldQty = Math.min(Math.abs(event.qtyDelta), previous.qty);
+
+    if (event.isTaxableSell && soldQty > 0) {
+      const proceeds = event.valueUsd;
+
+      // Valeur globale du portefeuille avant la cession, au cours du marché.
+      let portfolioValueUsd = 0;
+      let coveredValueUsd = 0;
+
+      for (const [symbol, state] of holdings) {
+        if (state.qty <= 0) continue;
+
+        // L'actif cédé se valorise au prix implicite de sa propre vente.
+        const impliedPrice =
+          symbol === event.asset && soldQty > 0 ? proceeds / soldQty : null;
+        const marketPrice = impliedPrice ?? priceAt(symbol, event.timestamp);
+
+        if (marketPrice !== null && marketPrice > 0) {
+          const line = state.qty * marketPrice;
+          portfolioValueUsd += line;
+          coveredValueUsd += line;
+        } else {
+          // Repli documenté : minore la valeur globale, donc la plus-value.
+          portfolioValueUsd += state.qty * state.avgCostUsd;
+          hasIncompleteValuation = true;
+        }
+      }
+
+      const valuationCoverage = portfolioValueUsd > 0 ? coveredValueUsd / portfolioValueUsd : 0;
+
+      // prix de revient = prix total d'acquisition × cession / valeur globale
+      const costBasisUsd =
+        portfolioValueUsd > 0
+          ? (totalAcquisitionCost * proceeds) / portfolioValueUsd
+          : soldQty * previous.avgCostUsd;
+
+      cessions.push({
+        date: event.timestamp,
+        asset: event.asset,
+        quantity: soldQty,
+        proceedsUsd: proceeds,
+        costBasisUsd,
+        gainLossUsd: proceeds - costBasisUsd,
+        source: event.source,
+        portfolioValueUsd,
+        valuationCoverage,
+      });
+
+      totalAcquisitionCost = Math.max(0, totalAcquisitionCost - costBasisUsd);
+    } else if (soldQty > 0) {
+      // Sortie non imposable (crypto contre crypto) : le prix d'acquisition
+      // suit l'actif, il n'est pas réintégré.
+      totalAcquisitionCost = Math.max(0, totalAcquisitionCost - soldQty * previous.avgCostUsd);
+    }
+
+    holdings.set(event.asset, {
+      qty: Math.max(0, previous.qty - soldQty),
+      avgCostUsd: previous.avgCostUsd,
+    });
+  }
+
+  return { cessions, finalAcquisitionCost: totalAcquisitionCost, hasIncompleteValuation };
+}

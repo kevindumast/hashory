@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import { computeCessionChain } from "../lib/tax";
 import { optionalUserId } from "./auth";
 
 // Currencies that trigger a taxable "cession" in France (article 150 VH bis CGI)
@@ -29,6 +30,11 @@ function extractBaseQuote(symbol: string): { base: string; quote: string } | nul
     }
   }
   return null;
+}
+
+/** Ramène un horodatage au début de sa journée UTC. */
+function startOfUtcDay(timestamp: number): number {
+  return Math.floor(timestamp / 86_400_000) * 86_400_000;
 }
 
 export type TaxableEvent = {
@@ -63,6 +69,11 @@ export type TaxReportResult = {
    * ré-estimer de son côté.
    */
   currentAcquisitionCost: number;
+  /**
+   * Vrai si au moins une cession a dû être valorisée en partie au prix de
+   * revient, faute de cours historique. La plus-value est alors minorée.
+   */
+  hasIncompleteValuation: boolean;
 };
 
 // PFU flat tax rate (Prélèvement Forfaitaire Unique)
@@ -80,6 +91,7 @@ export const computeTaxReport = query({
       tradeCountByYear: {},
       hasOnlyStablecoinTrades: false,
       currentAcquisitionCost: 0,
+      hasIncompleteValuation: false,
     };
     const clerkId = await optionalUserId(ctx);
     if (!clerkId) return empty;
@@ -203,88 +215,84 @@ export const computeTaxReport = query({
 
     events.sort((a, b) => a.timestamp - b.timestamp);
 
-    // ── French tax computation: article 150 VH bis CGI ──────────────────
+    // ── Calcul fiscal : article 150 VH bis du CGI ───────────────────────
     //
-    // At each taxable "cession":
-    //   Prix de revient = totalAcquisitionCost × P / (P + V_résiduel)
-    //   Plus-value = P - Prix de revient
-    //
-    // where:
-    //   P              = proceeds from the sale (USD)
-    //   V_résiduel     = market value of remaining portfolio after sale
-    //                    (approximated here with cost basis of remaining holdings)
-    //   totalAcquisitionCost = running sum of all crypto acquisitions
-    //
-    // After each cession: totalAcquisitionCost -= Prix de revient
+    // La logique vit dans `lib/tax.ts`, où elle est pure et couverte par des
+    // tests. Ce fichier ne fait que réunir les données : les événements, et
+    // l'historique de cours nécessaire pour établir la valeur globale du
+    // portefeuille à chaque cession.
     // ────────────────────────────────────────────────────────────────────
 
-    const holdings = new Map<string, { qty: number; avgCostUsd: number }>();
-    let totalAcquisitionCost = 0;
+    events.sort((a, b) => a.timestamp - b.timestamp);
 
-    const taxableByYear = new Map<number, TaxableEvent[]>();
+    const assets = Array.from(new Set(events.map((ev) => ev.asset)));
+    const fromDay = events.length > 0 ? startOfUtcDay(events[0].timestamp) : 0;
+    const toDay = events.length > 0 ? startOfUtcDay(events[events.length - 1].timestamp) : 0;
 
-    for (const ev of events) {
-      const prev = holdings.get(ev.asset) ?? { qty: 0, avgCostUsd: 0 };
-
-      if (ev.qtyDelta > 0) {
-        const newQty = prev.qty + ev.qtyDelta;
-        const newAvgCost =
-          newQty > 0
-            ? (prev.qty * prev.avgCostUsd + ev.valueUsd) / newQty
-            : 0;
-        holdings.set(ev.asset, { qty: newQty, avgCostUsd: newAvgCost });
-        totalAcquisitionCost += ev.valueUsd;
-      } else if (ev.qtyDelta < 0) {
-        const soldQty = Math.min(Math.abs(ev.qtyDelta), prev.qty);
-
-        if (ev.isTaxableSell && soldQty > 0) {
-          const P = ev.valueUsd;
-
-          // APPROXIMATION CONNUE — le texte retient la *valeur globale* du
-          // portefeuille au jour de la cession. On lui substitue ici le prix
-          // de revient des positions restantes, faute d'historique de prix
-          // par actif à chaque date de cession.
-          //
-          // Conséquence : sur un portefeuille en plus-value latente, ce
-          // dénominateur est sous-estimé, donc le prix de revient imputé est
-          // surestimé et la plus-value déclarée est INFÉRIEURE à la réalité.
-          // Le montant affiché est donc un plancher, jamais un plafond.
-          // Le simulateur de cession, lui, dispose des prix courants et
-          // applique la formule exacte (voir lib/tax.ts).
-          const soldCost = soldQty * prev.avgCostUsd;
-          const residualCost = Math.max(0, totalAcquisitionCost - soldCost);
-
-          const denom = P + residualCost;
-          const prixDeRevient =
-            denom > 0
-              ? (totalAcquisitionCost * P) / denom
-              : soldCost;
-
-          const gainLoss = P - prixDeRevient;
-
-          const year = new Date(ev.timestamp).getUTCFullYear();
-          if (!taxableByYear.has(year)) taxableByYear.set(year, []);
-          taxableByYear.get(year)!.push({
-            date: ev.timestamp,
-            asset: ev.asset,
-            quantity: soldQty,
-            proceedsUsd: P,
-            costBasisUsd: prixDeRevient,
-            gainLossUsd: gainLoss,
-            source: ev.source,
-          });
-
-          totalAcquisitionCost = Math.max(0, totalAcquisitionCost - prixDeRevient);
-        } else {
-          // Non-taxable exit (crypto-to-crypto): proportionally reduce acquisition cost
-          const exitCost = soldQty * prev.avgCostUsd;
-          totalAcquisitionCost = Math.max(0, totalAcquisitionCost - exitCost);
-        }
-
-        const newQty = Math.max(0, prev.qty - soldQty);
-        holdings.set(ev.asset, { qty: newQty, avgCostUsd: prev.avgCostUsd });
+    // Un seul balayage par actif : les cessions sont déjà triées, donc un
+    // curseur par symbole suffit à retrouver le cours du jour.
+    const priceSeries = new Map<string, { dayUtc: number; closeUsd: number }[]>();
+    for (const asset of assets) {
+      if (STABLECOINS.has(asset)) continue;
+      const rows = await ctx.db
+        .query("tokenPriceHistory")
+        .withIndex("by_symbol_day", (q) =>
+          q.eq("symbol", asset).gte("dayUtc", fromDay).lte("dayUtc", toDay)
+        )
+        .collect();
+      if (rows.length > 0) {
+        priceSeries.set(
+          asset,
+          rows
+            .map((row) => ({ dayUtc: row.dayUtc, closeUsd: row.closeUsd }))
+            .sort((a, b) => a.dayUtc - b.dayUtc)
+        );
       }
     }
+
+    // Les cessions sont parcourues dans l'ordre chronologique : un curseur
+    // par actif évite de re-balayer la série entière à chaque appel, ce qui
+    // ferait un coût quadratique sur un historique long.
+    const priceCursors = new Map<string, number>();
+
+    const priceAt = (asset: string, timestamp: number): number | null => {
+      if (STABLECOINS.has(asset)) return 1;
+      const series = priceSeries.get(asset);
+      if (!series || series.length === 0) return null;
+
+      const day = startOfUtcDay(timestamp);
+      let index = priceCursors.get(asset) ?? -1;
+
+      // Le curseur ne recule jamais ; on le remet à zéro dans le cas
+      // improbable d'un appel antidaté.
+      if (index >= 0 && series[index].dayUtc > day) index = -1;
+      while (index + 1 < series.length && series[index + 1].dayUtc <= day) {
+        index += 1;
+      }
+      priceCursors.set(asset, index);
+
+      // Dernier cours connu à cette date, sans extrapoler vers le futur.
+      return index >= 0 ? series[index].closeUsd : null;
+    };
+
+    const chain = computeCessionChain(events, priceAt);
+
+    const taxableByYear = new Map<number, TaxableEvent[]>();
+    for (const cession of chain.cessions) {
+      const year = new Date(cession.date).getUTCFullYear();
+      if (!taxableByYear.has(year)) taxableByYear.set(year, []);
+      taxableByYear.get(year)!.push({
+        date: cession.date,
+        asset: cession.asset,
+        quantity: cession.quantity,
+        proceedsUsd: cession.proceedsUsd,
+        costBasisUsd: cession.costBasisUsd,
+        gainLossUsd: cession.gainLossUsd,
+        source: cession.source,
+      });
+    }
+
+    const totalAcquisitionCost = chain.finalAcquisitionCost;
 
     // Build per-year trade counts from all events (including non-taxable)
     const tradeCountByYear: Record<number, number> = {};
@@ -327,6 +335,7 @@ export const computeTaxReport = query({
       tradeCountByYear,
       hasOnlyStablecoinTrades,
       currentAcquisitionCost: totalAcquisitionCost,
+      hasIncompleteValuation: chain.hasIncompleteValuation,
     };
   },
 });

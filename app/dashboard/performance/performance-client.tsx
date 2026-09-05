@@ -9,6 +9,7 @@ import {
   usePortfolioAnalytics,
   type AnalysisWindowId,
 } from "@/hooks/dashboard/usePortfolioAnalytics";
+import { useCorrelationMatrix } from "@/hooks/dashboard/useCorrelationMatrix";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +85,9 @@ function WeightBar({ weight }: { weight: number }) {
 export function PerformanceClient() {
   const [windowId, setWindowId] = useState<AnalysisWindowId>("all");
   const analytics = usePortfolioAnalytics(windowId);
+  const correlation = useCorrelationMatrix(
+    analytics.assetConcentration.weights.map((entry) => entry.key)
+  );
 
   if (analytics.isLoading) return <DashboardSkeleton />;
 
@@ -535,10 +539,121 @@ export function PerformanceClient() {
         </Reveal>
       </section>
 
-      {/* ─── 06 · Contrepartie ─── */}
+      {/* ─── 06 · Corrélations ─── */}
       <section>
         <Reveal>
-          <SectionLabel index="06">Risque de contrepartie</SectionLabel>
+          <SectionLabel index="06">Corrélations</SectionLabel>
+        </Reveal>
+
+        <Reveal delay={60}>
+          <p className="mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+            Détenir dix jetons qui montent et descendent ensemble n&apos;est pas de la
+            diversification : c&apos;est une seule position en dix exemplaires. Une corrélation
+            proche de 1 signifie qu&apos;une baisse les emportera tous.
+          </p>
+        </Reveal>
+
+        <Reveal delay={120}>
+          {correlation.isLoading ? (
+            <p className="mt-6 border-t border-border/60 py-6 text-sm text-muted-foreground">
+              Chargement de l&apos;historique de cours…
+            </p>
+          ) : correlation.matrix.keys.length < 2 ? (
+            <p className="mt-6 border-t border-border/60 py-6 text-sm text-muted-foreground">
+              Il faut au moins deux actifs disposant d&apos;un historique de cours commun pour
+              calculer une corrélation.
+            </p>
+          ) : (
+            <>
+              <div className="mt-6 border-y border-border/60 px-6 py-5">
+                <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
+                  Corrélation moyenne
+                </p>
+                <p
+                  className={cn(
+                    "num mt-2 text-4xl font-normal",
+                    correlation.matrix.averagePairwise > 0.8
+                      ? "text-negative"
+                      : correlation.matrix.averagePairwise > 0.5
+                        ? "text-chart-4"
+                        : "text-positive"
+                  )}
+                >
+                  {ratio(correlation.matrix.averagePairwise)}
+                </p>
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  {correlation.matrix.averagePairwise > 0.8
+                    ? "Vos positions se comportent comme une seule ligne."
+                    : correlation.matrix.averagePairwise > 0.5
+                      ? "Diversification partielle : les baisses restent largement communes."
+                      : "Vos positions réagissent différemment aux mêmes mouvements."}{" "}
+                  Calculé sur {correlation.matrix.observations} jours communs.
+                </p>
+              </div>
+
+              <div className="mt-6 overflow-x-auto">
+                <table className="border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th className="num sticky left-0 bg-background py-2 pr-4 text-left text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                        &nbsp;
+                      </th>
+                      {correlation.matrix.keys.map((key) => (
+                        <th
+                          key={key}
+                          className="num px-3 py-2 text-center text-[10px] uppercase tracking-[0.16em] text-muted-foreground"
+                        >
+                          {key}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {correlation.matrix.keys.map((rowKey, rowIndex) => (
+                      <tr key={rowKey} className="border-t border-border/60">
+                        <th className="num sticky left-0 bg-background py-2 pr-4 text-left text-xs font-normal text-foreground">
+                          {rowKey}
+                        </th>
+                        {correlation.matrix.values[rowIndex].map((value, columnIndex) => (
+                          <td
+                            key={`${rowKey}-${correlation.matrix.keys[columnIndex]}`}
+                            className="num px-3 py-2 text-center text-xs"
+                            style={{
+                              // L'intensité porte l'information ; la teinte
+                              // distingue seulement le sens de la relation.
+                              backgroundColor:
+                                rowIndex === columnIndex
+                                  ? "transparent"
+                                  : `color-mix(in srgb, var(${value >= 0 ? "--negative" : "--positive"}) ${Math.round(Math.abs(value) * 22)}%, transparent)`,
+                              color:
+                                rowIndex === columnIndex
+                                  ? "var(--muted-foreground)"
+                                  : "var(--foreground)",
+                            }}
+                          >
+                            {rowIndex === columnIndex ? "—" : value.toFixed(2)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {correlation.missingSymbols.length > 0 && (
+                <p className="num mt-4 text-[10px] uppercase tracking-[0.16em] text-muted-foreground/60">
+                  Sans historique : {correlation.missingSymbols.join(" · ")}
+                </p>
+              )}
+            </>
+          )}
+        </Reveal>
+      </section>
+
+      {/* ─── 07 · Contrepartie ─── */}
+      <section>
+        <Reveal>
+          <SectionLabel index="07">Risque de contrepartie</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>
