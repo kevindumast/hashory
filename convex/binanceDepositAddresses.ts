@@ -1,4 +1,4 @@
-import { action, internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
@@ -9,7 +9,7 @@ const BINANCE_API_URL = "https://api.binance.com";
 
 // ─── Query: obtenir l'adresse de dépôt pour une pièce ────────────────────────
 
-export const getAddress = query({
+export const getAddress = internalQuery({
   args: { coin: v.string() },
   handler: async (ctx, { coin }) => {
     return await ctx.db
@@ -21,7 +21,7 @@ export const getAddress = query({
 
 // ─── Query: obtenir toutes les adresses ──────────────────────────────────────
 
-export const getAll = query({
+export const getAll = internalQuery({
   args: {},
   handler: async (ctx) => {
     const addresses = await ctx.db.query("binanceDepositAddresses").collect();
@@ -68,7 +68,7 @@ export const upsertAddress = internalMutation({
 
 // ─── Action: syncer les adresses de dépôt depuis Binance ──────────────────────
 
-export const syncFromBinance = action({
+export const syncFromBinance = internalAction({
   args: {
     coins: v.optional(v.array(v.string())),
   },

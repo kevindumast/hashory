@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 
 const DAY_MS = 86_400_000;
@@ -73,8 +73,11 @@ export const insertBatch = internalMutation({
  *
  * La BCE ne publie ni les week-ends ni les jours fériés : les trous sont
  * normaux et le résolveur de `lib/fx.ts` retient le dernier taux publié.
+ *
+ * Interne : se lance depuis le tableau de bord Convex, ou avec
+ * `npx convex run fxRates:backfillEurUsd`.
  */
-export const backfillEurUsd = action({
+export const backfillEurUsd = internalAction({
   args: { fromTs: v.optional(v.number()) },
   handler: async (ctx, { fromTs }): Promise<{ inserted: number; from: string; to: string }> => {
     const latestDay: number | null = await ctx.runQuery(internal.fxRates.getLatestDay, {});

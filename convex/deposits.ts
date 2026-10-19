@@ -94,7 +94,9 @@ export const listByUser = query({
   },
 });
 
-export const listAssetsByIntegration = query({
+// Interne : lue par la synchronisation planifiée des ordres Binance, qui ne
+// porte aucune authentification. Aucun client n'a à l'appeler.
+export const listAssetsByIntegration = internalQuery({
   args: {
     integrationId: v.id("integrations"),
   },

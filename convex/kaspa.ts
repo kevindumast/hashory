@@ -2,6 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
+import { requireUserId } from "./auth";
 
 const KASPA_API_BASE = "https://api.kaspa.org";
 const SOMPI_PER_KAS = 100_000_000;
@@ -29,11 +30,12 @@ export const syncKaspaWallet = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
-    if (!integration) {
+    if (!integration || integration.clerkUserId !== clerkUserId) {
       throw new Error("Integration not found");
     }
 

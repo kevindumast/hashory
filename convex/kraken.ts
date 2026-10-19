@@ -5,6 +5,7 @@ import SHA256 from "crypto-js/sha256";
 import Base64 from "crypto-js/enc-base64";
 import Utf8 from "crypto-js/enc-utf8";
 import { decryptSecret } from "./utils/encryption";
+import { requireUserId } from "./auth";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
@@ -418,11 +419,12 @@ export const syncAccount = action({
     ctx,
     args
   ): Promise<{ trades: number; deposits: number; withdrawals: number; converts: number }> => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
-    if (!integration) {
+    if (!integration || integration.clerkUserId !== clerkUserId) {
       throw new Error("Intégration introuvable.");
     }
     if (integration.provider !== "kraken") {

@@ -2,6 +2,7 @@ import { action } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
+import { requireUserId } from "./auth";
 
 const TAOSTATS_API_BASE = "https://api.taostats.io/api/transfer/v1";
 const RAO_PER_TAO = 1_000_000_000;
@@ -31,11 +32,12 @@ export const syncTaoWallet = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     });
 
-    if (!integration) {
+    if (!integration || integration.clerkUserId !== clerkUserId) {
       throw new Error("Integration not found");
     }
 

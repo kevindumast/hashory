@@ -13,8 +13,6 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
-import type * as ai from "../ai.js";
-import type * as analytics from "../analytics.js";
 import type * as auth from "../auth.js";
 import type * as balances from "../balances.js";
 import type * as binance from "../binance.js";
@@ -38,7 +36,6 @@ import type * as kucoin_import from "../kucoin_import.js";
 import type * as migrateTradeTypes from "../migrateTradeTypes.js";
 import type * as orders from "../orders.js";
 import type * as portfolioSnapshots from "../portfolioSnapshots.js";
-import type * as portfolios from "../portfolios.js";
 import type * as priceHistory from "../priceHistory.js";
 import type * as resetCursors from "../resetCursors.js";
 import type * as solana from "../solana.js";
@@ -58,8 +55,6 @@ import type * as withdrawals from "../withdrawals.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
-  ai: typeof ai;
-  analytics: typeof analytics;
   auth: typeof auth;
   balances: typeof balances;
   binance: typeof binance;
@@ -83,7 +78,6 @@ declare const fullApi: ApiFromModules<{
   migrateTradeTypes: typeof migrateTradeTypes;
   orders: typeof orders;
   portfolioSnapshots: typeof portfolioSnapshots;
-  portfolios: typeof portfolios;
   priceHistory: typeof priceHistory;
   resetCursors: typeof resetCursors;
   solana: typeof solana;
