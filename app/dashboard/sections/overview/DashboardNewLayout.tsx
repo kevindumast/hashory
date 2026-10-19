@@ -19,6 +19,7 @@ import {
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
+import { TokenPlatformBreakdown } from "@/components/dashboard/token-platform-breakdown";
 import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
 import { PROVIDER_ICONS } from "@/lib/provider-icons";
 import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
@@ -1151,6 +1152,11 @@ export function DashboardNewLayout({
                             <tr className="bg-muted/10 border-t border-border/30">
                               <td colSpan={10} className="px-4 py-4">
                                 <TokenHistoryChart symbol={token.symbol} events={token.events} />
+                                <TokenPlatformBreakdown
+                                  sources={token.quantityBySource}
+                                  currentPrice={currentPrice ?? null}
+                                  money={money}
+                                />
                               </td>
                             </tr>
                           )}
