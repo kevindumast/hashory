@@ -1,6 +1,7 @@
 import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { optionalUserId } from "./auth";
 
 const DAY_MS = 86_400_000;
 
@@ -26,6 +27,11 @@ const GECKO_IDS: Record<string, string> = {
 
 const STABLECOINS = new Set(["USDT", "USDC", "BUSD", "FDUSD", "TUSD", "DAI", "USD"]);
 
+// Upper bound on rows read per call. The dashboard never needs more: the
+// per-platform history caps itself at 12,000 symbol-days. Anything above is
+// abuse, paid from the database quota that every user shares.
+const MAX_ROWS_PER_QUERY = 12_000;
+
 function startOfUtcDay(ts: number): number {
   const d = new Date(ts);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -40,13 +46,15 @@ export const getRange = query({
     toDay: v.number(),
   },
   handler: async (ctx, { symbol, fromDay, toDay }) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
     const upper = symbol.toUpperCase();
     return await ctx.db
       .query("tokenPriceHistory")
       .withIndex("by_symbol_day", (q) =>
         q.eq("symbol", upper).gte("dayUtc", fromDay).lte("dayUtc", toDay)
       )
-      .collect();
+      .take(MAX_ROWS_PER_QUERY);
   },
 });
 
@@ -58,14 +66,21 @@ export const getRangeMulti = query({
   },
   handler: async (ctx, { symbols, fromDay, toDay }) => {
     const result: Record<string, { dayUtc: number; closeUsd: number }[]> = {};
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return result;
+
+    // One budget for the whole call, so repeating a symbol buys nothing.
+    let budget = MAX_ROWS_PER_QUERY;
     for (const symbol of symbols) {
+      if (budget <= 0) break;
       const upper = symbol.toUpperCase();
       const rows = await ctx.db
         .query("tokenPriceHistory")
         .withIndex("by_symbol_day", (q) =>
           q.eq("symbol", upper).gte("dayUtc", fromDay).lte("dayUtc", toDay)
         )
-        .collect();
+        .take(budget);
+      budget -= rows.length;
       result[upper] = rows
         .map((r) => ({ dayUtc: r.dayUtc, closeUsd: r.closeUsd }))
         .sort((a, b) => a.dayUtc - b.dayUtc);

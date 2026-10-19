@@ -1,6 +1,7 @@
 import { v } from "convex/values";
 import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { optionalUserId } from "./auth";
 
 const DAY_MS = 86_400_000;
 
@@ -12,14 +13,24 @@ function toIsoDay(dayUtc: number): string {
   return new Date(dayUtc).toISOString().slice(0, 10);
 }
 
+/**
+ * Plafond de lignes par appel. La BCE publie environ 255 taux par an et le
+ * tableau de bord en demande cinq ans : près de vingt ans de marge ne gênent
+ * personne, et bornent ce qu'un appel peut coûter au quota commun.
+ */
+const MAX_ROWS_PER_QUERY = 5_000;
+
 /** Série de taux sur une plage, triée par date croissante. */
 export const getRange = query({
   args: { fromDay: v.number(), toDay: v.number() },
   handler: async (ctx, { fromDay, toDay }) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return [];
+
     const rows = await ctx.db
       .query("fxRateHistory")
       .withIndex("by_day", (q) => q.gte("dayUtc", fromDay).lte("dayUtc", toDay))
-      .collect();
+      .take(MAX_ROWS_PER_QUERY);
 
     return rows
       .map((row) => ({ dayUtc: row.dayUtc, eurPerUsd: row.eurPerUsd }))

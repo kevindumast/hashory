@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 
 
 /** Devises de cotation à retirer pour retrouver l'actif de base. */
 const QUOTE_SUFFIXES = /(USDT|USDC|BUSD|FDUSD|TUSD|DAI|USD|EUR|GBP)$/;
+
+/**
+ * Une paire ne contient que des caractères sans rôle dans une URL : rien ne
+ * peut s'y glisser en paramètre de la requête CoinGecko.
+ */
+const PAIR_RE = /^[A-Z0-9._-]{1,30}$/;
+
+/** Dix fois ce qu'envoie un portefeuille chargé : au-delà, aucun usage légitime. */
+const MAX_PAIRS_PER_REQUEST = 1_000;
 
 /* ─── Cache mémoire ───────────────────────────────────────────────
    Le dashboard redemande les mêmes symboles à chaque rafraîchissement.
@@ -110,11 +120,17 @@ async function fetchCoinGeckoBySymbols(symbols: string[]): Promise<Map<string, n
 
   for (let index = 0; index < symbols.length; index += COINGECKO_BATCH) {
     const chunk = symbols.slice(index, index + COINGECKO_BATCH);
-    const query = chunk.map((symbol) => symbol.toLowerCase()).join(',');
+    const query = chunk.map((symbol) => encodeURIComponent(symbol.toLowerCase())).join(',');
+    // Périmètre et ordre explicites : la règle du premier résultat en dépend.
+    const params = new URLSearchParams({
+      vs_currency: 'usd',
+      include_tokens: 'top',
+      order: 'market_cap_desc',
+    });
 
     try {
       const response = await fetch(
-        `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&symbols=${query}`,
+        `https://api.coingecko.com/api/v3/coins/markets?${params}&symbols=${query}`,
         { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(10000) }
       );
       if (!response.ok) continue;
@@ -136,6 +152,13 @@ async function fetchCoinGeckoBySymbols(symbols: string[]): Promise<Map<string, n
 }
 
 export async function POST(request: NextRequest) {
+  // Le cache et le quota CoinGecko sont communs à tous les utilisateurs :
+  // seule une session peut les solliciter.
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { symbols } = await request.json();
 
@@ -143,7 +166,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json([], { status: 200 });
     }
 
-    const uniqueSymbols = Array.from(new Set(symbols.map((s: string) => s.toUpperCase())));
+    const requested: unknown[] = symbols;
+    const uniqueSymbols = Array.from(
+      new Set(
+        requested
+          .filter((s): s is string => typeof s === 'string')
+          .map((s) => s.toUpperCase())
+          .filter((s) => PAIR_RE.test(s))
+      )
+    ).slice(0, MAX_PAIRS_PER_REQUEST);
     const allResults: Array<{ symbol: string; price: string }> = [];
     const resolvedPairs = new Set<string>();
 

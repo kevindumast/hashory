@@ -1,6 +1,7 @@
-import { internalAction, internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { optionalUserId } from "./auth";
 
 const CMC_BASE_URL = "https://pro-api.coinmarketcap.com";
 
@@ -151,7 +152,7 @@ export const clearAll = internalMutation({
 });
 
 /** @deprecated Use getBySymbols instead — getAll hits the 1024-field Convex limit */
-export const getAll = query({
+export const getAll = internalQuery({
   args: {},
   handler: async (ctx): Promise<Record<string, string>> => {
     const map: Record<string, string> = {};
@@ -171,12 +172,17 @@ export const getAll = query({
   },
 });
 
+/** Un portefeuille affiche rarement plus de quelques dizaines de jetons. */
+const MAX_SYMBOLS_PER_QUERY = 500;
+
 export const getBySymbols = query({
   args: { symbols: v.array(v.string()) },
   handler: async (ctx, { symbols }): Promise<Record<string, string>> => {
     const map: Record<string, string> = {};
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return map;
 
-    for (const symbol of symbols) {
+    for (const symbol of symbols.slice(0, MAX_SYMBOLS_PER_QUERY)) {
       if (!VALID_SYMBOL_RE.test(symbol)) continue;
       const token = await ctx.db
         .query("cmcTokenMap")
