@@ -1,4 +1,4 @@
-import { action, internalMutation, query } from "./_generated/server";
+import { internalAction, internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -11,7 +11,7 @@ const VALID_SYMBOL_RE = /^[A-Za-z0-9.]+$/;
 
 // ─── Action: ajouter un token manuellement (sans appel API) ────────────────
 
-export const addToken = action({
+export const addToken = internalAction({
   args: {
     symbol: v.string(),
     cmcId: v.optional(v.number()),
@@ -107,7 +107,7 @@ export const buildIconUrlsBatch = internalMutation({
 
 // ─── Action: construire les iconUrl pour tous les tokens ──────────────────
 
-export const buildIconUrlsForAll = action({
+export const buildIconUrlsForAll = internalAction({
   args: {},
   handler: async (ctx) => {
     console.log("🖼️ Building icon URLs for all tokens...");
@@ -243,7 +243,7 @@ export const upsertBatch = internalMutation({
 
 // ─── Action: fetch CMC API et stocker en base ────────────────────────────────
 
-export const syncFromCmc = action({
+export const syncFromCmc = internalAction({
   args: {},
   handler: async (ctx) => {
     const apiKey = process.env.CMC_API_KEY;

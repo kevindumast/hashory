@@ -1,4 +1,4 @@
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { optionalUserId } from "./auth";
 
@@ -63,7 +63,7 @@ export const ingestBatch = internalMutation({
   },
 });
 
-export const listByIntegration = query({
+export const listByIntegration = internalQuery({
   args: {
     integrationId: v.id("integrations"),
   },

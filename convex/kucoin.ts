@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
 import Base64 from "crypto-js/enc-base64";
 import { decryptSecret } from "./utils/encryption";
+import { requireUserId } from "./auth";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
@@ -714,6 +715,7 @@ export const syncAccount = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as {
@@ -722,7 +724,7 @@ export const syncAccount = action({
       encryptedCredentials: { apiKey: string; apiSecret: string; passphrase?: string };
     } | null;
 
-    if (!integration) throw new Error("Intégration introuvable.");
+    if (!integration || integration.clerkUserId !== clerkUserId) throw new Error("Intégration introuvable.");
     if (integration.provider !== "kucoin") throw new Error("Cette intégration n'est pas de type KuCoin.");
 
     const { apiKey, apiSecret, passphrase: encPassphrase } = integration.encryptedCredentials;
@@ -785,6 +787,7 @@ export const syncConvertsOnly = action({
     integrationId: v.id("integrations"),
   },
   handler: async (ctx, args) => {
+    const clerkUserId = await requireUserId(ctx);
     const integration = (await ctx.runQuery(internal.integrations.getByIdInternal, {
       integrationId: args.integrationId,
     })) as {
@@ -793,7 +796,7 @@ export const syncConvertsOnly = action({
       encryptedCredentials: { apiKey: string; apiSecret: string; passphrase?: string };
     } | null;
 
-    if (!integration) throw new Error("Intégration introuvable.");
+    if (!integration || integration.clerkUserId !== clerkUserId) throw new Error("Intégration introuvable.");
     if (integration.provider !== "kucoin") throw new Error("Cette intégration n'est pas de type KuCoin.");
 
     const { apiKey, apiSecret, passphrase: encPassphrase } = integration.encryptedCredentials;

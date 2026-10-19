@@ -64,7 +64,6 @@ flowchart LR
         Fiat[(fiatTransactions)]
         Users[(users)]
         AnalyticsDB[(analytics)]
-        AI[ai actions]
         IntegrationsFn[integrations]
     end
 
@@ -98,7 +97,6 @@ flowchart LR
     Binance --> Withdrawals
     Binance --> Balances
     Kaspa --> Trades
-    AI --> AnalyticsDB
 ```
 
 ## Stack

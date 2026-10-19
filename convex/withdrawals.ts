@@ -100,7 +100,7 @@ export const listByUser = query({
   },
 });
 
-export const listAssetsByIntegration = query({
+export const listAssetsByIntegration = internalQuery({
   args: {
     integrationId: v.id("integrations"),
   },

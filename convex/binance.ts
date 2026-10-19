@@ -3,7 +3,7 @@ import { requireUserId } from "./auth";
 import { v } from "convex/values";
 import HmacSHA256 from "crypto-js/hmac-sha256";
 import { decryptSecret } from "./utils/encryption";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 
@@ -394,7 +394,7 @@ type FiatSyncResult = {
   latest?: number | null;
 };
 
-// ─── Assets Overview (getUserAsset + deposit addresses) ─────────────────────
+// ─── Assets Overview (getUserAsset) ─────────────────────────────────────────
 
 export const getUserAssets = action({
   args: {
@@ -440,9 +440,6 @@ export const getUserAssets = action({
       userAssets.map((asset) => [asset.asset.toUpperCase(), asset])
     );
 
-    // Fetch deposit addresses from DB
-    const depositAddresses = (await ctx.runQuery(api.binanceDepositAddresses.getAll, {})) as Record<string, string>;
-
     const allAssets = new Set<string>([
       ...balancesByAsset.keys(),
       ...userAssetsBySymbol.keys(),
@@ -473,7 +470,6 @@ export const getUserAssets = action({
           withdrawing,
           totalPosition,
           btcValuation: userAsset?.btcValuation ?? "0",
-          depositAddress: depositAddresses[symbol] ?? undefined,
         };
       });
 
@@ -887,10 +883,10 @@ export const syncOrdersScheduled = internalAction({
       // 1. trades (spot + convert + fiat + dust) → includes SNX from conversions
       // 2. deposits → includes SNX from external deposits
       // 3. withdrawals
-      const tradeAssets = await ctx.runQuery(api.trades.listAssetsByIntegration, {
+      const tradeAssets = await ctx.runQuery(internal.trades.listAssetsByIntegration, {
         integrationId: args.integrationId,
       });
-      const depositAssets = await ctx.runQuery(api.deposits.listAssetsByIntegration, {
+      const depositAssets = await ctx.runQuery(internal.deposits.listAssetsByIntegration, {
         integrationId: args.integrationId,
       });
 

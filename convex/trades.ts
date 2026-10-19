@@ -1,4 +1,4 @@
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { optionalUserId } from "./auth";
 
@@ -95,7 +95,9 @@ function extractBaseAsset(symbol: string) {
   return upper;
 }
 
-export const listAssetsByIntegration = query({
+// Interne : lue par la synchronisation planifiée des ordres Binance, qui ne
+// porte aucune authentification. Aucun client n'a à l'appeler.
+export const listAssetsByIntegration = internalQuery({
   args: {
     integrationId: v.id("integrations"),
   },

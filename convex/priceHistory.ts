@@ -1,4 +1,4 @@
-import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -268,8 +268,9 @@ export const backfillSymbol = internalAction({
   },
 });
 
-// Public helper to backfill many symbols (e.g. all tokens of a portfolio + BTC for the benchmark)
-export const backfillSymbols = action({
+// Backfills many symbols at once (e.g. all tokens of a portfolio + BTC for the benchmark).
+// Internal: run it from the Convex dashboard or with `npx convex run`.
+export const backfillSymbols = internalAction({
   args: {
     symbols: v.array(v.string()),
     fromTs: v.number(),

@@ -1,11 +1,11 @@
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import { optionalUserId } from "./auth";
 
 // ─── Query: toutes les balances d'une intégration ───────────────────────────
 
-export const getByIntegration = query({
+export const getByIntegration = internalQuery({
   args: { integrationId: v.id("integrations") },
   handler: async (ctx, { integrationId }) => {
     return await ctx.db
@@ -116,7 +116,7 @@ export const listByUser = query({
 
 // ─── Query: balance d'un asset spécifique ───────────────────────────────────
 
-export const getByAsset = query({
+export const getByAsset = internalQuery({
   args: {
     integrationId: v.id("integrations"),
     asset: v.string(),
