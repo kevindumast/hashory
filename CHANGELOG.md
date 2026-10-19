@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.11](https://github.com/kevindumast/hashory/compare/hashory-v0.1.10...hashory-v0.1.11) (2026-10-19)
+
+
+### Bug Fixes
+
+* **api:** réserver aux sessions les cours, les taux et les icônes ([c501ee1](https://github.com/kevindumast/hashory/commit/c501ee1771c2e003f72e1923247746d7e00230ce))
+* **api:** réserver aux sessions les cours, les taux et les icônes ([90744c9](https://github.com/kevindumast/hashory/commit/90744c9cbabc8eee7ceface78d1f44613edb6ba1))
+
 ## [0.1.10](https://github.com/kevindumast/hashory/compare/hashory-v0.1.9...hashory-v0.1.10) (2026-10-19)
 
 
