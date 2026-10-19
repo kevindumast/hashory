@@ -112,7 +112,7 @@ flowchart LR
 
 ## Démarrage
 
-**Prérequis :** Node.js 20+, un compte [Convex](https://convex.dev) et un compte
+**Prérequis :** Node.js 22+, un compte [Convex](https://convex.dev) et un compte
 [Clerk](https://clerk.com).
 
 ```bash
