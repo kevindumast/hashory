@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.10](https://github.com/kevindumast/hashory/compare/hashory-v0.1.9...hashory-v0.1.10) (2026-10-19)
+
+
+### Bug Fixes
+
+* **auth:** fermer les fonctions Convex appelables sans contrôle ([a3ec10c](https://github.com/kevindumast/hashory/commit/a3ec10c7a73c449fa7d3ce526ed9505d11ccd7b8))
+* **auth:** fermer les fonctions Convex appelables sans contrôle ([85de357](https://github.com/kevindumast/hashory/commit/85de357c66c071761de886a976cf7dff9c589742))
+
 ## [0.1.9](https://github.com/kevindumast/hashory/compare/hashory-v0.1.8...hashory-v0.1.9) (2026-09-05)
 
 
