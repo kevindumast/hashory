@@ -63,10 +63,14 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-[220px] h-screen bg-sidebar border-r border-sidebar-border tracking-tight antialiased shrink-0">
       {/* Logo */}
-      <div className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border">
+      <Link
+        href="/dashboard"
+        aria-label="Retour au portefeuille"
+        className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border transition-opacity hover:opacity-80"
+      >
         <HashoryLogo size={22} />
         <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">Hashory</span>
-      </div>
+      </Link>
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto scrollbar-subtle px-3 py-3 flex flex-col gap-5">
@@ -215,10 +219,10 @@ export function MobileNav() {
 
   return (
     <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4">
-      <div className="flex items-center gap-2">
+      <Link href="/dashboard" aria-label="Retour au portefeuille" className="flex items-center gap-2">
         <HashoryLogo size={22} />
         <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
-      </div>
+      </Link>
       <div className="flex items-center gap-1">
         <UserMenu compact />
         <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -228,10 +232,15 @@ export function MobileNav() {
             </Button>
           </SheetTrigger>
           <SheetContent side="left" className="flex w-[240px] flex-col gap-0 bg-sidebar border-r border-sidebar-border p-0">
-            <div className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border">
+            <Link
+              href="/dashboard"
+              onClick={() => setIsOpen(false)}
+              aria-label="Retour au portefeuille"
+              className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border"
+            >
               <HashoryLogo size={22} />
               <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
-            </div>
+            </Link>
             <nav className="flex-1 px-3 py-3 flex flex-col gap-5">
               {navSections.map((section) => (
                 <div key={section.title}>
