@@ -31,6 +31,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "bitcoin.fr",
       },
+      {
+        protocol: "https",
+        hostname: "strike.me",
+      },
     ],
   },
 };
