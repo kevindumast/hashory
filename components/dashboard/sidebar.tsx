@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays, Activity,
-  User, Settings, LogOut, Menu, MoreHorizontal, Plug,
+  User, Settings, LogOut, Menu, MoreHorizontal, Plug, KeyRound,
 } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
@@ -39,6 +39,12 @@ const navSections = [
     links: [
       { href: "/dashboard/tax-report", label: "Déclaration fiscale", badge: null, icon: FileText },
       { href: "/dashboard/transactions", label: "Transactions", badge: null, icon: ArrowLeftRight },
+    ],
+  },
+  {
+    title: "Réglages",
+    links: [
+      { href: "/dashboard/settings/api-keys", label: "Clés d'API", badge: null, icon: KeyRound },
     ],
   },
 ]

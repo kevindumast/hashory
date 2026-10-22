@@ -80,9 +80,9 @@ const capabilities = [
   {
     tag: "Sécurité",
     tone: "jade",
-    title: "Lecture seule, par conception",
+    title: "Vos clés, votre crédit",
     description:
-      "Clés API en lecture seule et chiffrées au repos, wallets suivis par adresse publique. Aucun accès à vos fonds, jamais.",
+      "Vos wallets sont lus avec vos propres clés d'API, chiffrées au repos : c'est votre crédit qui est consommé, et vous pouvez les révoquer à tout moment. Aucun accès à vos fonds, jamais.",
   },
 ] as const;
 
@@ -168,6 +168,11 @@ const faqItems = [
       "Hashory calcule les plus-values de cession d'actifs numériques selon l'article 150 VH bis du CGI, avec le détail de chaque cession et la valeur globale du portefeuille au moment de celle-ci. C'est une aide au remplissage, pas un conseil fiscal : faites valider votre situation par un professionnel.",
   },
   {
+    question: "Pourquoi fournir mes propres clés d'API ?",
+    answer:
+      "Pour lire l'historique d'un wallet Solana, Ethereum ou Bittensor, Hashory interroge un service spécialisé (Helius, Etherscan, TaoStats). Chacun y utilise sa propre clé : c'est votre crédit qui est consommé, personne d'autre n'y touche, et vous gardez le contrôle — vous voyez l'usage chez le fournisseur et révoquez la clé quand vous voulez. Les offres gratuites suffisent largement pour un portefeuille personnel.",
+  },
+  {
     question: "Hashory est-il vraiment open source ?",
     answer:
       "Oui. Le code est disponible sur GitHub sous licence MIT : vous pouvez l'auditer, le forker, y contribuer ou déployer votre propre instance. La transparence est la raison d'être du projet.",
@@ -236,7 +241,7 @@ export default async function Home() {
 
               <Reveal delay={400}>
                 <ul className="mt-10 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
-                  {["Lecture seule", "Clés chiffrées", "Licence MIT"].map((item) => (
+                  {["Lecture seule", "Vos propres clés d'API", "Licence MIT"].map((item) => (
                     <li key={item} className="flex items-center gap-2">
                       <Check className="h-3.5 w-3.5 text-jade" />
                       {item}

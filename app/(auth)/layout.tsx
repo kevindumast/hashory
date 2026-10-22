@@ -8,6 +8,7 @@ const perks = [
   "P&L automatique par actif et par période",
   "Plus-values calculées selon l'article 150 VH bis",
   "Accès en lecture seule, clés chiffrées au repos",
+  "Vos propres clés d'API : votre crédit, votre contrôle",
 ];
 
 type AuthLayoutProps = {

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
+import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 
 const HELIUS_API_BASE = "https://api.helius.xyz/v0";
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -52,10 +53,8 @@ export const syncSolanaWallet = action({
       throw new Error("Cette intégration n'est pas de type Solana");
     }
 
-    const apiKey = process.env.HELIUS_API_KEY;
-    if (!apiKey) {
-      throw new Error("HELIUS_API_KEY not configured in Convex environment");
-    }
+    // La clé de l'utilisateur, jamais celle de l'hébergeur.
+    const apiKey = await requireDataProviderKey(ctx, clerkUserId, "helius");
 
     const walletAddress = decryptSecret(integration.encryptedCredentials.apiKey);
     if (!walletAddress) {
@@ -90,6 +89,9 @@ export const syncSolanaWallet = action({
         }
 
         const response = await fetch(url);
+        if (response.status === 401 || response.status === 403) {
+          throw rejectedDataProviderKey("helius");
+        }
         if (!response.ok) {
           throw new Error(`Helius API error: ${response.statusText}`);
         }

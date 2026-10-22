@@ -23,6 +23,7 @@ import type * as blockchainSync from "../blockchainSync.js";
 import type * as client from "../client.js";
 import type * as cmcTokenMap from "../cmcTokenMap.js";
 import type * as convertTrades from "../convertTrades.js";
+import type * as dataProviderKeys from "../dataProviderKeys.js";
 import type * as deposits from "../deposits.js";
 import type * as ethereum from "../ethereum.js";
 import type * as fiatTransactions from "../fiatTransactions.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   client: typeof client;
   cmcTokenMap: typeof cmcTokenMap;
   convertTrades: typeof convertTrades;
+  dataProviderKeys: typeof dataProviderKeys;
   deposits: typeof deposits;
   ethereum: typeof ethereum;
   fiatTransactions: typeof fiatTransactions;

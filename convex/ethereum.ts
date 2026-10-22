@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
+import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 
 const ETHERSCAN_API_BASE = "https://api.etherscan.io/v2/api?chainid=1";
 const PAGE_SIZE = 1000;
@@ -60,10 +61,8 @@ export const syncEthereumWallet = action({
       throw new Error("Cette intégration n'est pas de type Ethereum");
     }
 
-    const apiKey = process.env.ETHERSCAN_API_KEY;
-    if (!apiKey) {
-      throw new Error("ETHERSCAN_API_KEY not configured in Convex environment");
-    }
+    // La clé de l'utilisateur, jamais celle de l'hébergeur.
+    const apiKey = await requireDataProviderKey(ctx, clerkUserId, "etherscan");
 
     const walletAddress = decryptSecret(integration.encryptedCredentials.apiKey);
     if (!walletAddress) {
@@ -137,6 +136,10 @@ async function syncNativeEth(
     if (data.status !== "1") {
       if (data.message === "No transactions found") break;
       const detail = typeof data.result === "string" ? data.result : "";
+      // Etherscan répond 200 même à une clé refusée : seul le détail le dit.
+      if (/invalid api key/i.test(detail)) {
+        throw rejectedDataProviderKey("etherscan");
+      }
       throw new Error(`Etherscan error: ${data.message} ${detail}`.trim());
     }
 
@@ -259,6 +262,10 @@ async function syncErc20(
     if (data.status !== "1") {
       if (data.message === "No transactions found") break;
       const detail = typeof data.result === "string" ? data.result : "";
+      // Etherscan répond 200 même à une clé refusée : seul le détail le dit.
+      if (/invalid api key/i.test(detail)) {
+        throw rejectedDataProviderKey("etherscan");
+      }
       throw new Error(`Etherscan error: ${data.message} ${detail}`.trim());
     }
 

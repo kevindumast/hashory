@@ -18,8 +18,10 @@ import {
   Copy,
   FileUp,
   CircleStop,
+  KeyRound,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -43,7 +45,7 @@ import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dia
 import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
-import { useAction, useMutation } from "convex/react"
+import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
 import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
@@ -127,6 +129,7 @@ export function AccountsView() {
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
   const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
   const cancelSync = useMutation(api.integrations.cancelSync)
+  const dataProviderKeys = useQuery(api.dataProviderKeys.list)
   const now = useNow()
 
   // Diagnostic de synchronisation, tenu à part : il se rafraîchit à chaque
@@ -147,6 +150,17 @@ export function AccountsView() {
     }
     return map
   }, [integrations, now])
+
+  // Wallet lu via un fournisseur dont l'utilisateur n'a pas encore fourni
+  // la clé : on le dit sur la ligne plutôt que de laisser la synchro échouer.
+  const missingKeyFor = React.useCallback(
+    (provider: string) => {
+      const required = dataProviderForSource(provider)
+      if (!required || dataProviderKeys === undefined) return null
+      return dataProviderKeys.some((key) => key.provider === required) ? null : required
+    },
+    [dataProviderKeys]
+  )
 
   // Calculer les comptes avec les transactions
   const accountsWithTransactions = React.useMemo(() => {
@@ -182,9 +196,10 @@ export function AccountsView() {
         status,
         accountCreatedAt,
         health: syncHealthById.get(integration._id) ?? null,
+        missingKey: missingKeyFor(integration.provider),
       }
     })
-  }, [integrations, transactions, syncHealthById])
+  }, [integrations, transactions, syncHealthById, missingKeyFor])
 
   const handleToggleSync = React.useCallback(
     async (accountId: Id<"integrations">, enabled: boolean, label: string) => {
@@ -617,7 +632,11 @@ export function AccountsView() {
                           ? `depuis ${formatElapsed(account.health.elapsedMs)}`
                           : account.lastSync}
                       </span>
-                      <StatusBadge status={account.status} showText />
+                      {account.missingKey ? (
+                        <MissingKeyChip provider={account.missingKey} />
+                      ) : (
+                        <StatusBadge status={account.status} showText />
+                      )}
                       {account.health && account.health.message && (
                         <AlertCircle className="w-4 h-4 text-chart-4 shrink-0" aria-label={account.health.message} />
                       )}
@@ -689,6 +708,8 @@ export function AccountsView() {
                           <span className="num border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                             Non synchronisé
                           </span>
+                        ) : account.missingKey ? (
+                          <MissingKeyChip provider={account.missingKey} />
                         ) : (
                           <StatusBadge status={account.status} showText />
                         )}
@@ -905,6 +926,19 @@ function FilterChip({ label, active, onClick }: { label: string; active?: boolea
     >
       {label}
     </button>
+  )
+}
+
+/** Renvoie vers la page où l'utilisateur ajoute la clé qui manque. */
+function MissingKeyChip({ provider }: { provider: string }) {
+  return (
+    <Link
+      href="/dashboard/settings/api-keys"
+      className="chip chip-violet whitespace-nowrap py-0.5 text-[11px] hover:opacity-80"
+    >
+      <KeyRound className="h-3 w-3" />
+      Clé {dataProviderLabel(provider)} requise
+    </Link>
   )
 }
 
