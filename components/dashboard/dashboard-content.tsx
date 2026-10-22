@@ -1,6 +1,5 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
 import { DashboardNewLayout } from "@/app/dashboard/sections/overview/DashboardNewLayout";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
@@ -8,8 +7,6 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { OnboardingChecklist, OnboardingHero } from "@/components/dashboard/onboarding";
 
 export function DashboardContent() {
-  const { user } = useUser();
-  const userName = user?.firstName ?? user?.username ?? null;
   const { openDialog } = useProviderDialog();
   const {
     profitSummary,
@@ -31,13 +28,9 @@ export function DashboardContent() {
 
   return (
     <div className="no-scrollbar space-y-6 p-6 md:p-8">
-      <header className="border-b border-border/60 pb-5">
-        <p className="eyebrow">Portefeuille global
-        </p>
-        <h1 className="mt-3 title text-3xl leading-tight text-foreground">
-          Bonjour, {userName || "Investisseur"}
-        </h1>
-      </header>
+      {/* Titre pour les lecteurs d'écran : l'en-tête visible prenait une
+          place précieuse sans rien apprendre. */}
+      <h1 className="sr-only">Portefeuille global</h1>
 
       <OnboardingChecklist />
 
