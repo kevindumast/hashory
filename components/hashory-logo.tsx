@@ -8,10 +8,15 @@ interface HashoryLogoProps {
 }
 
 /**
- * Marque Hashory : un « H » géométrique sur une tuile à l'encre, dont la
- * barre passe du violet au jade — les deux accents de la marque.
- * Le tracé est identique à celui des icônes de `public/icons/` pour que
- * l'identité soit la même dans l'application, l'onglet et l'écran d'accueil.
+ * Marque Hashory : un « H » sur une tuile à l'encre, dont la barre passe du
+ * violet au jade — les deux accents de la marque.
+ *
+ * Dessinée pour rester lisible à 22 px, sa taille dans la barre latérale :
+ * le H occupe la moitié de la tuile, ses traits font 16 % de sa largeur
+ * (3,5 px à cette taille), et la barre prend les accents clairs, qui
+ * ressortent sur l'encre. Les couleurs sont fixes : la tuile reste foncée
+ * en thème sombre, sans quoi la barre claire disparaissait sur une tuile
+ * claire. Le tracé est identique à celui de `public/icons/` et du favicon.
  */
 export function HashoryLogo({ size = 64, className = "" }: HashoryLogoProps) {
   // Un dégradé par instance : deux logos sur la même page ne peuvent pas
@@ -31,16 +36,16 @@ export function HashoryLogo({ size = 64, className = "" }: HashoryLogoProps) {
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" style={{ stopColor: "var(--violet)" }} />
-          <stop offset="100%" style={{ stopColor: "var(--jade)" }} />
+          <stop offset="0%" stopColor="#a48ff0" />
+          <stop offset="100%" stopColor="#4cc49e" />
         </linearGradient>
       </defs>
-      <rect width="64" height="64" rx="15" style={{ fill: "var(--ink)" }} />
-      <g style={{ fill: "var(--background)" }}>
-        <rect x="18.75" y="16" width="6.5" height="32" rx="3.25" />
-        <rect x="38.75" y="16" width="6.5" height="32" rx="3.25" />
+      <rect width="64" height="64" rx="15" fill="#151b23" />
+      <g fill="#ffffff">
+        <rect x="16" y="15" width="10" height="34" rx="5" />
+        <rect x="38" y="15" width="10" height="34" rx="5" />
       </g>
-      <rect x="18.75" y="28.75" width="26.5" height="6.5" rx="3.25" fill={`url(#${gradientId})`} />
+      <rect x="16" y="27" width="32" height="10" rx="5" fill={`url(#${gradientId})`} />
     </svg>
   );
 }
