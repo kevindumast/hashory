@@ -302,10 +302,16 @@ export default defineSchema({
     costUsd: v.number(),
     /** Résultat réalisé cumulé, en dollars. */
     realizedUsd: v.number(),
+    /**
+     * Les mêmes, en euros : chaque opération au change de son jour. Un achat
+     * payé 30 € coûte 30 €, pas des dollars reconvertis au change du jour.
+     */
+    costEur: v.optional(v.number()),
+    realizedEur: v.optional(v.number()),
     computedAt: v.number(),
     /**
-     * Ligne de solde d'un compte (quantité seule), pour les plateformes qui
-     * ne publient pas leurs soldes. Absent sur une ligne de position globale.
+     * Position d'un seul compte (quantité, coût et réalisé de ce compte).
+     * Absent sur une ligne du portefeuille entier.
      */
     account: v.optional(v.string()),
   }).index("by_user", ["clerkId"]),

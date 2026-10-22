@@ -48,6 +48,7 @@ export const listByUser = query({
       addressTag?: string;
       insertTime: number;
       txId?: string;
+      depositId: string;
     }> = [];
 
     for (const integration of integrations) {
@@ -67,6 +68,7 @@ export const listByUser = query({
           addressTag: deposit.addressTag ?? undefined,
           insertTime: deposit.insertTime,
           txId: deposit.txId ?? undefined,
+          depositId: deposit.depositId,
         });
       }
     }
@@ -89,6 +91,7 @@ export const listByUser = query({
         addressTag: record.addressTag ?? null,
         insertTime: record.insertTime,
         txId: record.txId ?? null,
+        depositId: record.depositId,
       };
     });
   },

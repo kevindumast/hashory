@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { errorMessage, toast } from "@/lib/toast";
 import type { Id } from "@/convex/_generated/dataModel";
+import { decodeCsvText } from "@/lib/csv-text";
 
 type KucoinImportDialogProps = {
   open: boolean;
@@ -310,7 +311,7 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const rows = parseCsv(ev.target?.result as string);
+        const rows = parseCsv(decodeCsvText(ev.target?.result as ArrayBuffer));
 
         if (rows.some((r) => r.join("").toLowerCase().includes("no matching records"))) {
           setErrors((e) => ({ ...e, [expectedType]: "Aucune donnée sur cette période." }));
@@ -350,7 +351,7 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
         setErrors((e) => ({ ...e, [expectedType]: "Impossible de lire le fichier." }));
       }
     };
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   }, []);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>, type: FileType) {

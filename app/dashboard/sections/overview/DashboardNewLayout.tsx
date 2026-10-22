@@ -136,7 +136,8 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols } = useDashboardData();
+  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, integrations } =
+    useDashboardData();
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
 
@@ -376,6 +377,14 @@ export function DashboardNewLayout({
     if (!rate) return currencyFormatter.format(value);
     return eurFormatter.format(value * rate);
   };
+
+  /**
+   * Montant tenu dans les deux devises par le grand livre : en euros, on
+   * affiche le montant historique — les euros réellement payés pour un
+   * coût —, et non sa contre-valeur en dollars reconvertie au change du jour.
+   */
+  const amount = (usd: number, eur: number | null | undefined): string =>
+    displayCurrency === "EUR" && eur !== null && eur !== undefined ? eurFormatter.format(eur) : money(usd);
 
   const chartDays = useMemo(
     () => filteredHoldings.map((point) => point.timestamp),
@@ -934,7 +943,15 @@ export function DashboardNewLayout({
                 const costOfHoldings = token.avgCostBasis * token.currentQuantity;
                 const unrealized = currentValue !== null ? currentValue - costOfHoldings : null;
                 const totalPnl = unrealized !== null ? token.realizedPnlAvco + unrealized : null;
-                return { token, currentPrice, currentValue, unrealized, totalPnl };
+                // Les mêmes en euros : coût historique, valeur au change du jour.
+                const eurRate = fxRateAt(Date.now())?.eurPerUsd ?? null;
+                const unrealizedEur =
+                  currentValue !== null && eurRate && token.avgCostBasisEur !== null
+                    ? currentValue * eurRate - token.avgCostBasisEur * token.currentQuantity
+                    : null;
+                const totalPnlEur =
+                  unrealizedEur !== null && token.realizedPnlEur !== null ? unrealizedEur + token.realizedPnlEur : null;
+                return { token, currentPrice, currentValue, unrealized, totalPnl, unrealizedEur, totalPnlEur };
               });
 
               const totalTokensValue = tokensWithValues.reduce((sum, t) => sum + (t.currentValue ?? 0), 0);
@@ -998,8 +1015,9 @@ export function DashboardNewLayout({
                       </tr>
                     </thead>
                     <tbody className="text-xs font-medium">
-                      {sorted.map(({ token, currentPrice, currentValue, unrealized, totalPnl }) => {
+                      {sorted.map(({ token, currentPrice, currentValue, unrealized, totalPnl, unrealizedEur, totalPnlEur }) => {
                         const realized = token.realizedPnlAvco;
+                        const realizedEur = token.realizedPnlEur;
                         const isFiltered = chartFilter.type === "token" && chartFilter.symbol === token.symbol;
                         const isExpanded = expandedTokens.has(token.symbol);
                         const toggleExpand = (e: React.MouseEvent) => {
@@ -1074,7 +1092,7 @@ export function DashboardNewLayout({
                                 : "—"}
                             </td>
                             <td className="num px-4 py-3 text-right text-muted-foreground">
-                              {token.avgCostBasis > 0 ? money(token.avgCostBasis) : "—"}
+                              {token.avgCostBasis > 0 ? amount(token.avgCostBasis, token.avgCostBasisEur) : "—"}
                             </td>
                             <td className="num px-4 py-3 text-right font-bold text-primary">
                               {/* Recharger une seule ligne : une requête isolée
@@ -1136,18 +1154,18 @@ export function DashboardNewLayout({
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
-                                ? `${realized >= 0 ? "+" : ""}${money(realized)}`
+                                ? `${realized >= 0 ? "+" : ""}${amount(realized, realizedEur)}`
                                 : <span className="text-muted-foreground/70">—</span>}
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
-                                ? `${unrealized >= 0 ? "+" : ""}${money(unrealized)}`
+                                ? `${(unrealizedEur ?? unrealized) >= 0 ? "+" : ""}${amount(unrealized, unrealizedEur)}`
                                 : "—"}
                             </td>
                             <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
-                                ? `${totalPnl >= 0 ? "+" : ""}${money(totalPnl)}`
-                                : money(realized)}
+                                ? `${(totalPnlEur ?? totalPnl) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}`
+                                : amount(realized, realizedEur)}
                             </td>
                           </tr>
                           {isExpanded && (
@@ -1189,14 +1207,22 @@ export function DashboardNewLayout({
         )}
 
         {activeTab === "plateformes" && (() => {
-          // Aggrégation par plateforme à partir des events de chaque token
+          // Agrégation par plateforme depuis le grand livre : quantités de
+          // chaque source (solde publié, ou soldes du livre pour les autres),
+          // coût et résultat réalisé de CE compte, en dollars et en euros
+          // historiques. Auparavant, un coût moyen tous comptes confondus
+          // était appliqué à des quantités redimensionnées : le coût et la
+          // valeur d'une plateforme ne correspondaient à rien de réel.
           type PlatformTokenBreakdown = {
             symbol: string;
             qty: number;
             costBasis: number;
+            costBasisEur: number | null;
             currentValue: number | null;
             realized: number;
+            realizedEur: number | null;
             unrealized: number | null;
+            unrealizedEur: number | null;
           };
           type PlatformStat = {
             provider: string;
@@ -1204,106 +1230,108 @@ export function DashboardNewLayout({
             tokenCount: number;
             currentValueUsd: number;
             costBasisUsd: number;
+            costBasisEur: number | null;
             realizedPnl: number;
+            realizedPnlEur: number | null;
             unrealizedPnl: number | null;
+            unrealizedPnlEur: number | null;
             totalPnl: number | null;
+            totalPnlEur: number | null;
             lastActivityAt: number;
             hasAllPrices: boolean;
             tokens: PlatformTokenBreakdown[];
           };
 
-          const byProvider = new Map<string, {
-            provider: string;
-            providerDisplayName: string;
-            perSymbol: Map<string, { qty: number; costUsd: number; realized: number }>;
-            lastActivityAt: number;
-          }>();
+          const eurRateNow = fxRateAt(Date.now())?.eurPerUsd ?? null;
+          /** Cours en dollars ; l'euro au change du jour, comme tout le cash. */
+          const priceUsdOf = (symbol: string): number | undefined => {
+            if (USD_STABLECOINS.has(symbol)) return 1;
+            if (symbol === "EUR") return eurRateNow ? 1 / eurRateNow : undefined;
+            return currentPrices[symbol];
+          };
+
+          const positionByAccountAsset = new Map(
+            ledgerAccounts.map((position) => [`${position.account}|${position.asset}`, position])
+          );
+          const metaByAccount = new Map<string, { provider: string; displayName: string }>();
+          for (const integration of integrations) {
+            metaByAccount.set(String(integration._id), {
+              provider: integration.provider,
+              displayName: integration.displayName ?? integration.provider,
+            });
+          }
+
+          const lastActivityByProvider = new Map<string, number>();
+          for (const token of portfolioTokens) {
+            for (const ev of token.events) {
+              lastActivityByProvider.set(ev.provider, Math.max(lastActivityByProvider.get(ev.provider) ?? 0, ev.timestamp));
+            }
+          }
+
+          type Line = { qty: number; costUsd: number; costEur: number | null; realized: number; realizedEur: number | null };
+          const byProvider = new Map<string, { provider: string; providerDisplayName: string; perSymbol: Map<string, Line> }>();
+          const lineFor = (account: string, symbol: string) => {
+            const meta = metaByAccount.get(account) ?? { provider: account, displayName: account };
+            const entry = byProvider.get(meta.provider) ?? {
+              provider: meta.provider,
+              providerDisplayName: meta.displayName,
+              perSymbol: new Map<string, Line>(),
+            };
+            byProvider.set(meta.provider, entry);
+            const line = entry.perSymbol.get(symbol) ?? { qty: 0, costUsd: 0, costEur: 0, realized: 0, realizedEur: 0 };
+            entry.perSymbol.set(symbol, line);
+            return line;
+          };
+          const seen = new Set<string>();
 
           for (const token of portfolioTokens) {
-            // AVCO par plateforme : on recalcule la quantité et le coût moyen
-            // uniquement avec les events de cette plateforme
-            const eventsByProvider = new Map<string, typeof token.events>();
-            for (const ev of token.events) {
-              const key = ev.provider;
-              const arr = eventsByProvider.get(key) ?? [];
-              arr.push(ev);
-              eventsByProvider.set(key, arr);
+            for (const source of token.quantityBySource ?? []) {
+              if (source.quantity <= 1e-12) continue;
+              const key = `${source.integrationId}|${token.symbol}`;
+              seen.add(key);
+              const position = positionByAccountAsset.get(key);
+              // Coût unitaire de ce compte ; à défaut, celui de l'actif.
+              const ledgerQty = position && position.quantity > 1e-12 ? position.quantity : null;
+              const unitUsd = ledgerQty ? position!.costUsd / ledgerQty : token.avgCostBasis;
+              const unitEur =
+                ledgerQty && position!.costEur !== null ? position!.costEur / ledgerQty : null;
+              const line = lineFor(source.integrationId, token.symbol);
+              line.qty += source.quantity;
+              line.costUsd += source.quantity * unitUsd;
+              line.costEur = line.costEur !== null && unitEur !== null ? line.costEur + source.quantity * unitEur : null;
+              line.realized += position?.realizedUsd ?? 0;
+              line.realizedEur =
+                line.realizedEur !== null && (position === undefined || position.realizedEur !== null)
+                  ? line.realizedEur + (position?.realizedEur ?? 0)
+                  : null;
             }
-
-            type PerPlatform = { qty: number; avgCost: number; realized: number; lastAt: number; displayName: string };
-            const perPlatform = new Map<string, PerPlatform>();
-            const upper = token.symbol.toUpperCase();
-
-            for (const [provider, events] of eventsByProvider) {
-              const sorted = [...events].sort((a, b) => a.timestamp - b.timestamp);
-              let qty = 0;
-              let avgCost = 0;
-              let realized = 0;
-              for (const ev of sorted) {
-                const feeInBase = ev.fee && ev.feeAsset?.toUpperCase() === upper ? ev.fee : 0;
-                if (ev.type === "BUY" && ev.valueUsd) {
-                  const eff = ev.quantity - feeInBase;
-                  const newQty = qty + eff;
-                  avgCost = newQty > 0 ? (qty * avgCost + ev.valueUsd) / newQty : 0;
-                  qty = newQty;
-                } else if (ev.type === "SELL") {
-                  const proceeds = ev.valueUsd ?? ev.quantity * (ev.price ?? avgCost);
-                  realized += proceeds - ev.quantity * avgCost;
-                  qty = Math.max(0, qty - ev.quantity - feeInBase);
-                } else if (ev.type === "DEPOSIT") {
-                  qty += ev.quantity;
-                } else if (ev.type === "WITHDRAWAL") {
-                  qty = Math.max(0, qty - ev.quantity);
-                }
-              }
-              perPlatform.set(provider, {
-                qty,
-                avgCost,
-                realized,
-                lastAt: sorted[sorted.length - 1]?.timestamp ?? 0,
-                displayName: sorted[0]?.providerDisplayName ?? provider,
-              });
-            }
-
-            // Rescale : la quantité totale par plateforme (depuis events) peut
-            // diverger de token.currentQuantity (qui est la vérité API, ajustée
-            // pour dust conversions, staking, etc.). On rescale pour garder
-            // la cohérence avec la valeur globale du portefeuille.
-            const sumQty = Array.from(perPlatform.values()).reduce((s, p) => s + Math.max(0, p.qty), 0);
-            const scale = sumQty > 0 ? token.currentQuantity / sumQty : 0;
-
-            for (const [provider, pp] of perPlatform) {
-              const scaledQty = Math.max(0, pp.qty) * scale;
-              if (scaledQty <= 0.00001 && pp.realized === 0) continue;
-
-              const entry = byProvider.get(provider) ?? {
-                provider,
-                providerDisplayName: pp.displayName,
-                perSymbol: new Map(),
-                lastActivityAt: 0,
-              };
-              entry.perSymbol.set(token.symbol, {
-                qty: scaledQty,
-                costUsd: scaledQty * pp.avgCost,
-                realized: pp.realized,
-              });
-              entry.lastActivityAt = Math.max(entry.lastActivityAt, pp.lastAt);
-              byProvider.set(provider, entry);
-            }
+          }
+          // Actifs entièrement cédés sur un compte : seul leur résultat reste.
+          for (const position of ledgerAccounts) {
+            const key = `${position.account}|${position.asset}`;
+            if (seen.has(key) || Math.abs(position.realizedUsd) < 1e-9) continue;
+            const line = lineFor(position.account, position.asset);
+            line.realized += position.realizedUsd;
+            line.realizedEur =
+              line.realizedEur !== null && position.realizedEur !== null ? line.realizedEur + position.realizedEur : null;
           }
 
           const stats: PlatformStat[] = Array.from(byProvider.values()).map((p) => {
             let currentValueUsd = 0;
             let costBasisUsd = 0;
+            let costBasisEur: number | null = 0;
             let realizedPnl = 0;
+            let realizedPnlEur: number | null = 0;
             let tokenCount = 0;
             let hasAllPrices = true;
             const tokens: PlatformTokenBreakdown[] = [];
             for (const [symbol, info] of p.perSymbol) {
               if (info.qty > 0.00001) tokenCount += 1;
               costBasisUsd += info.costUsd;
+              costBasisEur = costBasisEur !== null && info.costEur !== null ? costBasisEur + info.costEur : null;
               realizedPnl += info.realized;
-              const price = USD_STABLECOINS.has(symbol) ? 1 : currentPrices[symbol];
+              realizedPnlEur = realizedPnlEur !== null && info.realizedEur !== null ? realizedPnlEur + info.realizedEur : null;
+              const price = priceUsdOf(symbol);
               let tokenCurrentValue: number | null = null;
               if (price && info.qty > 0) {
                 tokenCurrentValue = price * info.qty;
@@ -1311,30 +1339,41 @@ export function DashboardNewLayout({
               } else if (info.qty > 0.00001) {
                 hasAllPrices = false;
               }
+              const valueEur = tokenCurrentValue !== null && eurRateNow ? tokenCurrentValue * eurRateNow : null;
               tokens.push({
                 symbol,
                 qty: info.qty,
                 costBasis: info.costUsd,
+                costBasisEur: info.costEur,
                 currentValue: tokenCurrentValue,
                 realized: info.realized,
+                realizedEur: info.realizedEur,
                 unrealized: tokenCurrentValue !== null ? tokenCurrentValue - info.costUsd : null,
+                unrealizedEur: valueEur !== null && info.costEur !== null ? valueEur - info.costEur : null,
               });
             }
             tokens.sort((a, b) => (b.currentValue ?? 0) - (a.currentValue ?? 0));
-            const unrealizedPnl = hasAllPrices && hasCurrentPrices
-              ? currentValueUsd - costBasisUsd
-              : null;
-            const totalPnl = unrealizedPnl !== null ? unrealizedPnl + realizedPnl : null;
+            const unrealizedPnl = hasAllPrices && hasCurrentPrices ? currentValueUsd - costBasisUsd : null;
+            const currentValueEur = eurRateNow ? currentValueUsd * eurRateNow : null;
+            const unrealizedPnlEur =
+              hasAllPrices && hasCurrentPrices && currentValueEur !== null && costBasisEur !== null
+                ? currentValueEur - costBasisEur
+                : null;
             return {
               provider: p.provider,
               providerDisplayName: p.providerDisplayName,
               tokenCount,
               currentValueUsd,
               costBasisUsd,
+              costBasisEur,
               realizedPnl,
+              realizedPnlEur,
               unrealizedPnl,
-              totalPnl,
-              lastActivityAt: p.lastActivityAt,
+              unrealizedPnlEur,
+              totalPnl: unrealizedPnl !== null ? unrealizedPnl + realizedPnl : null,
+              totalPnlEur:
+                unrealizedPnlEur !== null && realizedPnlEur !== null ? unrealizedPnlEur + realizedPnlEur : null,
+              lastActivityAt: lastActivityByProvider.get(p.provider) ?? 0,
               hasAllPrices,
               tokens,
             };
@@ -1421,7 +1460,7 @@ export function DashboardNewLayout({
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground">{s.tokenCount}</td>
                       <td className="num px-4 py-3 text-right text-muted-foreground">
-                        {s.costBasisUsd > 0 ? money(s.costBasisUsd) : "—"}
+                        {s.costBasisUsd > 0 ? amount(s.costBasisUsd, s.costBasisEur) : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right font-bold text-foreground">
                         {hasCurrentPrices && s.currentValueUsd > 0 ? (
@@ -1452,17 +1491,17 @@ export function DashboardNewLayout({
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                         {s.realizedPnl !== 0
-                          ? `${s.realizedPnl >= 0 ? "+" : ""}${money(s.realizedPnl)}`
+                          ? `${s.realizedPnl >= 0 ? "+" : ""}${amount(s.realizedPnl, s.realizedPnlEur)}`
                           : "—"}
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.unrealizedPnl !== null
-                          ? `${s.unrealizedPnl >= 0 ? "+" : ""}${money(s.unrealizedPnl)}`
+                          ? `${(s.unrealizedPnlEur ?? s.unrealizedPnl) >= 0 ? "+" : ""}${amount(s.unrealizedPnl, s.unrealizedPnlEur)}`
                           : "—"}
                       </td>
                       <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.totalPnl !== null
-                          ? `${s.totalPnl >= 0 ? "+" : ""}${money(s.totalPnl)}`
+                          ? `${(s.totalPnlEur ?? s.totalPnl) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}`
                           : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground text-[11px]">
@@ -1515,11 +1554,11 @@ export function DashboardNewLayout({
                                         {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
-                                        {t.costBasis > 0 ? money(t.costBasis) : "—"}
+                                        {t.costBasis > 0 ? amount(t.costBasis, t.costBasisEur) : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.qty > 0 && t.costBasis > 0
-                                          ? money(t.costBasis / t.qty)
+                                          ? amount(t.costBasis / t.qty, t.costBasisEur !== null ? t.costBasisEur / t.qty : null)
                                           : "—"}
                                       </td>
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
@@ -1527,12 +1566,12 @@ export function DashboardNewLayout({
                                       </td>
                                       <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                                         {t.realized !== 0
-                                          ? `${t.realized >= 0 ? "+" : ""}${money(t.realized)}`
+                                          ? `${t.realized >= 0 ? "+" : ""}${amount(t.realized, t.realizedEur)}`
                                           : "—"}
                                       </td>
                                       <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
                                         {t.unrealized !== null
-                                          ? `${t.unrealized >= 0 ? "+" : ""}${money(t.unrealized)}`
+                                          ? `${(t.unrealizedEur ?? t.unrealized) >= 0 ? "+" : ""}${amount(t.unrealized, t.unrealizedEur)}`
                                           : "—"}
                                       </td>
                                     </tr>

@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { errorMessage, toast } from "@/lib/toast";
+import { decodeCsvText } from "@/lib/csv-text";
 
 type BitstackImportDialogProps = {
   open: boolean;
@@ -197,7 +198,7 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const result = parseBitstackCsv(ev.target?.result as string);
+        const result = parseBitstackCsv(decodeCsvText(ev.target?.result as ArrayBuffer));
         if (result.trades.length === 0 && result.deposits.length === 0) {
           setParseError("Aucune transaction reconnue dans ce fichier. Vérifiez que c'est bien un export Bitstack.");
         } else {
@@ -207,7 +208,7 @@ export function BitstackImportDialog({ open, onOpenChange, onSuccess }: Bitstack
         setParseError("Impossible de lire le fichier. Vérifiez qu'il s'agit d'un CSV Bitstack valide.");
       }
     };
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   }, []);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

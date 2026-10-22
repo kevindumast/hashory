@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { api } from "@/convex/_generated/api";
 import { errorMessage, toast } from "@/lib/toast";
+import { decodeCsvText } from "@/lib/csv-text";
 
 type FinaryImportDialogProps = {
   open: boolean;
@@ -205,7 +206,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const result = parseFinaryCsv(ev.target?.result as string);
+        const result = parseFinaryCsv(decodeCsvText(ev.target?.result as ArrayBuffer));
         if (result.trades.length === 0 && result.withdrawals.length === 0) {
           setParseError("Aucune transaction reconnue dans ce fichier. Vérifiez que c'est bien un export Finary CSV.");
         } else {
@@ -215,7 +216,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
         setParseError("Impossible de lire le fichier. Vérifiez qu'il s'agit d'un CSV Finary valide.");
       }
     };
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   }, []);
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
