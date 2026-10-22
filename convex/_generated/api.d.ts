@@ -41,6 +41,7 @@ import type * as portfolioSnapshots from "../portfolioSnapshots.js";
 import type * as priceHistory from "../priceHistory.js";
 import type * as resetCursors from "../resetCursors.js";
 import type * as solana from "../solana.js";
+import type * as strike from "../strike.js";
 import type * as tao from "../tao.js";
 import type * as taxReport from "../taxReport.js";
 import type * as trades from "../trades.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   priceHistory: typeof priceHistory;
   resetCursors: typeof resetCursors;
   solana: typeof solana;
+  strike: typeof strike;
   tao: typeof tao;
   taxReport: typeof taxReport;
   trades: typeof trades;

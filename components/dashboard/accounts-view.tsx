@@ -70,6 +70,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   tao: "Bittensor (TAO)",
   bitstack: "Bitstack",
   finary: "Finary",
+  strike: "Strike",
 }
 
 

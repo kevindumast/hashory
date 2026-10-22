@@ -19,7 +19,7 @@ en open source et en lecture seule.
 ## Ce que fait Hashory
 
 - **Agrège vos sources.** Binance et KuCoin via API en lecture seule ; Bitcoin, Ethereum, Solana,
-  Kaspa et Bittensor via adresse publique ; Bitstack et Finary via import CSV.
+  Kaspa et Bittensor via adresse publique ; Bitstack, Finary et Strike via import CSV.
 - **Reconstitue votre historique.** Trades, conversions, dépôts, retraits, ordres, soldes et
   poussière — l'intégralité de votre activité, sans ressaisie.
 - **Calcule votre performance.** P&L par actif, par période et par plateforme, prix de revient

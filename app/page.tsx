@@ -160,7 +160,7 @@ const faqItems = [
   {
     question: "Quelles plateformes sont réellement supportées ?",
     answer:
-      "Aujourd'hui : Binance, Kraken et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack et Finary sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
+      "Aujourd'hui : Binance, Kraken et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack, Finary et Strike sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
   },
   {
     question: "La déclaration fiscale couvre-t-elle mon cas ?",
