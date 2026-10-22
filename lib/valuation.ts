@@ -111,6 +111,21 @@ export function createPriceBook(options: {
   return { usd, eurPerUsd, eur };
 }
 
+/**
+ * Le même carnet, exprimé en euros : `usd()` y rend des euros. Le moteur de
+ * performance ne connaît pas la devise de ses montants ; lui passer ce
+ * carnet donne une comptabilité en euros, chaque opération valorisée au
+ * change de son jour. Un achat payé 30 € coûte alors 30 €, et non « 34,87 $ »
+ * reconvertis au change d'aujourd'hui.
+ */
+export function inEuros(book: PriceBook): PriceBook {
+  return {
+    usd: book.eur,
+    eur: book.eur,
+    eurPerUsd: () => 1,
+  };
+}
+
 /** Vrai pour le fiat et les stablecoins : valorisés au pair, sans cours. */
 export function isCashLike(asset: string): boolean {
   const upper = normalizeAsset(asset);

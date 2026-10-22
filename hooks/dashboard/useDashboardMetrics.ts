@@ -52,6 +52,8 @@ export type TradeRecord = {
   provider: string;
   providerDisplayName: string;
   providerOrderId?: string;
+  /** Identifiant de la transaction chez la plateforme (préfixé par la source). */
+  providerTradeId?: string;
   tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
   symbol: string;
   side: "BUY" | "SELL";
@@ -83,6 +85,7 @@ export type TrackedScope = {
 
 export type DepositRecord = {
   _id: Id<"deposits">;
+  depositId?: string;
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
@@ -100,6 +103,7 @@ export type DepositRecord = {
 
 export type WithdrawalRecord = {
   _id: Id<"withdrawals">;
+  withdrawId?: string;
   integrationId: Id<"integrations">;
   provider: string;
   providerDisplayName: string;
@@ -137,6 +141,8 @@ export type TransactionEntry =
       type: "trade";
       tradeType?: "SPOT" | "CONVERT" | "FIAT" | "DUST";
       id: string;
+      /** Numéro de la transaction chez la plateforme. */
+      externalId?: string | null;
       integrationId: Id<"integrations">;
       provider: string;
       providerDisplayName: string;
@@ -153,6 +159,7 @@ export type TransactionEntry =
   | {
       type: "deposit";
       id: string;
+      externalId?: string | null;
       integrationId: Id<"integrations">;
       provider: string;
       providerDisplayName: string;
@@ -168,6 +175,7 @@ export type TransactionEntry =
   | {
       type: "withdrawal";
       id: string;
+      externalId?: string | null;
       integrationId: Id<"integrations">;
       provider: string;
       providerDisplayName: string;
@@ -226,6 +234,10 @@ export type PortfolioToken = {
   avgCostBasis: number;
   /** PnL réalisé calculé avec AVCO */
   realizedPnlAvco: number;
+  /** Prix de revient moyen en euros historiques, si le grand livre l'a calculé. */
+  avgCostBasisEur: number | null;
+  /** Résultat réalisé en euros historiques, si le grand livre l'a calculé. */
+  realizedPnlEur: number | null;
   averageBuyPrice?: number;
   averageSellPrice?: number;
   lastActivityAt: number;
@@ -522,6 +534,7 @@ export function useDashboardMetrics(refreshToken: number) {
       type: "trade",
       tradeType: trade.tradeType,
       id: trade._id,
+      externalId: trade.providerTradeId ?? trade.providerOrderId ?? null,
       integrationId: trade.integrationId,
       provider: trade.provider,
       providerDisplayName: trade.providerDisplayName,
@@ -540,6 +553,7 @@ export function useDashboardMetrics(refreshToken: number) {
       entries.push({
         type: "deposit",
         id: deposit._id,
+        externalId: deposit.depositId ?? null,
         integrationId: deposit.integrationId,
         provider: deposit.provider,
         providerDisplayName: deposit.providerDisplayName,
@@ -558,6 +572,7 @@ export function useDashboardMetrics(refreshToken: number) {
       entries.push({
         type: "withdrawal",
         id: withdrawal._id,
+        externalId: withdrawal.withdrawId ?? null,
         integrationId: withdrawal.integrationId,
         provider: withdrawal.provider,
         providerDisplayName: withdrawal.providerDisplayName,
@@ -590,6 +605,7 @@ export function useDashboardMetrics(refreshToken: number) {
           type: "trade",
           tradeType: "FIAT",
           id: fiat._id,
+          externalId: fiat.orderId ?? null,
           integrationId: fiat.integrationId,
           provider: fiat.provider,
           providerDisplayName: fiat.providerDisplayName,
@@ -608,6 +624,7 @@ export function useDashboardMetrics(refreshToken: number) {
         entries.push({
           type: "deposit",
           id: fiat._id,
+          externalId: fiat.orderId ?? null,
           integrationId: fiat.integrationId,
           provider: fiat.provider,
           providerDisplayName: fiat.providerDisplayName,
@@ -624,6 +641,7 @@ export function useDashboardMetrics(refreshToken: number) {
         entries.push({
           type: "withdrawal",
           id: fiat._id,
+          externalId: fiat.orderId ?? null,
           integrationId: fiat.integrationId,
           provider: fiat.provider,
           providerDisplayName: fiat.providerDisplayName,
@@ -939,6 +957,13 @@ export function useDashboardMetrics(refreshToken: number) {
             : 0
           : local.avgCostBasis;
         const realizedPnlAvco = ledgerPosition ? ledgerPosition.realizedUsd : local.realizedPnlAvco;
+        const avgCostBasisEur =
+          ledgerPosition && ledgerPosition.costEur !== null
+            ? ledgerPosition.quantity > 1e-12
+              ? ledgerPosition.costEur / ledgerPosition.quantity
+              : 0
+            : null;
+        const realizedPnlEur = ledgerPosition?.realizedEur ?? null;
 
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
@@ -990,6 +1015,8 @@ export function useDashboardMetrics(refreshToken: number) {
           netProfitUsd: entry.sellValueUsd - entry.buyValueUsd,
           avgCostBasis,
           realizedPnlAvco,
+          avgCostBasisEur,
+          realizedPnlEur,
           averageBuyPrice,
           averageSellPrice,
           lastActivityAt: entry.lastActivityAt,
@@ -1205,5 +1232,7 @@ export function useDashboardMetrics(refreshToken: number) {
     profitSummary,
     historySeries,
     performanceSeries,
+    /** Positions du grand livre compte par compte, en dollars et en euros. */
+    ledgerAccounts: ledgerPositions?.balances ?? [],
   };
 }

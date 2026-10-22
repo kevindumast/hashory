@@ -50,6 +50,7 @@ export const listByUser = query({
       updateTime?: number;
       fee: number;
       txId?: string;
+      withdrawId: string;
     }> = [];
 
     for (const integration of integrations) {
@@ -71,6 +72,7 @@ export const listByUser = query({
           updateTime: withdrawal.updateTime ?? undefined,
           fee: withdrawal.fee,
           txId: withdrawal.txId ?? undefined,
+          withdrawId: withdrawal.withdrawId,
         });
       }
     }
@@ -95,6 +97,7 @@ export const listByUser = query({
         updateTime: record.updateTime ?? null,
         fee: record.fee,
         txId: record.txId ?? null,
+        withdrawId: record.withdrawId,
       };
     });
   },

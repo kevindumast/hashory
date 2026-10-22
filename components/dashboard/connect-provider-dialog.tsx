@@ -25,6 +25,7 @@ import { isConvexConfigured } from "@/convex/client";
 import type { ProviderId } from "@/lib/providers";
 import { providerIcon } from "@/lib/provider-icons";
 import { errorMessage, toast } from "@/lib/toast";
+import { decodeCsvText } from "@/lib/csv-text";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
 
@@ -451,7 +452,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const text = ev.target?.result as string;
+        const text = decodeCsvText(ev.target?.result as ArrayBuffer);
         if (provider.value === "strike") {
           const result = parseStrikeCsv(text);
           if (result.trades.length + result.deposits.length + result.withdrawals.length === 0) {
@@ -480,7 +481,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         setError("Impossible de lire le fichier CSV.");
       }
     };
-    reader.readAsText(file, "utf-8");
+    reader.readAsArrayBuffer(file);
   }
 
   function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {

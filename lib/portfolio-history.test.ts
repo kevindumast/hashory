@@ -9,7 +9,7 @@ import {
   quarterlyReturns,
   type HistoryPoint,
 } from "./portfolio-history";
-import { createPriceBook, impliedPrices } from "./valuation";
+import { createPriceBook, impliedPrices, inEuros } from "./valuation";
 import { krakenInput } from "./test-fixtures";
 
 const DAY_MS = 86_400_000;
@@ -188,6 +188,49 @@ describe("performance du portefeuille", () => {
     // 32,47 USDC reçus.
     const realized = history.positions.reduce((sum, position) => sum + position.realizedUsd, 0);
     close(realized, -(0.28 * 1.1457 + 0.32), 0.002);
+  });
+
+  it("tient en euros le coût exact des achats payés en euros", () => {
+    // Trois achats Bitstack de 30 € à des changes différents : en euros, le
+    // coût vaut 90 €, quel que soit le change du jour.
+    const operations = buildLedger({
+      ...empty,
+      trades: [0, 1, 2].map((i) => ({
+        id: `b${i}`,
+        account: "bitstack",
+        tradeType: "FIAT" as const,
+        symbol: "BTCEUR",
+        side: "BUY" as const,
+        quantity: 0.0004,
+        price: 75_000,
+        quoteQuantity: 30,
+        fee: 0.45,
+        feeAsset: "EUR",
+        executedAt: day("2025-01-01") + i * 40 * DAY_MS,
+        fromAsset: "EUR",
+        fromAmount: 30,
+        toAsset: "BTC",
+        toAmount: 0.0004,
+      })),
+    });
+    const book = createPriceBook({
+      prices: flat("BTC", 80_000, "2025-01-01", "2025-04-30"),
+      fx: [
+        { dayUtc: day("2025-01-01"), eurPerUsd: 0.96 },
+        { dayUtc: day("2025-02-10"), eurPerUsd: 0.92 },
+        { dayUtc: day("2025-03-22"), eurPerUsd: 0.88 },
+      ],
+    });
+    const inEur = buildPortfolioHistory(operations, inEuros(book), { account: "bitstack", todayUtc: day("2025-04-30") });
+    const btc = inEur.positions.find((position) => position.asset === "BTC")!;
+    close(btc.costUsd, 90, 1e-9);
+    close(last(inEur.points).netContributionsUsd, 90, 1e-9);
+    // Valeur en euros au change du jour : 0,0012 BTC × 80 000 $ × 0,88.
+    close(last(inEur.points).valueUsd, 0.0012 * 80_000 * 0.88, 1e-6);
+
+    // En dollars, le même coût dépend du change de chaque achat.
+    const inUsd = buildPortfolioHistory(operations, book, { account: "bitstack", todayUtc: day("2025-04-30") });
+    close(inUsd.positions.find((position) => position.asset === "BTC")!.costUsd, 30 / 0.96 + 30 / 0.92 + 30 / 0.88, 1e-6);
   });
 
   it("transmet le coût d'un actif à travers un transfert interne", () => {

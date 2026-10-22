@@ -9,6 +9,7 @@ import {
   assetsToPrice,
   createPriceBook,
   impliedPrices,
+  inEuros,
   startOfUtcDay,
   type PriceSeries,
 } from "../lib/valuation";
@@ -21,8 +22,9 @@ import {
  * 3 — frais de retrait Finary ignorés (rangés sans leur devise).
  * 4 — écriture sans doublon quand deux recalculs se chevauchent.
  * 5 — soldes par compte pour le dashboard.
+ * 6 — positions par compte, en dollars et en euros historiques.
  */
-const ENGINE_VERSION = 5;
+const ENGINE_VERSION = 6;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";
@@ -70,13 +72,19 @@ export const listPositions = query({
       .query("portfolioPositions")
       .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
       .collect();
+    const shape = (row: (typeof rows)[number]) => ({
+      asset: row.asset,
+      quantity: row.quantity,
+      costUsd: row.costUsd,
+      realizedUsd: row.realizedUsd,
+      costEur: row.costEur ?? null,
+      realizedEur: row.realizedEur ?? null,
+    });
     return {
-      positions: rows
-        .filter((row) => row.account === undefined)
-        .map(({ asset, quantity, costUsd, realizedUsd }) => ({ asset, quantity, costUsd, realizedUsd })),
+      positions: rows.filter((row) => row.account === undefined).map(shape),
       balances: rows
         .filter((row) => row.account !== undefined)
-        .map(({ account, asset, quantity }) => ({ account: account!, asset, quantity })),
+        .map((row) => ({ account: row.account!, ...shape(row) })),
     };
   },
 });
@@ -119,15 +127,41 @@ export const pruneSnapshots = internalMutation({
   },
 });
 
+const positionFields = {
+  asset: v.string(),
+  quantity: v.number(),
+  costUsd: v.number(),
+  realizedUsd: v.number(),
+  costEur: v.number(),
+  realizedEur: v.number(),
+};
+const positionRow = v.object(positionFields);
+
+type PositionRow = { asset: string; quantity: number; costUsd: number; realizedUsd: number; costEur: number; realizedEur: number };
+
+/** Réunit les positions en dollars et en euros d'un même périmètre. */
+function mergePositions(
+  usd: { asset: string; quantity: number; costUsd: number; realizedUsd: number }[],
+  eur: { asset: string; costUsd: number; realizedUsd: number }[]
+): PositionRow[] {
+  const inEur = new Map(eur.map((position) => [position.asset, position]));
+  return usd
+    .filter((position) => position.quantity > 1e-12 || Math.abs(position.realizedUsd) > 1e-9)
+    .map((position) => ({
+      ...position,
+      // Le moteur nomme « Usd » la devise de son carnet : ici, des euros.
+      costEur: inEur.get(position.asset)?.costUsd ?? 0,
+      realizedEur: inEur.get(position.asset)?.realizedUsd ?? 0,
+    }));
+}
+
 export const replacePositions = internalMutation({
   args: {
     clerkId: v.string(),
-    positions: v.array(
-      v.object({ asset: v.string(), quantity: v.number(), costUsd: v.number(), realizedUsd: v.number() })
-    ),
-    balances: v.array(v.object({ account: v.string(), asset: v.string(), quantity: v.number() })),
+    positions: v.array(positionRow),
+    accounts: v.array(v.object({ account: v.string(), ...positionFields })),
   },
-  handler: async (ctx, { clerkId, positions, balances }) => {
+  handler: async (ctx, { clerkId, positions, accounts }) => {
     const existing = await ctx.db
       .query("portfolioPositions")
       .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
@@ -137,16 +171,8 @@ export const replacePositions = internalMutation({
     for (const position of positions) {
       await ctx.db.insert("portfolioPositions", { clerkId, ...position, computedAt: now });
     }
-    for (const balance of balances) {
-      await ctx.db.insert("portfolioPositions", {
-        clerkId,
-        account: balance.account,
-        asset: balance.asset,
-        quantity: balance.quantity,
-        costUsd: 0,
-        realizedUsd: 0,
-        computedAt: now,
-      });
+    for (const position of accounts) {
+      await ctx.db.insert("portfolioPositions", { clerkId, ...position, computedAt: now });
     }
   },
 });
@@ -295,6 +321,7 @@ export const recomputeForUser = action({
       toDay: todayUtc,
     });
     const book = createPriceBook({ prices, fx, implied: impliedPrices(operations, fx) });
+    const eurBook = inEuros(book);
 
     const btcStart = book.usd("BTC", fromDay);
 
@@ -314,9 +341,16 @@ export const recomputeForUser = action({
 
     const scopes: (string | undefined)[] = [undefined, ...accounts];
     let days = 0;
+    let globalPositions: PositionRow[] = [];
+    const accountPositions: (PositionRow & { account: string })[] = [];
     for (const account of scopes) {
       const history = buildPortfolioHistory(operations, book, { account, todayUtc });
       if (history.points.length === 0) continue;
+      // La même comptabilité en euros, pour les positions.
+      const historyEur = buildPortfolioHistory(operations, eurBook, { account, todayUtc });
+      const positions = mergePositions(history.positions, historyEur.positions);
+      if (account === undefined) globalPositions = positions;
+      else accountPositions.push(...positions.map((position) => ({ account, ...position })));
       const rows = history.points.map((point) => {
         const btc = book.usd("BTC", point.dayUtc);
         return {
@@ -330,13 +364,7 @@ export const recomputeForUser = action({
           realizedPnlUsd: point.realizedPnlUsd,
         };
       });
-      if (account === undefined) {
-        await ctx.runMutation(internal.portfolioSnapshots.replacePositions, {
-          clerkId,
-          positions: history.positions,
-          balances: history.balances,
-        });
-      }
+
       const CHUNK = 400;
       for (let i = 0; i < rows.length; i += CHUNK) {
         await ctx.runMutation(internal.portfolioSnapshots.insertSnapshots, {
@@ -348,6 +376,12 @@ export const recomputeForUser = action({
       await prune(account ?? ALL_SCOPE, rows[0].dayUtc, rows[rows.length - 1].dayUtc);
       days = Math.max(days, rows.length);
     }
+
+    await ctx.runMutation(internal.portfolioSnapshots.replacePositions, {
+      clerkId,
+      positions: globalPositions,
+      accounts: accountPositions,
+    });
 
     await ctx.runMutation(internal.portfolioSnapshots.upsertState, {
       clerkId,

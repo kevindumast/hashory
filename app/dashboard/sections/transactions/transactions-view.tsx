@@ -15,6 +15,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
+
+/**
+ * Numéro de transaction tel que la plateforme l'affiche : l'import préfixe
+ * ses identifiants par la source (« bitstack:… », « convert:… ») pour les
+ * rendre uniques ; le préfixe n'a pas de sens pour l'utilisateur.
+ */
+function platformReference(externalId: string | null | undefined): string | null {
+  if (!externalId) return null;
+  const match = externalId.match(/^[a-z_]+:(.+)$/i);
+  return match ? match[1] : externalId;
+}
 import { useFxRates } from "@/hooks/useFxRates";
 
 // Helper pour extraire le quote asset (réutilisé de votre logique existante)
@@ -126,7 +137,7 @@ export function TransactionsView({
       
       let label = "Transaction";
       let type: "trade" | "deposit" | "withdrawal" = "trade";
-      type TxDisplay = { amount: string; currency: string; account: string; address?: string };
+      type TxDisplay = { amount: string; quantity: number; currency: string; account: string; address?: string };
       let outTx: TxDisplay | undefined = undefined;
       let inTx: TxDisplay | undefined = undefined;
 
@@ -147,21 +158,21 @@ export function TransactionsView({
 
         if (tx.side === 'BUY') {
             // Achat: Sortie Quote -> Entrée Base
-            outTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
-            inTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+            outTx = { amount: numberFormatter.format(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: numberFormatter.format(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
         } else {
             // Vente: Sortie Base -> Entrée Quote
-            outTx = { amount: numberFormatter.format(tx.quantity), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
-            inTx = { amount: numberFormatter.format(quoteQty), currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
+            outTx = { amount: numberFormatter.format(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: numberFormatter.format(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
         }
       } else if (tx.type === 'deposit') {
         type = 'deposit';
         label = "Entrée";
-        inTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+        inTx = { amount: numberFormatter.format(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       } else if (tx.type === 'withdrawal') {
         type = 'withdrawal';
         label = "Sortie";
-        outTx = { amount: numberFormatter.format(tx.amount), currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+        outTx = { amount: numberFormatter.format(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       }
 
       // Calculer le montant pour tri et affichage
@@ -233,6 +244,8 @@ export function TransactionsView({
 
       return {
         id: tx.id,
+        externalId: platformReference(tx.externalId),
+        txId: tx.type === 'trade' ? null : tx.txId,
         type,
         label,
         date,
@@ -296,19 +309,28 @@ export function TransactionsView({
   }, [sortOrder, tokenSearch]);
 
   const handleExport = () => {
-    // Préparer les données pour l'export
+    // Quantités exactes et montants en nombres, pas les libellés arrondis de
+    // l'écran : « 0,0004 BTC » cachait 0,00040509 BTC, et un tableur doit
+    // pouvoir faire ses propres sommes. Les identifiants permettent de
+    // retrouver chaque ligne dans l'historique de la plateforme.
     const exportData = sortedTransactions.map((tx) => ({
       'Date': tx.date,
       'Heure': tx.time,
       'Type de transaction': tx.label,
-      'Sortie': tx.out ? `-${tx.out.amount} ${tx.out.currency}` : '',
-      'Plateforme Sortie': tx.out?.account || '',
-      'Entrée': tx.in ? `+${tx.in.amount} ${tx.in.currency}` : '',
-      'Plateforme Entrée': tx.in?.account || '',
+      'Quantité sortie': tx.out ? -tx.out.quantity : '',
+      'Devise sortie': tx.out?.currency ?? '',
+      'Plateforme sortie': tx.out?.account || '',
+      'Quantité entrée': tx.in ? tx.in.quantity : '',
+      'Devise entrée': tx.in?.currency ?? '',
+      'Plateforme entrée': tx.in?.account || '',
       'Prix unitaire': tx.price != null ? tx.price : '',
-      'Fee': tx.fee != null ? tx.fee : '',
-      'Fee Asset': tx.feeAsset || '',
-      'Montant': tx.amountDisplay,
+      'Frais': tx.fee != null ? tx.fee : '',
+      'Devise des frais': tx.feeAsset || '',
+      'Montant USD': tx.amountDisplay === '-' ? '' : Number(tx.amount.toFixed(2)),
+      'Montant EUR': tx.amountEur != null ? Number(tx.amountEur.toFixed(2)) : '',
+      'N° de transaction (plateforme)': tx.externalId ?? '',
+      'Hash on-chain': tx.txId ?? '',
+      'ID Hashory': tx.id,
     }));
 
     // Créer un workbook et une feuille
@@ -319,13 +341,22 @@ export function TransactionsView({
     // Ajuster la largeur des colonnes
     ws['!cols'] = [
       { wch: 12 }, // Date
-      { wch: 10 }, // Heure
-      { wch: 18 }, // Type
-      { wch: 20 }, // Sortie
-      { wch: 18 }, // Plateforme Sortie
-      { wch: 20 }, // Entrée
-      { wch: 18 }, // Plateforme Entrée
-      { wch: 15 }, // Montant
+      { wch: 8 }, // Heure
+      { wch: 16 }, // Type
+      { wch: 16 }, // Quantité sortie
+      { wch: 8 }, // Devise sortie
+      { wch: 16 }, // Plateforme sortie
+      { wch: 16 }, // Quantité entrée
+      { wch: 8 }, // Devise entrée
+      { wch: 16 }, // Plateforme entrée
+      { wch: 14 }, // Prix unitaire
+      { wch: 10 }, // Frais
+      { wch: 8 }, // Devise des frais
+      { wch: 12 }, // Montant USD
+      { wch: 12 }, // Montant EUR
+      { wch: 40 }, // N° plateforme
+      { wch: 40 }, // Hash
+      { wch: 34 }, // ID Hashory
     ];
 
     // Générer le fichier
