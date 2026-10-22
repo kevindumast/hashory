@@ -7,8 +7,8 @@
   </defs>
   <rect width="512" height="512" fill="#151b23" />
   <g fill="#ffffff">
-    <rect x="176" y="166" width="42" height="180" rx="21" />
-    <rect x="294" y="166" width="42" height="180" rx="21" />
+    <rect x="154" y="147" width="64" height="218" rx="32" />
+    <rect x="294" y="147" width="64" height="218" rx="32" />
   </g>
-  <rect x="176" y="235" width="160" height="42" rx="21" fill="url(#hashory-bar-maskable)" />
+  <rect x="154" y="224" width="204" height="64" rx="32" fill="url(#hashory-bar-maskable)" />
 </svg>
