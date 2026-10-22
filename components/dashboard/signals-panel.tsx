@@ -7,13 +7,11 @@ import { ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
-import { Reveal } from "@/components/motion";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { usePortfolioAnalytics } from "@/hooks/dashboard/usePortfolioAnalytics";
 import { useCorrelationMatrix } from "@/hooks/dashboard/useCorrelationMatrix";
-import { computeSignals, type SignalSeverity } from "@/lib/signals";
+import { computeSignals, type Signal, type SignalSeverity } from "@/lib/signals";
 import { cn } from "@/lib/utils";
-
 
 const SEVERITY_LABEL: Record<SignalSeverity, string> = {
   critical: "Critique",
@@ -21,24 +19,22 @@ const SEVERITY_LABEL: Record<SignalSeverity, string> = {
   info: "À noter",
 };
 
-const SEVERITY_COLOR: Record<SignalSeverity, string> = {
-  critical: "text-destructive",
-  warning: "text-chart-4",
-  info: "text-muted-foreground",
+const SEVERITY_CHIP: Record<SignalSeverity, string> = {
+  critical: "bg-negative/10 text-negative",
+  warning: "bg-chart-4/12 text-chart-4",
+  info: "",
 };
 
 /**
- * Ce qui demande une décision, rassemblé en haut du portefeuille.
+ * Ce qui demande une décision : un compte en erreur, une contrepartie
+ * devenue dominante, un impôt à provisionner. Les règles vivent dans
+ * `lib/signals.ts`, où elles sont pures et testées ; ce hook ne fait que
+ * leur fournir l'état courant du portefeuille.
  *
- * Le tableau de bord montre un état ; il ne dit pas ce qui cloche. Un compte
- * en erreur depuis une semaine, une contrepartie devenue dominante ou un
- * impôt à provisionner ne se voient qu'en allant les chercher. Les règles
- * vivent dans `lib/signals.ts`, où elles sont pures et testées.
- *
- * Le silence est le comportement normal : rien ne s'affiche quand rien
+ * Le silence est le comportement normal : la liste est vide quand rien
  * n'appelle d'action.
  */
-export function SignalsPanel() {
+export function useSignals(): Signal[] {
   const { integrations, isLoadingIntegrations } = useDashboardData();
   const analytics = usePortfolioAnalytics("all");
   const correlation = useCorrelationMatrix(
@@ -46,7 +42,7 @@ export function SignalsPanel() {
   );
   const report = useQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
 
-  const signals = useMemo(() => {
+  return useMemo(() => {
     if (isLoadingIntegrations || analytics.isLoading) return [];
 
     const currentYear = new Date().getUTCFullYear();
@@ -81,57 +77,43 @@ export function SignalsPanel() {
       hasMissingFxRates: report?.hasMissingFxRates ?? false,
     });
   }, [integrations, isLoadingIntegrations, analytics, correlation, report]);
+}
 
-  if (signals.length === 0) return null;
+/** Une ligne de signal, compacte : elle vit dans le menu des notifications. */
+export function SignalItem({ signal, onNavigate }: { signal: Signal; onNavigate?: () => void }) {
+  const body = (
+    <>
+      <span className="min-w-0 flex-1">
+        <span
+          className={cn(
+            "chip py-0.5 text-[10px] uppercase tracking-[0.14em]",
+            SEVERITY_CHIP[signal.severity]
+          )}
+        >
+          {SEVERITY_LABEL[signal.severity]}
+        </span>
+        <span className="mt-1.5 block text-sm font-bold leading-snug text-foreground">
+          {signal.title}
+        </span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
+          {signal.detail}
+        </span>
+      </span>
+      {signal.href && <ArrowUpRight className="mt-1 size-3.5 shrink-0 text-faint" />}
+    </>
+  );
 
-  return (
-    <Reveal>
-      <section className="border-y border-border/60" aria-label="Points d'attention">
-        <p className="num border-b border-border/60 px-5 py-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-          Points d&apos;attention · {signals.length}
-        </p>
+  const className = "flex items-start gap-3 rounded-xl px-3 py-2.5";
 
-        <ul>
-          {signals.map((signal) => {
-            const body = (
-              <>
-                <span
-                  className={cn(
-                    "num w-20 shrink-0 text-[10px] uppercase tracking-[0.16em]",
-                    SEVERITY_COLOR[signal.severity]
-                  )}
-                >
-                  {SEVERITY_LABEL[signal.severity]}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm text-foreground">{signal.title}</span>
-                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-                    {signal.detail}
-                  </span>
-                </span>
-                {signal.href && (
-                  <ArrowUpRight className="mt-0.5 size-3.5 shrink-0 text-muted-foreground/50" />
-                )}
-              </>
-            );
-
-            return (
-              <li key={signal.id} className="border-b border-border/60 last:border-b-0">
-                {signal.href ? (
-                  <Link
-                    href={signal.href}
-                    className="flex items-start gap-4 px-5 py-3.5 transition-colors hover:bg-muted/20"
-                  >
-                    {body}
-                  </Link>
-                ) : (
-                  <div className="flex items-start gap-4 px-5 py-3.5">{body}</div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-    </Reveal>
+  return signal.href ? (
+    <Link
+      href={signal.href}
+      onClick={onNavigate}
+      className={cn(className, "transition-colors hover:bg-muted")}
+    >
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }

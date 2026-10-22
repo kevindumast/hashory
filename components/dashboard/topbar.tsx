@@ -16,6 +16,7 @@ import {
 import { isConvexConfigured } from "@/convex/client";
 import { useTheme } from "next-themes";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
@@ -58,9 +59,21 @@ export function DashboardTopbar({
       .slice(0, 6);
   }, [integrations]);
 
+  const signals = useSignals();
+  const [isBellOpen, setIsBellOpen] = useState(false);
+
   const errorCount = activity.filter((item) => item.syncStatus === "error").length;
   const syncingCount = activity.filter((item) => item.syncStatus === "syncing").length;
-  const hasSignal = errorCount > 0 || syncingCount > 0;
+  const hasCritical = errorCount > 0 || signals.some((signal) => signal.severity === "critical");
+  const hasWarning = signals.some((signal) => signal.severity === "warning");
+  // La pastille prend la couleur de ce qu'il y a de plus urgent.
+  const dotColor = hasCritical
+    ? "bg-negative"
+    : hasWarning
+      ? "bg-chart-4"
+      : syncingCount > 0
+        ? "bg-positive"
+        : null;
 
   return (
     <header className="sticky top-0 z-30 h-[57px] flex items-center gap-3 border-b border-sidebar-border bg-sidebar/95 backdrop-blur-md px-4">
@@ -106,31 +119,50 @@ export function DashboardTopbar({
           Connecter
         </Button>
 
-        {/* Activité de synchronisation — données réelles */}
-        <DropdownMenu>
+        {/* Notifications : points d'attention, puis activité de synchronisation */}
+        <DropdownMenu open={isBellOpen} onOpenChange={setIsBellOpen}>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Activité de synchronisation"
+              aria-label={
+                signals.length > 0
+                  ? `Notifications : ${signals.length} point${signals.length > 1 ? "s" : ""} d'attention`
+                  : "Notifications"
+              }
               className="relative h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
             >
               <Bell className="size-4" />
-              {hasSignal && (
-                <span
-                  className={cn(
-                    "absolute right-1.5 top-1.5 size-1.5 rounded-full",
-                    errorCount > 0 ? "bg-destructive" : "bg-positive"
-                  )}
-                />
+              {dotColor && (
+                <span className={cn("absolute right-1.5 top-1.5 size-1.5 rounded-full", dotColor)} />
               )}
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[300px]">
-            <DropdownMenuLabel className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-              Activité de synchronisation
+          <DropdownMenuContent
+            align="end"
+            className="max-h-[min(36rem,calc(100vh-5rem))] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto scrollbar-subtle rounded-2xl p-2"
+          >
+            <DropdownMenuLabel className="eyebrow px-3 pt-2 text-[11px]">
+              Points d&apos;attention{signals.length > 0 ? ` · ${signals.length}` : ""}
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            {signals.length === 0 ? (
+              <p className="flex items-center gap-2 px-3 py-3 text-sm text-muted-foreground">
+                <CheckCircle2 className="size-4 text-positive" />
+                Rien à signaler.
+              </p>
+            ) : (
+              <ul className="py-1">
+                {signals.map((signal) => (
+                  <li key={signal.id}>
+                    <SignalItem signal={signal} onNavigate={() => setIsBellOpen(false)} />
+                  </li>
+                ))}
+              </ul>
+            )}
+            <DropdownMenuSeparator className="my-2" />
+            <DropdownMenuLabel className="eyebrow px-3 text-[11px] text-muted-foreground">
+              Synchronisation
+            </DropdownMenuLabel>
             {isLoadingIntegrations ? (
               <p className="px-2 py-4 text-center text-xs text-muted-foreground">Chargement…</p>
             ) : activity.length === 0 ? (
@@ -141,7 +173,7 @@ export function DashboardTopbar({
                 </Button>
               </div>
             ) : (
-              <ul className="max-h-72 overflow-y-auto scrollbar-subtle py-1">
+              <ul className="py-1">
                 {activity.map((item) => {
                   const label = item.displayName ?? item.provider;
                   const at = item.lastSyncedAt ?? item.updatedAt;
@@ -152,7 +184,7 @@ export function DashboardTopbar({
                         ? RefreshCw
                         : CheckCircle2;
                   return (
-                    <li key={item._id} className="flex items-start gap-2.5 px-2 py-2">
+                    <li key={item._id} className="flex items-start gap-2.5 px-3 py-2">
                       <Icon
                         className={cn(
                           "mt-0.5 size-3.5 shrink-0",
