@@ -30,17 +30,17 @@ const columns = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-border/60">
-      <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+    <footer className="border-t border-line bg-surface">
+      <div className="mx-auto w-full max-w-7xl px-4 py-16 sm:px-8">
         <div className="flex flex-col gap-10 md:flex-row md:justify-between">
           <div className="max-w-xs space-y-3">
-            <Link href="/" className="flex items-center gap-2">
-              <HashoryLogo size={26} />
-              <span className="text-base font-semibold tracking-tight text-foreground">
+            <Link href="/" className="flex items-center gap-2.5">
+              <HashoryLogo size={24} />
+              <span className="text-sm font-bold uppercase tracking-[0.28em] text-foreground">
                 {siteConfig.name}
               </span>
             </Link>
-            <p className="text-sm leading-relaxed text-muted-foreground">
+            <p className="text-[15px] leading-relaxed text-muted-foreground">
               L&apos;agrégateur de portefeuille crypto open source : vos exchanges, vos wallets et
               votre fiscalité dans un seul terminal.
             </p>
@@ -49,7 +49,7 @@ export function SiteFooter() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {columns.map((column) => (
               <div key={column.title}>
-                <p className="num mb-4 border-b border-border/60 pb-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
+                <p className="eyebrow mb-4 text-[11px]">
                   {column.title}
                 </p>
                 <ul className="space-y-2">
@@ -60,14 +60,14 @@ export function SiteFooter() {
                           href={link.href}
                           target="_blank"
                           rel="noreferrer noopener"
-                          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                          className="text-[15px] text-slate transition-colors hover:text-foreground"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                          className="text-[15px] text-slate transition-colors hover:text-foreground"
                         >
                           {link.label}
                         </Link>
@@ -80,11 +80,11 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-start justify-between gap-3 border-t border-border/50 pt-6 sm:flex-row sm:items-center">
-          <p className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+        <div className="mt-12 flex flex-col items-start justify-between gap-3 border-t border-border pt-6 sm:flex-row sm:items-center">
+          <p className="text-sm text-faint">
             © {new Date().getFullYear()} {siteConfig.name} · Licence MIT
           </p>
-          <p className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
+          <p className="text-sm text-faint">
             Accès en lecture seule · Aucun accès à vos fonds
           </p>
         </div>

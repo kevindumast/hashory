@@ -214,14 +214,15 @@ function computeQuarterlyReturns(monthly: Map<number, (number | null)[]>): Map<n
 function cellColor(v: number | null) {
   if (v === null) return "bg-muted/20 text-muted-foreground/40";
   if (v === 0) return "bg-muted/30 text-muted-foreground";
-  return v > 0 ? "text-emerald-700 dark:text-emerald-300" : "text-red-700 dark:text-red-300";
+  return v > 0 ? "text-positive" : "text-negative";
 }
 
 function cellBg(v: number | null): React.CSSProperties {
   if (v === null || v === 0) return {};
   const intensity = Math.min(Math.abs(v) / 30, 1);
-  const alpha = Math.round((0.12 + intensity * 0.55) * 255).toString(16).padStart(2, "0");
-  return v > 0 ? { backgroundColor: `#10b981${alpha}` } : { backgroundColor: `#ef4444${alpha}` };
+  const share = Math.round((0.12 + intensity * 0.55) * 100);
+  const tone = v > 0 ? "var(--positive)" : "var(--negative)";
+  return { backgroundColor: `color-mix(in srgb, ${tone} ${share}%, transparent)` };
 }
 
 function avg(vals: (number | null)[]) {

@@ -8,7 +8,8 @@ interface HashoryLogoProps {
 }
 
 /**
- * Marque Hashory : un « H » géométrique sur une tuile en dégradé indigo.
+ * Marque Hashory : un « H » géométrique sur une tuile à l'encre, dont la
+ * barre passe du violet au jade — les deux accents de la marque.
  * Le tracé est identique à celui des icônes de `public/icons/` pour que
  * l'identité soit la même dans l'application, l'onglet et l'écran d'accueil.
  */
@@ -29,17 +30,17 @@ export function HashoryLogo({ size = 64, className = "" }: HashoryLogoProps) {
       aria-label="Hashory"
     >
       <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#4338ca" />
-          <stop offset="100%" stopColor="#6366f1" />
+        <linearGradient id={gradientId} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" style={{ stopColor: "var(--violet)" }} />
+          <stop offset="100%" style={{ stopColor: "var(--jade)" }} />
         </linearGradient>
       </defs>
-      <rect width="64" height="64" rx="13" fill={`url(#${gradientId})`} />
-      <g fill="#ffffff">
+      <rect width="64" height="64" rx="15" style={{ fill: "var(--ink)" }} />
+      <g style={{ fill: "var(--background)" }}>
         <rect x="18.75" y="16" width="6.5" height="32" rx="3.25" />
         <rect x="38.75" y="16" width="6.5" height="32" rx="3.25" />
-        <rect x="18.75" y="28.75" width="26.5" height="6.5" rx="3.25" />
       </g>
+      <rect x="18.75" y="28.75" width="26.5" height="6.5" rx="3.25" fill={`url(#${gradientId})`} />
     </svg>
   );
 }

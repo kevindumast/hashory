@@ -222,11 +222,9 @@ export default async function ChangelogPage() {
       <main className="bg-background">
         <div className="mx-auto w-full max-w-3xl px-4 pb-24 pt-24 sm:px-6 lg:pb-32 lg:pt-32">
           <Reveal as="header">
-            <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-              <span className="h-px w-6 bg-primary" />
-              {siteConfig.name}
+            <p className="eyebrow">{siteConfig.name}
             </p>
-            <h1 className="mt-6 font-serif text-5xl font-normal leading-[1.02] text-foreground sm:text-6xl">
+            <h1 className="mt-6 title text-5xl leading-[1.02] text-foreground sm:text-6xl">
               Changelog
             </h1>
             <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground">

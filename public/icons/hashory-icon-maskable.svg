@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Hashory">
   <defs>
-    <linearGradient id="hashory-tile-maskable" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4338ca" />
-      <stop offset="100%" stop-color="#6366f1" />
+    <linearGradient id="hashory-bar-maskable" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a48ff0" />
+      <stop offset="100%" stop-color="#4cc49e" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" fill="url(#hashory-tile-maskable)" />
+  <rect width="512" height="512" fill="#151b23" />
   <g fill="#ffffff">
     <rect x="176" y="166" width="42" height="180" rx="21" />
     <rect x="294" y="166" width="42" height="180" rx="21" />
-    <rect x="176" y="235" width="160" height="42" rx="21" />
   </g>
+  <rect x="176" y="235" width="160" height="42" rx="21" fill="url(#hashory-bar-maskable)" />
 </svg>

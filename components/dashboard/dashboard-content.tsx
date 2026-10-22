@@ -33,11 +33,9 @@ export function DashboardContent() {
   return (
     <div className="no-scrollbar space-y-6 p-6 md:p-8">
       <header className="border-b border-border/60 pb-5">
-        <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-          <span className="h-px w-6 bg-primary" />
-          Portefeuille global
+        <p className="eyebrow">Portefeuille global
         </p>
-        <h1 className="mt-3 font-serif text-3xl font-normal leading-tight text-foreground">
+        <h1 className="mt-3 title text-3xl leading-tight text-foreground">
           Bonjour, {userName || "Investisseur"}
         </h1>
       </header>

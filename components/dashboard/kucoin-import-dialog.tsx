@@ -428,7 +428,7 @@ export function KucoinImportDialog({ open, onOpenChange, integrationId, onSucces
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Importer des exports KuCoin</DialogTitle>
+          <DialogTitle className="title text-2xl leading-tight">Importer des exports KuCoin</DialogTitle>
           <DialogDescription className="text-xs">
             KuCoin → Orders → Order Records → Export → <span className="font-medium text-foreground">choisir CSV</span>
           </DialogDescription>

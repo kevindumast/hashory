@@ -281,7 +281,7 @@ export function FinaryImportDialog({ open, onOpenChange, onSuccess }: FinaryImpo
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Importer un export Finary</DialogTitle>
+          <DialogTitle className="title text-2xl leading-tight">Importer un export Finary</DialogTitle>
           <DialogDescription className="text-xs">
             Importez votre historique depuis un fichier CSV exporté depuis Finary (Compte → Exporter).
           </DialogDescription>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, Check, FileText, Plug, RefreshCw, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GlowCard, Magnetic, Reveal } from "@/components/motion";
+import { GlowCard, Reveal } from "@/components/motion";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
 import { providerIcon } from "@/lib/provider-icons";
@@ -108,15 +108,12 @@ export function OnboardingHero() {
   return (
     <div className="mx-auto w-full max-w-4xl px-6 py-16 md:py-24">
       <Reveal>
-        <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-          <span className="h-px w-6 bg-primary" />
-          Première étape
-        </p>
+        <p className="eyebrow">Première étape</p>
       </Reveal>
 
       <Reveal delay={80}>
-        <h1 className="mt-6 max-w-2xl text-balance font-serif text-4xl font-normal leading-[1.02] text-foreground sm:text-5xl">
-          Connectez votre première plateforme.
+        <h1 className="mt-5 max-w-2xl title text-4xl text-foreground sm:text-5xl">
+          Connectez votre <span className="text-violet">première</span> plateforme.
         </h1>
         <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground">
           Dès la première connexion, Hashory reconstitue votre historique complet et calcule
@@ -125,16 +122,14 @@ export function OnboardingHero() {
       </Reveal>
 
       <Reveal delay={160} className="mt-12">
-        <p className="num border-b border-border/60 pb-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/60">
-          Sources disponibles
-        </p>
-        <div className="grid border-b border-border/60 sm:grid-cols-2 lg:grid-cols-3">
+        <p className="eyebrow mb-4 text-muted-foreground">Sources disponibles</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {QUICK_PROVIDERS.map((provider) => (
-            <GlowCard key={provider.id} className="border-b border-border/60 last:border-b-0 sm:last:border-b">
+            <GlowCard key={provider.id} className="rounded-2xl border border-line bg-card">
               <button
                 type="button"
                 onClick={openDialog}
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-muted/20"
+                className="flex w-full cursor-pointer items-center gap-3 rounded-2xl px-4 py-4 text-left"
               >
                 <Image
                   src={providerIcon(provider.id)}
@@ -144,10 +139,8 @@ export function OnboardingHero() {
                   className="size-6 shrink-0 rounded-full"
                   unoptimized
                 />
-                <span className="flex-1 text-sm text-foreground">{provider.label}</span>
-                <span className="num text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">
-                  {provider.kind}
-                </span>
+                <span className="flex-1 text-sm font-bold text-foreground">{provider.label}</span>
+                <span className="chip py-0.5 text-[11px]">{provider.kind}</span>
               </button>
             </GlowCard>
           ))}
@@ -155,12 +148,10 @@ export function OnboardingHero() {
       </Reveal>
 
       <Reveal delay={240} className="mt-10 flex flex-wrap items-center gap-4">
-        <Magnetic strength={8}>
-          <Button size="lg" onClick={openDialog} className="cursor-pointer px-7">
-            <Plug className="mr-2 size-4" />
-            Connecter une plateforme
-          </Button>
-        </Magnetic>
+        <Button size="lg" onClick={openDialog} className="cursor-pointer px-7">
+          <Plug className="mr-2 size-4" />
+          Connecter une plateforme
+        </Button>
         <p className="num text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">
           Lecture seule · Clés chiffrées · Aucun accès à vos fonds
         </p>

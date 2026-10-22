@@ -161,7 +161,7 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
-            <h1 className="font-serif text-3xl font-normal leading-tight text-foreground">Déclaration fiscale</h1>
+            <h1 className="title text-3xl leading-tight text-foreground">Déclaration fiscale</h1>
             <p className="text-sm text-muted-foreground">
               Calcul selon l&apos;article 150 VH bis du CGI — méthode proportionnelle (PFU 30%)
             </p>

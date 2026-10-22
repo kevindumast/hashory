@@ -30,11 +30,11 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           alignItems: "center",
           justifyContent: "center",
           padding: "2rem 1rem",
-          colorScheme: "dark",
-          backgroundColor: "#070d1f",
-          color: "#dfe4ff",
+          colorScheme: "light",
+          backgroundColor: "#ffffff",
+          color: "#151b23",
           fontFamily:
-            "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
+            "Calibri, Carlito, 'Segoe UI', Arial, sans-serif",
         }}
       >
         <div style={{ maxWidth: "32rem", textAlign: "center" }}>
@@ -79,7 +79,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
                 margin: "1.5rem 0 0",
                 maxHeight: "14rem",
                 overflow: "auto",
-                borderRadius: "0.5rem",
+                borderRadius: "9999px",
                 border: "1px solid rgba(223, 228, 255, 0.16)",
                 background: "rgba(255, 255, 255, 0.04)",
                 padding: "1rem",
@@ -120,14 +120,14 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
               onClick={reset}
               style={{
                 cursor: "pointer",
-                borderRadius: "0.5rem",
+                borderRadius: "9999px",
                 border: "none",
                 padding: "0.625rem 1.25rem",
                 fontSize: "0.875rem",
-                fontWeight: 500,
+                fontWeight: 700,
                 fontFamily: "inherit",
-                backgroundColor: "#b4c5ff",
-                color: "#00389a",
+                backgroundColor: "#151b23",
+                color: "#ffffff",
               }}
             >
               Réessayer
@@ -140,7 +140,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
             <a
               href="/"
               style={{
-                borderRadius: "0.5rem",
+                borderRadius: "9999px",
                 border: "1px solid rgba(223, 228, 255, 0.24)",
                 padding: "0.625rem 1.25rem",
                 fontSize: "0.875rem",
