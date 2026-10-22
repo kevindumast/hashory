@@ -751,7 +751,7 @@ export function DashboardNewLayout({
                 <span className="text-muted-foreground">Profit total</span>
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#F59E0B" }} />
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "var(--chart-4)" }} />
                 <span className="text-muted-foreground">BTC</span>
               </span>
             </div>
@@ -761,8 +761,8 @@ export function DashboardNewLayout({
             {filteredHoldings.length >= 2 ? (
               <ChartContainer
                 config={{
-                  profitPercent: { label: "Profit %", color: "#3B82F6" },
-                  btcPercent: { label: "BTC %", color: "#F59E0B" },
+                  profitPercent: { label: "Profit %", color: "var(--chart-1)" },
+                  btcPercent: { label: "BTC %", color: "var(--chart-4)" },
                 }}
                 className="h-full w-full"
               >
@@ -817,7 +817,7 @@ export function DashboardNewLayout({
                     <Line
                       type="monotone"
                       dataKey="btcPercent"
-                      stroke="#F59E0B"
+                      stroke="var(--chart-4)"
                       strokeWidth={2}
                       dot={false}
                       name="BTC"

@@ -121,12 +121,10 @@ export function PerformanceClient() {
   return (
     <div className="space-y-10 p-6 md:p-8">
       <header className="border-b border-border/60 pb-5">
-        <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-          <span className="h-px w-6 bg-primary" />
-          Performance et risque
+        <p className="eyebrow">Performance et risque
         </p>
         <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-          <h1 className="font-serif text-3xl font-normal leading-tight text-foreground">
+          <h1 className="title text-3xl leading-tight text-foreground">
             Êtes-vous vraiment bon ?
           </h1>
 

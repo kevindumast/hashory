@@ -30,7 +30,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
           Erreur inattendue
         </p>
 
-        <h1 className="mt-6 font-serif text-4xl font-normal leading-[1.05] text-foreground sm:text-5xl">
+        <h1 className="mt-6 title text-4xl leading-[1.05] text-foreground sm:text-5xl">
           Quelque chose s&apos;est mal passé
         </h1>
 

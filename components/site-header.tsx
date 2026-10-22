@@ -10,10 +10,13 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HashoryLogo } from "@/components/hashory-logo";
+import { ScrollProgress } from "@/components/motion";
 
 const navLinks = [
+  { href: "/#apercu", label: "Aperçu" },
   { href: "/#features", label: "Fonctionnalités" },
   { href: "/#workflow", label: "Comment ça marche" },
+  { href: "/#transparence", label: "Transparence" },
   { href: "/changelog", label: "Changelog" },
 ];
 
@@ -28,17 +31,14 @@ export function SiteHeader() {
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur">
-      <header className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+    <div className="sticky top-0 z-40 border-b border-line bg-background/85 backdrop-blur">
+      <header className="mx-auto w-full max-w-7xl px-4 sm:px-8">
         <div className="flex h-16 w-full items-center justify-between">
-          <Link
-            href="/"
-            className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground sm:text-lg"
-          >
-            <HashoryLogo size={26} />
-            <span className="leading-none">Hashory</span>
+          <Link href="/" className="flex items-center gap-2.5 text-foreground">
+            <HashoryLogo size={24} />
+            <span className="text-sm font-bold uppercase leading-none tracking-[0.28em]">Hashory</span>
           </Link>
-          <nav className="num hidden items-center gap-8 text-[11px] uppercase tracking-[0.18em] text-muted-foreground md:flex">
+          <nav className="hidden items-center gap-8 text-[15px] text-slate lg:flex">
             {navLinks.map((link) => (
               <Link
                 key={link.href}
@@ -55,10 +55,13 @@ export function SiteHeader() {
           <div className="flex items-center gap-2">
             <ThemeToggle />
             <SignedOut>
-              <Button asChild variant="ghost" size="sm" className="hidden md:inline-flex">
-                <Link href="/sign-in">Se connecter</Link>
-              </Button>
-              <Button asChild size="sm" className="hidden md:inline-flex">
+              <Link
+                href="/sign-in"
+                className="hidden px-2 text-[15px] text-slate transition-colors hover:text-foreground md:inline"
+              >
+                Se connecter
+              </Link>
+              <Button asChild size="sm" className="hidden h-9 px-4 md:inline-flex">
                 <Link href="/sign-up">Commencer</Link>
               </Button>
             </SignedOut>
@@ -81,7 +84,7 @@ export function SiteHeader() {
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="md:hidden"
+                  className="lg:hidden"
                   aria-label="Ouvrir le menu de navigation"
                 >
                   <Menu className="h-5 w-5 text-foreground" />
@@ -98,8 +101,8 @@ export function SiteHeader() {
                       href={link.href}
                       onClick={() => setIsOpen(false)}
                       className={cn(
-                        "rounded-lg px-2 py-3 text-base font-medium transition hover:bg-muted/40 hover:text-foreground",
-                        pathname === link.href && "bg-muted/40 text-foreground"
+                        "rounded-xl px-3 py-3 text-base font-bold transition hover:bg-muted hover:text-foreground",
+                        pathname === link.href && "bg-muted text-foreground"
                       )}
                     >
                       {link.label}
@@ -136,6 +139,7 @@ export function SiteHeader() {
           </div>
         </div>
       </header>
+      <ScrollProgress className="absolute inset-x-0 -bottom-px" />
     </div>
   );
 }

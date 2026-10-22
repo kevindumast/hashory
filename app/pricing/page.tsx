@@ -96,11 +96,9 @@ export default function PricingPage() {
     <>
       <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-24 sm:px-6 lg:pb-32 lg:pt-32">
         <header>
-          <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-            <span className="h-px w-6 bg-primary" />
-            Tarifs
+          <p className="eyebrow">Tarifs
           </p>
-          <h1 className="mt-6 max-w-2xl text-balance font-serif text-5xl font-normal leading-[1.02] text-foreground sm:text-6xl">
+          <h1 className="mt-6 max-w-2xl title text-5xl leading-[1.02] text-foreground sm:text-6xl">
             Un plan pour chaque ambition.
           </h1>
           <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground">
@@ -109,28 +107,25 @@ export default function PricingPage() {
           </p>
         </header>
 
-        {/* Colonnes séparées par des filets : pas de carte surlignée en couleur. */}
-        <div className="mt-16 grid border-t border-border/60 lg:grid-cols-3">
+        <div className="mt-16 grid gap-5 lg:grid-cols-3">
           {tiers.map((tier) => (
             <GlowCard
               key={tier.name}
               className={cn(
-                "flex h-full flex-col border-b border-border/60 lg:border-r lg:last:border-r-0",
-                tier.recommended && "border-t-2 border-t-primary"
+                "flex h-full flex-col rounded-3xl border border-line bg-card",
+                tier.recommended && "float-card"
               )}
             >
               <div className="flex h-full flex-col p-8">
                 <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="font-serif text-2xl font-normal text-foreground">{tier.name}</h2>
+                  <h2 className="title text-2xl text-foreground">{tier.name}</h2>
                   {tier.recommended && (
-                    <span className="num text-[10px] uppercase tracking-[0.2em] text-primary">
-                      Recommandé
-                    </span>
+                    <span className="chip chip-violet">Recommandé</span>
                   )}
                 </div>
 
                 <p className="mt-6 flex items-baseline gap-x-2">
-                  <span className="num text-5xl font-normal tracking-tight text-foreground">
+                  <span className="text-5xl font-bold tracking-[-0.03em] text-foreground">
                     {tier.price}
                   </span>
                   {tier.priceFrequency && (
@@ -144,13 +139,13 @@ export default function PricingPage() {
                   {tier.description}
                 </p>
 
-                <ul role="list" className="mt-8 border-t border-border/60">
+                <ul role="list" className="mt-8">
                   {tier.features.map((feature) => (
                     <li
                       key={feature}
-                      className="flex items-start gap-3 border-b border-border/60 py-3 text-sm text-muted-foreground"
+                      className="flex items-start gap-3 py-2 text-sm text-slate"
                     >
-                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-jade" />
                       <span>{feature}</span>
                     </li>
                   ))}
@@ -171,11 +166,9 @@ export default function PricingPage() {
 
         <section className="mt-24 grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-4">
-            <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-              <span className="h-px w-6 bg-primary" />
-              Questions
+            <p className="eyebrow">Questions
             </p>
-            <h2 className="mt-6 font-serif text-4xl font-normal leading-[1.05] text-foreground">
+            <h2 className="mt-6 title text-4xl leading-[1.05] text-foreground">
               Sur la facturation.
             </h2>
           </div>

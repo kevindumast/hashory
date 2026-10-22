@@ -476,12 +476,12 @@ export function TransactionsView({
                 <td className="px-4 py-2">
                   <div className="flex items-center gap-3">
                     <div className={cn("w-8 h-8 rounded-full flex items-center justify-center bg-muted",
-                        tx.type === 'trade' && "bg-blue-500/10",
-                        tx.type === 'deposit' && "bg-emerald-500/10",
+                        tx.type === 'trade' && "bg-violet-soft",
+                        tx.type === 'deposit' && "bg-jade-soft",
                         tx.type === 'withdrawal' && "bg-destructive/10"
                     )}>
-                        {tx.type === 'trade' && <ArrowLeftRight className="w-4 h-4 text-blue-500 dark:text-blue-400" />}
-                        {tx.type === 'deposit' && <ArrowRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400 rotate-90" />}
+                        {tx.type === 'trade' && <ArrowLeftRight className="w-4 h-4 text-violet" />}
+                        {tx.type === 'deposit' && <ArrowRight className="w-4 h-4 text-jade rotate-90" />}
                         {tx.type === 'withdrawal' && <ArrowRight className="w-4 h-4 text-destructive -rotate-90" />}
                     </div>
                     <span className="text-sm font-bold text-foreground">{tx.label}</span>
@@ -580,7 +580,7 @@ export function TransactionsView({
       <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
         <DialogContent className="sm:max-w-[500px] bg-card">
           <DialogHeader className="pb-4">
-            <DialogTitle className="font-serif text-2xl font-normal text-foreground">Filtres</DialogTitle>
+            <DialogTitle className="title text-2xl text-foreground">Filtres</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">

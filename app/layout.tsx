@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Instrument_Serif, JetBrains_Mono, Space_Grotesk, Sora } from "next/font/google";
+import { Carlito, JetBrains_Mono } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -7,23 +7,12 @@ import { SiteHeader } from "@/components/site-header";
 import { RootLayoutClient } from "./layout-client";
 import { getSiteUrl, siteConfig } from "@/lib/site";
 
-const display = Space_Grotesk({
-  variable: "--font-display",
+// Calibri d'abord (installée sur Windows et macOS avec Office), Carlito
+// ensuite : métriquement identique, elle garantit le même rendu ailleurs.
+const sans = Carlito({
+  variable: "--font-carlito",
   subsets: ["latin"],
-  display: "swap",
-});
-
-const body = Sora({
-  variable: "--font-body",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-// Sérif éditoriale : réservée aux grands titres.
-const editorial = Instrument_Serif({
-  variable: "--font-editorial",
-  subsets: ["latin"],
-  weight: "400",
+  weight: ["400", "700"],
   display: "swap",
 });
 
@@ -81,7 +70,7 @@ export const metadata: Metadata = {
     apple: "/icons/hashory-icon-maskable.svg",
     shortcut: "/icons/hashory-icon.svg",
     other: [
-      { rel: "mask-icon", url: "/icons/hashory-icon-maskable.svg", color: "#6366f1" },
+      { rel: "mask-icon", url: "/icons/hashory-icon-maskable.svg", color: "#151b23" },
     ],
   },
   appleWebApp: {
@@ -96,10 +85,10 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fbfbfe" },
-    { media: "(prefers-color-scheme: dark)", color: "#070d1f" },
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
   ],
-  colorScheme: "dark light",
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({
@@ -111,11 +100,11 @@ export default function RootLayout({
     <html lang="fr" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${display.variable} ${body.variable} ${mono.variable} ${editorial.variable} min-h-screen bg-background font-sans antialiased`}
+        className={`${sans.variable} ${mono.variable} min-h-screen bg-background font-sans antialiased`}
       >
         <a
           href="#contenu"
-          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-full focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
         >
           Aller au contenu principal
         </a>

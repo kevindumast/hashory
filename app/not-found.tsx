@@ -16,12 +16,10 @@ export default function NotFound() {
   return (
     <main className="mx-auto flex min-h-[70vh] w-full max-w-6xl items-center px-4 py-24 sm:px-6">
       <div className="w-full max-w-xl">
-        <p className="num flex items-center gap-3 text-[10px] uppercase tracking-[0.24em] text-muted-foreground">
-          <span className="h-px w-6 bg-primary" />
-          Erreur 404
+        <p className="eyebrow">Erreur 404
         </p>
 
-        <h1 className="mt-6 font-serif text-4xl font-normal leading-[1.05] text-foreground sm:text-5xl">
+        <h1 className="mt-6 title text-4xl leading-[1.05] text-foreground sm:text-5xl">
           Cette page n&apos;existe pas
         </h1>
 

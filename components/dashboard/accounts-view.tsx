@@ -494,7 +494,7 @@ export function AccountsView() {
       <div className="flex flex-row justify-between items-center mb-9">
         <div className="flex flex-col gap-1">
           <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Portefeuille</p>
-          <h1 className="font-serif text-3xl font-normal leading-tight text-foreground">Mes comptes</h1>
+          <h1 className="title text-3xl leading-tight text-foreground">Mes comptes</h1>
         </div>
         <Button
           onClick={() => setIsConnectOpen(true)}

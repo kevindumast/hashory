@@ -548,7 +548,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md gap-4">
         <DialogHeader className="space-y-1">
-          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Connecter une plateforme</DialogTitle>
+          <DialogTitle className="title text-2xl leading-tight">Connecter une plateforme</DialogTitle>
           <DialogDescription className="text-xs">
             Saisissez les identifiants pour activer la synchronisation.
           </DialogDescription>
@@ -847,7 +847,7 @@ function ConnectProviderDialogPlaceholder({ open, onOpenChange }: ConnectProvide
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="font-serif text-2xl font-normal leading-tight">Intégrations indisponibles</DialogTitle>
+          <DialogTitle className="title text-2xl leading-tight">Intégrations indisponibles</DialogTitle>
           <DialogDescription>
             Configurez `NEXT_PUBLIC_CONVEX_URL` et déployez Convex pour activer la connexion des plateformes dans
             Hashory.

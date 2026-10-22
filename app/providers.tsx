@@ -5,6 +5,7 @@ import { dark } from "@clerk/themes";
 import { ConvexProvider } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { ReactNode, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { convexClient, isConvexConfigured } from "@/convex/client";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ClerkUserSync } from "@/components/auth/clerk-user-sync";
@@ -16,6 +17,14 @@ type ProvidersProps = {
 
 export function Providers({ children }: ProvidersProps) {
   const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+  const { resolvedTheme } = useTheme();
+  // Les composants Clerk (menu utilisateur…) suivent le thème du site.
+  const clerkAppearance = {
+    baseTheme: resolvedTheme === "dark" ? dark : undefined,
+    variables: {
+      colorPrimary: resolvedTheme === "dark" ? "#a48ff0" : "#6a4fc2",
+    },
+  };
 
   useEffect(() => {
     if (typeof window === "undefined" || process.env.NODE_ENV !== "production") {
@@ -66,12 +75,7 @@ export function Providers({ children }: ProvidersProps) {
     return (
       <ClerkProvider
         publishableKey={publishableKey}
-        appearance={{
-          baseTheme: dark,
-          variables: {
-            colorPrimary: "#6366f1",
-          },
-        }}
+        appearance={clerkAppearance}
       >
         <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
           <ClerkUserSync />
@@ -84,12 +88,7 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <ClerkProvider
       publishableKey={publishableKey}
-      appearance={{
-        baseTheme: dark,
-        variables: {
-          colorPrimary: "#6366f1",
-        },
-      }}
+      appearance={clerkAppearance}
     >
       {tooltipWrapped}
     </ClerkProvider>

@@ -9,9 +9,17 @@
   --color-surface-low: var(--surface-low);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-body);
-  --font-display: var(--font-display);
-  --font-serif: var(--font-editorial);
+  /* Palette de marque : une encre, deux accents doux. */
+  --color-ink: var(--ink);
+  --color-slate: var(--slate);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-violet: var(--violet);
+  --color-violet-soft: var(--violet-soft);
+  --color-jade: var(--jade);
+  --color-jade-soft: var(--jade-soft);
+  --font-sans: Calibri, var(--font-carlito), "Segoe UI", Arial, sans-serif;
   --font-mono: var(--font-numeric);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -49,97 +57,102 @@
 }
 
 /* ─────────────────────────────────────────────────────────────
-   Thème clair — variante d'un système pensé dark-first.
-   Le bleu shadcn par défaut laisse place à l'indigo de marque,
-   cohérent avec le periwinkle du thème sombre.
+   Thème clair — le thème de référence. Fond blanc, encre bleu nuit,
+   violet pour ce qui relève de la lecture, jade pour ce qui relève de
+   la donnée et des gains.
    ───────────────────────────────────────────────────────────── */
 :root {
-  --radius: 0.25rem;
-  --positive: #0f9d6f;
-  --negative: #dc4c4c;
-  --surface-low: rgba(255, 255, 255, 0.88);
-  --background: #fbfbfe;
-  --foreground: #0b1120;
-  --card: rgba(255, 255, 255, 0.94);
-  --card-foreground: #0b1120;
-  --popover: rgba(255, 255, 255, 0.98);
-  --popover-foreground: #0b1120;
-  --primary: #4338ca;
-  --primary-foreground: #f8fafc;
-  --secondary: rgba(15, 23, 42, 0.05);
-  --secondary-foreground: #0b1120;
-  --muted: rgba(15, 23, 42, 0.045);
-  --muted-foreground: rgba(15, 23, 42, 0.6);
-  --accent: rgba(67, 56, 202, 0.12);
-  --accent-foreground: #0b1120;
-  --destructive: #dc4c4c;
-  --border: rgba(15, 23, 42, 0.08);
-  --input: rgba(15, 23, 42, 0.12);
-  --ring: rgba(67, 56, 202, 0.5);
-  --chart-1: #4338ca;
-  --chart-2: #0ea5e9;
-  --chart-3: #0f9d6f;
-  --chart-4: #f97316;
-  --chart-5: #a855f7;
-  --sidebar: rgba(255, 255, 255, 0.96);
-  --sidebar-foreground: #0b1120;
-  --sidebar-primary: #4338ca;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: rgba(67, 56, 202, 0.1);
-  --sidebar-accent-foreground: #0b1120;
-  --sidebar-border: rgba(15, 23, 42, 0.08);
-  --sidebar-ring: rgba(67, 56, 202, 0.45);
+  --radius: 0.75rem;
 
-  /* Jetons de marque : halos, grilles, effets de pointeur */
-  --brand-glow: rgba(67, 56, 202, 0.18);
-  --brand-glow-strong: rgba(67, 56, 202, 0.3);
-  --grid-line: rgba(15, 23, 42, 0.06);
+  --ink: #151b23;
+  --slate: #3a4350;
+  --faint: #8a96a3;
+  --line: #eef1f4;
+  --surface: #f3f5f7;
+  --violet: #6a4fc2;
+  --violet-soft: #efebfa;
+  --jade: #1e8c6e;
+  --jade-soft: #e8f5f0;
+
+  --positive: var(--jade);
+  --negative: #c8463d;
+  --surface-low: var(--surface);
+  --background: #ffffff;
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: var(--violet);
+  --primary-foreground: #ffffff;
+  --secondary: var(--surface);
+  --secondary-foreground: var(--ink);
+  --muted: var(--surface);
+  --muted-foreground: #6b7380;
+  --accent: var(--violet-soft);
+  --accent-foreground: var(--ink);
+  --destructive: #c8463d;
+  --border: #e6eaef;
+  --input: #dfe4ea;
+  --ring: rgba(106, 79, 194, 0.45);
+  --chart-1: var(--violet);
+  --chart-2: var(--jade);
+  --chart-3: var(--slate);
+  --chart-4: #c9862b;
+  --chart-5: var(--faint);
+  --sidebar: #fbfcfd;
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--violet);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--surface);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: rgba(106, 79, 194, 0.45);
+
+  /* Quadrillage du hero et ombre portée des grandes cartes. */
+  --grid-line: rgba(21, 27, 35, 0.045);
+  --shadow-float: 0 30px 80px -40px rgba(21, 27, 35, 0.35);
 }
 
+/* Thème sombre — dérivé : mêmes rôles, accents éclaircis pour garder le
+   contraste, fonds bleu nuit plutôt que noirs. */
 .dark {
-  --positive: #9bffce;
-  --negative: #ee7d77;
-  --surface-low: #09122b;
-  --background: #070d1f;
-  --foreground: #dfe4ff;
-  --card: rgba(10, 24, 57, 0.7);
-  --card-foreground: #dfe4ff;
-  --popover: #09122b;
-  --popover-foreground: #dfe4ff;
-  --primary: #b4c5ff;
-  --primary-foreground: #00389a;
-  --secondary: rgba(144, 159, 181, 0.12);
-  --secondary-foreground: #dfe4ff;
-  --muted: rgba(96, 115, 173, 0.18);
-  --muted-foreground: rgba(180, 197, 255, 0.82);
-  --accent: rgba(180, 197, 255, 0.14);
-  --accent-foreground: #dfe4ff;
-  --destructive: #ee7d77;
-  --border: rgba(130, 155, 210, 0.28);
-  --input: rgba(130, 155, 210, 0.22);
-  --ring: rgba(180, 197, 255, 0.5);
-  --chart-1: #b4c5ff;
-  --chart-2: #9bffce;
-  --chart-3: #58e7ab;
-  --chart-4: #f97316;
-  --chart-5: #ee7d77;
-  --sidebar: #0b1222;
-  --sidebar-foreground: #dfe4ff;
-  --sidebar-primary: #b4c5ff;
-  --sidebar-primary-foreground: #00389a;
-  --sidebar-accent: rgba(180, 197, 255, 0.16);
-  --sidebar-accent-foreground: #dfe4ff;
-  --sidebar-border: rgba(255, 255, 255, 0.1);
-  --sidebar-ring: rgba(180, 197, 255, 0.5);
+  --ink: #e9edf2;
+  --slate: #c3cad3;
+  --faint: #6b7684;
+  --line: #1d2430;
+  --surface: #141a23;
+  --violet: #a48ff0;
+  --violet-soft: rgba(164, 143, 240, 0.14);
+  --jade: #4cc49e;
+  --jade-soft: rgba(76, 196, 158, 0.13);
 
-  --brand-glow: rgba(180, 197, 255, 0.18);
-  --brand-glow-strong: rgba(180, 197, 255, 0.38);
-  --grid-line: rgba(180, 197, 255, 0.07);
+  --negative: #f07b72;
+  --background: #0d1117;
+  --card: #131922;
+  --popover: #131922;
+  --primary-foreground: #0d1117;
+  --muted-foreground: #8f9aa8;
+  --destructive: #f07b72;
+  --border: #232b37;
+  --input: #2a3341;
+  --ring: rgba(164, 143, 240, 0.5);
+  --chart-4: #e0a24e;
+  --sidebar: #10151d;
+  --sidebar-primary-foreground: #0d1117;
+  --sidebar-ring: rgba(164, 143, 240, 0.5);
+
+  --grid-line: rgba(233, 237, 242, 0.04);
+  --shadow-float: 0 30px 80px -40px rgba(0, 0, 0, 0.8);
 }
 
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   body {
     @apply bg-background text-foreground;
@@ -183,21 +196,26 @@
   border-radius: 9999px;
 }
 
-/* Étiquette éditoriale : mono, capitales, très espacée. Sert de sur-titre
-   de section, d'en-tête de colonne et de libellé d'indicateur. */
+/* Classes de composant : rangées dans un calque pour que les utilitaires
+   Tailwind posés à côté (`leading-*`, `text-*`…) gardent le dernier mot. */
+@layer components {
+/* Sur-titre : capitales grasses, très espacées, dans l'accent. C'est la
+   signature typographique — un par section, au-dessus du titre. */
 .eyebrow {
-  font-family: var(--font-numeric), ui-monospace, SFMono-Regular, monospace;
-  font-size: 10px;
-  line-height: 1.4;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.5;
   text-transform: uppercase;
-  letter-spacing: 0.24em;
-  color: var(--muted-foreground);
+  letter-spacing: 0.22em;
+  color: var(--primary);
 }
 
-/* Filet horizontal — la structure du site repose dessus plutôt que sur
-   des cartes flottantes. */
-.rule {
-  border-bottom: 1px solid var(--border);
+/* Titre : gras, serré, interligne court. */
+.title {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  text-wrap: balance;
 }
 
 /* Valeur chiffrée : mono + tabulaire, à poser sur tout montant. */
@@ -205,139 +223,70 @@
   font-family: var(--font-numeric), ui-monospace, SFMono-Regular, monospace;
   font-variant-numeric: tabular-nums;
 }
-
-/* ─── Effets pilotés par le pointeur ───────────────────────────
-   Les composants client posent --mx / --my (curseur dans l'élément,
-   en px) et --px / --py (position normalisée 0→1 dans la fenêtre).
-   Tout le rendu se fait en CSS : aucun re-render React.
-   ───────────────────────────────────────────────────────────── */
-
-/* Halo global qui suit le curseur sur la landing. */
-.cursor-aura {
-  position: fixed;
-  inset: 0;
-  /* Derrière le contenu, devant le fond de page — comme la grille et la lueur. */
-  z-index: -1;
-  pointer-events: none;
-  background: radial-gradient(
-    600px circle at var(--cursor-x, 50%) var(--cursor-y, 0%),
-    var(--brand-glow) 0%,
-    transparent 65%
-  );
-  opacity: 0;
-  transition: opacity 600ms ease;
-}
-.cursor-aura[data-active="true"] {
-  opacity: 1;
+/* Un `.num` en capitales est une étiquette, pas un chiffre : il reprend
+   la voix des sur-titres (sans-serif grasse) plutôt que la mono. */
+.num.uppercase {
+  font-family: inherit;
+  font-weight: 700;
 }
 
-/* Carte dont la bordure s'illumine sous le curseur. */
-.glow-card {
-  position: relative;
+/* Pastille douce — étiquette, filtre, état. Teinte via les variantes. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.6rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  background: var(--surface);
+  color: var(--slate);
 }
-.glow-card::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: radial-gradient(
-    220px circle at var(--mx, 50%) var(--my, 50%),
-    var(--brand-glow-strong),
-    transparent 70%
-  );
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  opacity: 0;
-  transition: opacity 300ms ease;
-  pointer-events: none;
-  z-index: 1;
+.chip-violet {
+  background: var(--violet-soft);
+  color: var(--violet);
 }
-.glow-card::after {
-  content: "";
-  position: absolute;
-  inset: -24px;
-  border-radius: calc(var(--radius) + 24px);
-  /* Le pseudo déborde de 24px : on recale le centre du dégradé d'autant
-     pour qu'il reste exactement sous le curseur. */
-  background: radial-gradient(
-    280px circle at calc(var(--mx, 50%) + 24px) calc(var(--my, 50%) + 24px),
-    var(--brand-glow),
-    transparent 70%
-  );
-  filter: blur(12px);
-  opacity: 0;
-  transition: opacity 300ms ease;
-  pointer-events: none;
-  z-index: -1;
-}
-.glow-card:hover::before,
-.glow-card:hover::after {
-  opacity: 1;
+.chip-jade {
+  background: var(--jade-soft);
+  color: var(--jade);
 }
 
-/* Fondu vertical du champ de caractères : il naît sous l'en-tête et
-   s'efface avant l'aperçu produit. */
-.decoder-mask {
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 14%,
-    #000 56%,
-    transparent 92%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0%,
-    #000 14%,
-    #000 56%,
-    transparent 92%
-  );
+/* Grande carte posée : bordure à peine visible, ombre longue et douce. */
+.float-card {
+  border: 1px solid var(--line);
+  background: var(--card);
+  border-radius: 1.5rem;
+  box-shadow: var(--shadow-float);
 }
 
-/* Grille de fond dont l'origine suit légèrement le curseur. */
-.reactive-grid {
+/* Quadrillage léger du hero, effacé vers le bas. */
+.grid-paper {
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 56px 56px;
-  background-position: calc(var(--px, 0.5) * -24px) calc(var(--py, 0.5) * -24px);
-  transition: background-position 600ms cubic-bezier(0.22, 1, 0.36, 1);
-  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 30%, transparent 75%);
+  mask-image: linear-gradient(to bottom, #000 40%, transparent 100%);
+}
 }
 
-/* Parallaxe : l'élément se décale à l'inverse du curseur. */
-.parallax {
-  transform: translate3d(
-    calc((var(--px, 0.5) - 0.5) * var(--parallax-strength, 16px) * -1),
-    calc((var(--py, 0.5) - 0.5) * var(--parallax-strength, 16px) * -1),
-    0
-  );
-  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
+/* Bloc interactif : il se soulève légèrement au survol. */
+.glow-card {
+  position: relative;
+  transition:
+    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 300ms ease;
+}
+.glow-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-float);
 }
 
-/* Inclinaison 3D d'une carte suivant le pointeur. */
-.tilt {
-  transform: perspective(1200px)
-    rotateX(calc((var(--ty, 0.5) - 0.5) * var(--tilt-strength, 7deg) * -1))
-    rotateY(calc((var(--tx, 0.5) - 0.5) * var(--tilt-strength, 7deg)));
-  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
-  transform-style: preserve-3d;
-  will-change: transform;
-}
-
-/* Bouton magnétique — décalage posé en JS via --dx / --dy. */
-.magnetic {
-  transform: translate3d(var(--dx, 0px), var(--dy, 0px), 0);
-  transition: transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: transform;
+/* Barre de progression de lecture : du violet au jade. */
+.scroll-progress {
+  background: linear-gradient(90deg, var(--violet), var(--jade));
+  transform-origin: 0 50%;
 }
 
 /* Révélation à l'entrée dans le viewport. */
@@ -354,29 +303,38 @@
   transform: none;
 }
 
-/* Balayage lumineux (bordures animées, badges live). */
-@keyframes shimmer-sweep {
-  from {
-    background-position: 200% 0;
-  }
+/* Titre révélé mot à mot : chaque mot monte depuis sous sa ligne. */
+.word-reveal .word {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: top;
+  padding-bottom: 0.1em;
+  margin-bottom: -0.1em;
+}
+.word-reveal .word > span {
+  display: inline-block;
+  transform: translateY(110%);
+  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: calc(var(--word-index, 0) * 70ms + var(--reveal-delay, 0ms));
+}
+.word-reveal[data-revealed="true"] .word > span {
+  transform: none;
+}
+
+/* Tracé qui circule le long d'un lien du schéma. */
+@keyframes dash-flow {
   to {
-    background-position: -200% 0;
+    stroke-dashoffset: -24;
   }
 }
-.shimmer {
-  background: linear-gradient(
-    100deg,
-    transparent 20%,
-    var(--brand-glow-strong) 50%,
-    transparent 80%
-  );
-  background-size: 200% 100%;
-  animation: shimmer-sweep 2.4s linear infinite;
+.dash-flow {
+  stroke-dasharray: 4 8;
+  animation: dash-flow 1.6s linear infinite;
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 var(--brand-glow-strong);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--jade) 45%, transparent);
   }
   70% {
     box-shadow: 0 0 0 10px transparent;
@@ -402,7 +360,7 @@
   animation: marquee-scroll var(--marquee-duration, 40s) linear infinite;
 }
 .marquee-mask {
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
 }
 .marquee-host:hover .marquee-track {
   animation-play-state: paused;
@@ -423,12 +381,10 @@
     opacity: 1;
     transform: none;
   }
-  .parallax,
-  .tilt,
-  .magnetic {
+  .word-reveal .word > span {
     transform: none;
   }
-  .cursor-aura {
-    display: none;
+  .glow-card:hover {
+    transform: none;
   }
 }
