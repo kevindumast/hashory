@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13](https://github.com/kevindumast/hashory/compare/hashory-v0.1.12...hashory-v0.1.13) (2026-10-22)
+
+
+### Bug Fixes
+
+* **plateformes:** positions par compte en euros réels, change à jour, export complet ([36983a2](https://github.com/kevindumast/hashory/commit/36983a22d3da3804fff3a3bd551b0ff06996bbbf))
+
 ## [0.1.12](https://github.com/kevindumast/hashory/compare/hashory-v0.1.11...hashory-v0.1.12) (2026-10-22)
 
 
