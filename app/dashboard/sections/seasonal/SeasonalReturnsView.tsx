@@ -4,17 +4,21 @@ import React, { useMemo } from "react";
 import type { PortfolioSnapshot } from "@/hooks/usePortfolioSnapshots";
 import type { IntegrationRecord } from "@/hooks/dashboard/useIntegrations";
 import type { TradeRecord } from "@/hooks/dashboard/useDashboardMetrics";
+import {
+  buildDcaSnapshots,
+  buildTradeHistory,
+  compoundReturns,
+  computeMonthlyFromSnapshots,
+  computeMonthlyFromTrades,
+  computeQuarterlyReturns,
+  type EurPerUsdAt,
+  type PriceHistory,
+} from "@/lib/seasonality";
 
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const MONTHS_SHORT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
 const QUARTERS = ["T1","T2","T3","T4"];
 const QUARTER_MONTHS = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
-const DAY_MS = 86_400_000;
-
-const QUOTE_ASSETS = ["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI","BTC","ETH","BNB","EUR","GBP","TRY","AUD","CAD","BRL","ARS"];
-const STABLECOINS = new Set(["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI"]);
-
-type PriceHistory = Record<string, { dayUtc: number; closeUsd: number }[]>;
 
 type Props = {
   snapshots: PortfolioSnapshot[];
@@ -24,190 +28,9 @@ type Props = {
   onSelectIntegration: (id: string) => void;
   isDcaOnly: boolean;
   dcaPriceHistory: PriceHistory | null;
+  /** Change EUR/USD du jour : les achats payés en euros sont convertis. */
+  eurPerUsdAt: EurPerUsdAt;
 };
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function extractBaseAsset(symbol: string): string {
-  const upper = symbol.toUpperCase();
-  for (const q of QUOTE_ASSETS) {
-    if (upper.endsWith(q)) { const b = upper.slice(0, upper.length - q.length); if (b) return b; }
-  }
-  return upper;
-}
-
-function startOfUtcDay(ts: number): number {
-  const d = new Date(ts);
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-}
-
-// ─── Snapshot-based (all portfolio) — Modified Dietz ─────────────────────────
-
-type SimpleSnap = { dayUtc: number; valueUsd: number; netInvestedUsd: number };
-
-function getLastBefore<T extends { dayUtc: number }>(arr: T[], dayUtc: number): T | null {
-  for (let i = arr.length - 1; i >= 0; i--) { if (arr[i].dayUtc < dayUtc) return arr[i]; }
-  return null;
-}
-
-function getLastInMonth<T extends { dayUtc: number }>(arr: T[], year: number, month: number): T | null {
-  const lo = Date.UTC(year, month, 1);
-  const hi = Date.UTC(year, month + 1, 1);
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const d = arr[i].dayUtc;
-    if (d >= lo && d < hi) return arr[i];
-  }
-  return null;
-}
-
-function computeMonthlyFromSnapshots(snaps: SimpleSnap[]): Map<number, (number | null)[]> {
-  if (snaps.length === 0) return new Map();
-  const sorted = [...snaps].sort((a, b) => a.dayUtc - b.dayUtc);
-  const minYear = new Date(sorted[0].dayUtc).getUTCFullYear();
-  const maxYear = new Date(sorted[sorted.length - 1].dayUtc).getUTCFullYear();
-  const result = new Map<number, (number | null)[]>();
-  for (let year = minYear; year <= maxYear; year++) {
-    const months: (number | null)[] = [];
-    for (let m = 0; m < 12; m++) {
-      const startSnap = getLastBefore(sorted, Date.UTC(year, m, 1));
-      const endSnap = getLastInMonth(sorted, year, m);
-      if (!endSnap) { months.push(null); continue; }
-      const EV = endSnap.valueUsd;
-      const BV = startSnap?.valueUsd ?? 0;
-      const CF = endSnap.netInvestedUsd - (startSnap?.netInvestedUsd ?? 0);
-      const denom = BV + CF / 2;
-      if (Math.abs(denom) < 1) { months.push(null); continue; }
-      months.push(((EV - BV - CF) / denom) * 100);
-    }
-    result.set(year, months);
-  }
-  return result;
-}
-
-// ─── DCA integration: holdings × market price ────────────────────────────────
-
-function buildDcaSnapshots(trades: TradeRecord[], prices: PriceHistory): SimpleSnap[] {
-  if (trades.length === 0) return [];
-  const sorted = [...trades].sort((a, b) => a.executedAt - b.executedAt);
-  const todayUtc = startOfUtcDay(Date.now());
-  const firstDay = startOfUtcDay(sorted[0].executedAt);
-
-  const holdings = new Map<string, { qty: number; avgCost: number }>();
-  let netInvestedUsd = 0;
-  let eventIdx = 0;
-
-  // Price forward-fill cursor per symbol
-  const cursors = new Map<string, number>();
-  function priceAt(symbol: string, dayUtc: number): number {
-    if (STABLECOINS.has(symbol)) return 1;
-    const series = prices[symbol.toUpperCase()];
-    if (!series || series.length === 0) return 0;
-    let idx = cursors.get(symbol) ?? -1;
-    while (idx + 1 < series.length && series[idx + 1].dayUtc <= dayUtc) idx++;
-    cursors.set(symbol, idx);
-    return idx >= 0 ? series[idx].closeUsd : 0;
-  }
-
-  const result: SimpleSnap[] = [];
-
-  for (let day = firstDay; day <= todayUtc; day += DAY_MS) {
-    const dayEnd = day + DAY_MS;
-    while (eventIdx < sorted.length && sorted[eventIdx].executedAt < dayEnd) {
-      const t = sorted[eventIdx];
-      const valueUsd = t.quoteQuantity ?? t.price * t.quantity;
-      const base = t.tradeType === "CONVERT" && t.toAsset
-        ? t.toAsset.toUpperCase()
-        : extractBaseAsset(t.symbol);
-      const h = holdings.get(base) ?? { qty: 0, avgCost: 0 };
-      if (t.side === "BUY") {
-        const newQty = h.qty + t.quantity;
-        holdings.set(base, { qty: newQty, avgCost: newQty > 0 ? (h.qty * h.avgCost + valueUsd) / newQty : 0 });
-        netInvestedUsd += valueUsd;
-      } else {
-        const sold = Math.min(t.quantity, h.qty);
-        netInvestedUsd = Math.max(0, netInvestedUsd - sold * h.avgCost);
-        holdings.set(base, { qty: Math.max(0, h.qty - t.quantity), avgCost: h.avgCost });
-      }
-      eventIdx++;
-    }
-
-    let valueUsd = 0;
-    for (const [sym, h] of holdings) {
-      if (h.qty > 0) valueUsd += h.qty * priceAt(sym, day);
-    }
-    result.push({ dayUtc: day, valueUsd, netInvestedUsd });
-  }
-  return result;
-}
-
-// ─── Trade-based (active trading) — realized P&L / cost basis ────────────────
-
-type TradePoint = { timestamp: number; realizedPnl: number; costBasis: number };
-
-function buildTradeHistory(trades: TradeRecord[]): TradePoint[] {
-  if (trades.length === 0) return [];
-  const sorted = [...trades].sort((a, b) => a.executedAt - b.executedAt);
-  const holdings = new Map<string, { qty: number; avgCost: number }>();
-  let realizedPnl = 0;
-  let totalCostBasis = 0;
-  const byDay = new Map<string, TradePoint>();
-
-  for (const t of sorted) {
-    const valueUsd = t.quoteQuantity ?? t.price * t.quantity;
-    const base = t.tradeType === "CONVERT" && t.toAsset ? t.toAsset.toUpperCase() : extractBaseAsset(t.symbol);
-    const h = holdings.get(base) ?? { qty: 0, avgCost: 0 };
-    if (t.side === "BUY") {
-      const newQty = h.qty + t.quantity;
-      holdings.set(base, { qty: newQty, avgCost: newQty > 0 ? (h.qty * h.avgCost + valueUsd) / newQty : 0 });
-      totalCostBasis += valueUsd;
-    } else {
-      const sold = Math.min(t.quantity, h.qty);
-      const costSold = sold * h.avgCost;
-      realizedPnl += valueUsd - costSold;
-      totalCostBasis = Math.max(0, totalCostBasis - costSold);
-      holdings.set(base, { qty: Math.max(0, h.qty - t.quantity), avgCost: h.avgCost });
-    }
-    const d = new Date(t.executedAt);
-    const key = d.toISOString().slice(0, 10);
-    byDay.set(key, { timestamp: Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()), realizedPnl, costBasis: totalCostBasis });
-  }
-  return Array.from(byDay.values()).sort((a, b) => a.timestamp - b.timestamp);
-}
-
-function computeMonthlyFromTrades(history: TradePoint[]): Map<number, (number | null)[]> {
-  if (history.length === 0) return new Map();
-  const minYear = new Date(history[0].timestamp).getUTCFullYear();
-  const maxYear = new Date(history[history.length - 1].timestamp).getUTCFullYear();
-  const result = new Map<number, (number | null)[]>();
-  for (let year = minYear; year <= maxYear; year++) {
-    const months: (number | null)[] = [];
-    for (let m = 0; m < 12; m++) {
-      const cutoff = Date.UTC(year, m, 1);
-      const monthEnd = Date.UTC(year, m + 1, 1);
-      const endPt = [...history].reverse().find((p) => p.timestamp >= cutoff && p.timestamp < monthEnd) ?? null;
-      if (!endPt) { months.push(null); continue; }
-      const startPt = [...history].reverse().find((p) => p.timestamp < cutoff) ?? null;
-      const monthlyGain = endPt.realizedPnl - (startPt?.realizedPnl ?? 0);
-      const base = Math.max(startPt?.costBasis ?? endPt.costBasis, 1);
-      months.push((monthlyGain / base) * 100);
-    }
-    result.set(year, months);
-  }
-  return result;
-}
-
-// ─── Shared ───────────────────────────────────────────────────────────────────
-
-function computeQuarterlyReturns(monthly: Map<number, (number | null)[]>): Map<number, (number | null)[]> {
-  const result = new Map<number, (number | null)[]>();
-  for (const [year, months] of monthly) {
-    result.set(year, QUARTER_MONTHS.map((qm) => {
-      const vals = qm.map((m) => months[m]).filter((v): v is number => v !== null);
-      return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) : null;
-    }));
-  }
-  return result;
-}
 
 // ─── Presentation ─────────────────────────────────────────────────────────────
 
@@ -257,10 +80,7 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
   const years = Array.from(data.keys()).sort((a, b) => b - a);
   const colAvgs = cols.map((_, i) => avg(years.map((y) => data.get(y)?.[i] ?? null)));
   const colMeds = cols.map((_, i) => median(years.map((y) => data.get(y)?.[i] ?? null)));
-  const yearTotals = years.map((y) => {
-    const ns = (data.get(y) ?? []).filter((v): v is number => v !== null);
-    return ns.length > 0 ? ns.reduce((a, b) => a + b, 0) : null;
-  });
+  const yearTotals = years.map((y) => compoundReturns(data.get(y) ?? []));
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-bold tracking-tight text-foreground">{title}</h2>
@@ -302,7 +122,7 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function SeasonalReturnsView({ snapshots, integrations, allTrades, selectedIntegration, onSelectIntegration, isDcaOnly, dcaPriceHistory }: Props) {
+export function SeasonalReturnsView({ snapshots, integrations, allTrades, selectedIntegration, onSelectIntegration, isDcaOnly, dcaPriceHistory, eurPerUsdAt }: Props) {
   const integrationsWithTrades = useMemo(() => {
     const ids = new Set(allTrades.map((t) => String(t.integrationId)));
     return integrations.filter((i) => ids.has(String(i._id)));
@@ -315,12 +135,12 @@ export function SeasonalReturnsView({ snapshots, integrations, allTrades, select
     if (isDcaOnly) {
       if (!dcaPriceHistory) return new Map<number, (number | null)[]>();
       const filtered = allTrades.filter((t) => String(t.integrationId) === selectedIntegration);
-      const dcaSnaps = buildDcaSnapshots(filtered, dcaPriceHistory);
+      const dcaSnaps = buildDcaSnapshots(filtered, dcaPriceHistory, eurPerUsdAt);
       return computeMonthlyFromSnapshots(dcaSnaps);
     }
     const filtered = allTrades.filter((t) => String(t.integrationId) === selectedIntegration);
-    return computeMonthlyFromTrades(buildTradeHistory(filtered));
-  }, [selectedIntegration, isDcaOnly, dcaPriceHistory, snapshots, allTrades]);
+    return computeMonthlyFromTrades(buildTradeHistory(filtered, eurPerUsdAt));
+  }, [selectedIntegration, isDcaOnly, dcaPriceHistory, eurPerUsdAt, snapshots, allTrades]);
 
   const quarterlyReturns = useMemo(() => computeQuarterlyReturns(monthlyReturns), [monthlyReturns]);
   const quarterColsFull = QUARTERS.map((q, qi) => `${q} (${QUARTER_MONTHS[qi].map((m) => MONTHS_SHORT[m]).join("-")})`);
@@ -333,7 +153,7 @@ export function SeasonalReturnsView({ snapshots, integrations, allTrades, select
 
   const footnote = selectedIntegration === "all" || isDcaOnly
     ? "Performance mensuelle en valeur de marché, ajustée des flux de capitaux (méthode Dietz modifiée)."
-    : "P&L réalisé mensuel en % du coût moyen d'achat.";
+    : "Résultat réalisé mensuel en % du coût des positions en début de mois. Euros et stablecoins sont tenus au pair.";
 
   return (
     <div className="space-y-6">

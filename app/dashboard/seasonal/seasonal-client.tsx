@@ -5,21 +5,13 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
+import { useFxRates } from "@/hooks/useFxRates";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SeasonalReturnsView } from "@/app/dashboard/sections/seasonal/SeasonalReturnsView";
 import { CalendarDays } from "lucide-react";
+import { acquiredCryptoAssets, hasCryptoDisposal } from "@/lib/seasonality";
 
 const DAY_MS = 86_400_000;
-const QUOTE_ASSETS = ["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI","BTC","ETH","BNB","EUR","GBP","TRY","AUD","CAD","BRL","ARS"];
-const STABLECOINS = new Set(["USDT","USDC","BUSD","USD","FDUSD","TUSD","DAI"]);
-
-function extractBase(symbol: string): string {
-  const upper = symbol.toUpperCase();
-  for (const q of QUOTE_ASSETS) {
-    if (upper.endsWith(q)) { const b = upper.slice(0, upper.length - q.length); if (b) return b; }
-  }
-  return upper;
-}
 
 export function SeasonalPageClient() {
   const [selectedIntegration, setSelectedIntegration] = useState<string>("all");
@@ -27,27 +19,29 @@ export function SeasonalPageClient() {
   const { snapshots, isComputing } = usePortfolioSnapshots();
   // Données partagées avec le reste du dashboard : un seul calcul.
   const { trades, isLoading, integrations } = useDashboardData();
+  const fx = useFxRates();
+  const eurPerUsdAt = useMemo(
+    () => (timestamp: number) => fx.rateAt(timestamp)?.eurPerUsd ?? null,
+    [fx]
+  );
 
-  // Detect DCA-only integrations (no sells)
-  const isDcaOnly = useMemo(() => {
-    if (selectedIntegration === "all") return false;
-    return !trades.some((t) => String(t.integrationId) === selectedIntegration && t.side === "SELL");
-  }, [selectedIntegration, trades]);
+  const selectedTrades = useMemo(
+    () => trades.filter((t) => String(t.integrationId) === selectedIntegration),
+    [selectedIntegration, trades]
+  );
 
-  // Symbols held by selected DCA integration (non-stablecoin bases)
-  const dcaSymbols = useMemo(() => {
-    if (!isDcaOnly || selectedIntegration === "all") return [];
-    const syms = new Set<string>();
-    trades
-      .filter((t) => String(t.integrationId) === selectedIntegration)
-      .forEach((t) => {
-        const base = t.tradeType === "CONVERT" && t.toAsset
-          ? t.toAsset.toUpperCase()
-          : extractBase(t.symbol);
-        if (!STABLECOINS.has(base)) syms.add(base);
-      });
-    return Array.from(syms);
-  }, [isDcaOnly, selectedIntegration, trades]);
+  // Sans cession de crypto, il n'y a rien de « réalisé » : on mesure alors
+  // la valeur de marché. Convertir des euros en USDC n'est pas une cession.
+  const isDcaOnly = useMemo(
+    () => selectedIntegration !== "all" && !hasCryptoDisposal(selectedTrades),
+    [selectedIntegration, selectedTrades]
+  );
+
+  // Cryptos acquises dont il faut l'historique de cours.
+  const dcaSymbols = useMemo(
+    () => (isDcaOnly ? acquiredCryptoAssets(selectedTrades) : []),
+    [isDcaOnly, selectedTrades]
+  );
 
   // Date range for price query
   const { fromDay, toDay } = useMemo(() => {
@@ -68,7 +62,8 @@ export function SeasonalPageClient() {
       : "skip"
   );
 
-  const loading = (isComputing && snapshots.length === 0) || isLoading;
+  // Sans le change, les achats en euros seraient pris pour des dollars.
+  const loading = (isComputing && snapshots.length === 0) || isLoading || fx.isLoading;
 
   return (
     <div className="p-6 md:p-9 space-y-6">
@@ -97,6 +92,7 @@ export function SeasonalPageClient() {
           onSelectIntegration={setSelectedIntegration}
           isDcaOnly={isDcaOnly}
           dcaPriceHistory={dcaPriceHistory ?? null}
+          eurPerUsdAt={eurPerUsdAt}
         />
       )}
     </div>
