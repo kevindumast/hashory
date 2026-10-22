@@ -6,7 +6,6 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { OnboardingChecklist, OnboardingHero } from "@/components/dashboard/onboarding";
-import { SignalsPanel } from "@/components/dashboard/signals-panel";
 
 export function DashboardContent() {
   const { user } = useUser();
@@ -39,8 +38,6 @@ export function DashboardContent() {
           Bonjour, {userName || "Investisseur"}
         </h1>
       </header>
-
-      <SignalsPanel />
 
       <OnboardingChecklist />
 
