@@ -6,7 +6,6 @@
 ### Bug Fixes
 
 * **plateformes:** positions par compte en euros réels, change à jour, export complet ([36983a2](https://github.com/kevindumast/hashory/commit/36983a22d3da3804fff3a3bd551b0ff06996bbbf))
-* **plateformes:** positions par compte en euros réels, change à jour, export complet ([c4e5462](https://github.com/kevindumast/hashory/commit/c4e54622976e255ab85e093cb3513617efcba739))
 
 ## [0.1.12](https://github.com/kevindumast/hashory/compare/hashory-v0.1.11...hashory-v0.1.12) (2026-10-22)
 
