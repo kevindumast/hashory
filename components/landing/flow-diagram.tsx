@@ -127,6 +127,9 @@ export function FlowDiagram() {
           <div>
             Accès : <span className="text-slate">lecture seule</span>
           </div>
+          <div>
+            Crédit API : <span className="text-slate">le vôtre, vos clés</span>
+          </div>
         </div>
       </div>
     </div>

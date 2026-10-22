@@ -312,4 +312,18 @@ export default defineSchema({
   })
     .index("by_integration_status", ["integrationId", "status"])
     .index("by_status", ["status"]),
+  /**
+   * Clés d'API des fournisseurs de données de chaîne (Helius, Etherscan…),
+   * apportées par chaque utilisateur : la lecture de ses wallets consomme
+   * son crédit, jamais celui de l'hébergeur. Liste dans `lib/data-providers.ts`.
+   */
+  dataProviderKeys: defineTable({
+    clerkUserId: v.string(),
+    provider: v.string(),
+    /** Chiffrée au repos ; ne ressort jamais de la base en clair. */
+    encryptedKey: v.string(),
+    /** Derniers caractères, pour reconnaître la clé en place. */
+    hint: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user_provider", ["clerkUserId", "provider"]),
 });

@@ -1,7 +1,9 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
+import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers";
 import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText } from "lucide-react";
 import Image from "next/image";
 import {
@@ -395,6 +397,14 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [isDragging, setIsDragging] = useState(false);
 
   const upsertIntegration = useMutation(api.integrations.upsert);
+  const dataProviderKeys = useQuery(api.dataProviderKeys.list);
+  // Wallet lu via un fournisseur tiers avec la clé de l'utilisateur : s'il
+  // ne l'a pas encore fournie, on le prévient avant qu'il connecte.
+  const requiredKey = dataProviderForSource(provider.value);
+  const missingKey =
+    requiredKey && dataProviderKeys !== undefined && !dataProviderKeys.some((k) => k.provider === requiredKey)
+      ? requiredKey
+      : null;
   const ingestBitstackCsv = useMutation(api.bitstack.ingestCsv);
   const ingestFinaryCsv = useMutation(api.finary.ingestCsv);
 
@@ -791,6 +801,19 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               Restez informé dans notre changelog.
             </div>
           )}
+
+          {missingKey ? (
+            <div className="rounded-xl bg-violet-soft px-4 py-3 text-xs leading-relaxed text-foreground">
+              Ce wallet est lu via {dataProviderLabel(missingKey)}, avec{" "}
+              <span className="font-bold">votre propre clé d&apos;API</span> : c&apos;est votre
+              crédit qui est consommé. Vous pouvez le connecter maintenant ; sa synchronisation
+              démarrera une fois la clé ajoutée dans{" "}
+              <Link href="/dashboard/settings/api-keys" className="font-bold text-violet hover:opacity-80">
+                Réglages › Clés d&apos;API
+              </Link>
+              .
+            </div>
+          ) : null}
 
           {error ? (
             <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive" role="alert">

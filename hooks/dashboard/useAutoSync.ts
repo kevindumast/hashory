@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useAction } from "convex/react";
+import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
+import { dataProviderForSource } from "@/lib/data-providers";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { errorMessage, toast } from "@/lib/toast";
@@ -67,6 +68,7 @@ export function useAutoSync() {
   const syncSolana = useAction(api.solana.syncSolanaWallet);
   const syncBitcoin = useAction(api.bitcoin.syncBitcoinWallet);
   const syncTao = useAction(api.tao.syncTaoWallet);
+  const dataProviderKeys = useQuery(api.dataProviderKeys.list);
 
   // Une seule campagne par session, quels que soient les re-rendus.
   const hasRunRef = useRef(false);
@@ -100,6 +102,9 @@ export function useAutoSync() {
 
   useEffect(() => {
     if (!isConvexConfigured || isLoadingIntegrations || hasRunRef.current) return;
+    // Il faut savoir quelles clés sont en place avant de choisir les sources.
+    if (dataProviderKeys === undefined) return;
+    const configuredKeys = new Set(dataProviderKeys.map((key) => key.provider));
 
     const now = Date.now();
     if (now - readLastAttempt() < RETRY_COOLDOWN_MS) {
@@ -114,6 +119,11 @@ export function useAutoSync() {
       if (FILE_IMPORT_PROVIDERS.has(integration.provider)) return false;
       // Une synchronisation déjà en cours ne doit pas être doublée.
       if (integration.syncStatus === "syncing") return false;
+      // Wallet lu via un fournisseur dont l'utilisateur n'a pas fourni la
+      // clé : la tentative échouerait à coup sûr. La page des comptes le
+      // signale ; inutile d'afficher une erreur chaque jour.
+      const requiredKey = dataProviderForSource(integration.provider);
+      if (requiredKey && !configuredKeys.has(requiredKey)) return false;
       const lastSyncedAt = integration.lastSyncedAt ?? 0;
       return now - lastSyncedAt > STALE_AFTER_MS;
     });
@@ -165,5 +175,5 @@ export function useAutoSync() {
 
       if (succeeded > 0) refresh();
     })();
-  }, [integrations, isLoadingIntegrations, runSync, refresh]);
+  }, [integrations, isLoadingIntegrations, dataProviderKeys, runSync, refresh]);
 }

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
+import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 
 const TAOSTATS_API_BASE = "https://api.taostats.io/api/transfer/v1";
 const RAO_PER_TAO = 1_000_000_000;
@@ -45,10 +46,8 @@ export const syncTaoWallet = action({
       throw new Error("Cette intégration n'est pas de type TAO");
     }
 
-    const apiKey = process.env.TAOSTATS_API_KEY;
-    if (!apiKey) {
-      throw new Error("TAOSTATS_API_KEY not configured in Convex environment");
-    }
+    // La clé de l'utilisateur, jamais celle de l'hébergeur.
+    const apiKey = await requireDataProviderKey(ctx, clerkUserId, "taostats");
 
     const walletAddress = decryptSecret(integration.encryptedCredentials.apiKey);
     if (!walletAddress) {
@@ -83,6 +82,9 @@ export const syncTaoWallet = action({
         const response = await fetch(url, {
           headers: { Authorization: apiKey, Accept: "application/json" },
         });
+        if (response.status === 401 || response.status === 403) {
+          throw rejectedDataProviderKey("taostats");
+        }
         if (!response.ok) {
           throw new Error(`Taostats API error: ${response.statusText}`);
         }
