@@ -36,6 +36,7 @@ export const PROVIDERS = [
   { id: "tao", label: "Bittensor", kind: "wallet" },
   { id: "bitstack", label: "Bitstack", kind: "file" },
   { id: "finary", label: "Finary", kind: "file" },
+  { id: "strike", label: "Strike", kind: "file" },
 ] as const satisfies readonly ProviderDefinition[];
 
 /**

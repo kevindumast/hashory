@@ -14,6 +14,7 @@ const PLATFORMS = [
   { name: "Bittensor", id: "tao", kind: "Wallet" },
   { name: "Bitstack", id: "bitstack", kind: "CSV" },
   { name: "Finary", id: "finary", kind: "CSV" },
+  { name: "Strike", id: "strike", kind: "CSV" },
 ];
 
 /**

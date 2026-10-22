@@ -29,6 +29,7 @@ export const PROVIDER_ICONS: Record<string, string> = {
   tao: `${CMC_COIN}/22974.png`,
   bitstack: "https://bitcoin.fr/wp-content/uploads/2022/05/Bitstack.jpg",
   finary: FINARY_ICON,
+  strike: "https://strike.me/favicon.ico",
 };
 
 /** Icône d'une source, ou chaîne vide si aucune n'est connue. */

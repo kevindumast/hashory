@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers";
+import { parseStrikeCsv, type StrikeImport } from "@/lib/strike";
 import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText } from "lucide-react";
 import Image from "next/image";
 import {
@@ -338,6 +339,14 @@ const providerConfigs: ProviderConfig[] = [
     fields: [],
   },
   {
+    value: "strike",
+    label: "Strike",
+    description: "Importez votre relevé CSV Strike.",
+    category: "platform",
+    fileImport: true,
+    fields: [],
+  },
+  {
     value: "kucoin",
     label: "KuCoin",
     description: "Connexion par clé API avec passphrase.",
@@ -393,6 +402,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [csvFileName, setCsvFileName] = useState<string | null>(null);
   const [csvParsed, setCsvParsed] = useState<{ trades: BitstackTrade[]; deposits: BitstackDeposit[]; skipped: number } | null>(null);
   const [finaryParsed, setFinaryParsed] = useState<{ trades: FinaryTrade[]; withdrawals: FinaryWithdrawal[]; skipped: number } | null>(null);
+  const [strikeParsed, setStrikeParsed] = useState<StrikeImport | null>(null);
   const [csvImportResult, setCsvImportResult] = useState<{ tradesInserted: number; depositsInserted: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -407,6 +417,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       : null;
   const ingestBitstackCsv = useMutation(api.bitstack.ingestCsv);
   const ingestFinaryCsv = useMutation(api.finary.ingestCsv);
+  const ingestStrikeCsv = useMutation(api.strike.ingestCsv);
 
   useEffect(() => {
     if (!open) {
@@ -435,12 +446,22 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     setCsvFileName(file.name);
     setCsvParsed(null);
     setFinaryParsed(null);
+    setStrikeParsed(null);
     setError(null);
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
         const text = ev.target?.result as string;
-        if (provider.value === "finary") {
+        if (provider.value === "strike") {
+          const result = parseStrikeCsv(text);
+          if (result.trades.length + result.deposits.length + result.withdrawals.length === 0) {
+            setError(
+              result.skipped[0]?.reason ?? "Aucune transaction reconnue. Vérifiez que c'est bien un relevé Strike."
+            );
+          } else {
+            setStrikeParsed(result);
+          }
+        } else if (provider.value === "finary") {
           const result = parseFinaryCsv(text);
           if (result.trades.length === 0 && result.withdrawals.length === 0) {
             setError("Aucune transaction reconnue. Vérifiez que c'est bien un export Finary CSV.");
@@ -494,6 +515,22 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
     setError(null);
 
     try {
+      if (provider.value === "strike" && strikeParsed) {
+        const result = await ingestStrikeCsv({
+          trades: strikeParsed.trades,
+          deposits: strikeParsed.deposits,
+          withdrawals: strikeParsed.withdrawals,
+        });
+        const others = result.depositsInserted + result.withdrawalsInserted;
+        setCsvImportResult({ tradesInserted: result.tradesInserted, depositsInserted: others });
+        setCompleted(true);
+        toast.success(
+          `Import Strike terminé : ${result.tradesInserted} achat${result.tradesInserted > 1 ? "s" : ""} et ${others} mouvement${others > 1 ? "s" : ""} ajoutés`
+        );
+        setTimeout(() => { onOpenChange(false); }, 1500);
+        return;
+      }
+
       if (provider.value === "finary" && finaryParsed) {
         const result = await ingestFinaryCsv({
           trades: finaryParsed.trades,
@@ -702,6 +739,8 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                         <p className="text-xs text-muted-foreground">
                           {provider.value === "finary"
                             ? "Finary → Compte → Exporter l'historique"
+                            : provider.value === "strike"
+                            ? "strike.me → Documents → relevé → Exporter en CSV"
                             : "Paramètres Bitstack → Exporter l'historique"}
                         </p>
                       </div>
@@ -722,6 +761,23 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                       <p className="text-muted-foreground">{csvParsed.trades.length} achat{csvParsed.trades.length > 1 ? "s" : ""} par carte</p>
                       <p className="text-muted-foreground">{csvParsed.deposits.length} dépôt{csvParsed.deposits.length > 1 ? "s" : ""} fiat</p>
                       {csvParsed.skipped > 0 && <p className="text-chart-4">{csvParsed.skipped} ligne{csvParsed.skipped > 1 ? "s" : ""} ignorée{csvParsed.skipped > 1 ? "s" : ""}</p>}
+                    </div>
+                  )}
+
+                  {strikeParsed && !completed && (
+                    <div className="space-y-0.5 border-l-2 border-border/60 py-2 pl-3 text-xs">
+                      <p className="text-muted-foreground">
+                        {strikeParsed.trades.length} achat{strikeParsed.trades.length > 1 ? "s" : ""} ou vente{strikeParsed.trades.length > 1 ? "s" : ""} de BTC
+                      </p>
+                      <p className="text-muted-foreground">
+                        {strikeParsed.deposits.length} dépôt{strikeParsed.deposits.length > 1 ? "s" : ""} ·{" "}
+                        {strikeParsed.withdrawals.length} retrait{strikeParsed.withdrawals.length > 1 ? "s" : ""}
+                      </p>
+                      {strikeParsed.skipped.length > 0 && (
+                        <p className="text-chart-4">
+                          {strikeParsed.skipped.length} ligne{strikeParsed.skipped.length > 1 ? "s" : ""} ignorée{strikeParsed.skipped.length > 1 ? "s" : ""}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -830,7 +886,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               disabled={
                 submitting ||
                 provider.disabled ||
-                (provider.value === "finary"
+                (provider.value === "strike"
+                  ? !strikeParsed
+                  : provider.value === "finary"
                   ? !finaryParsed
                   : provider.fileImport
                   ? !csvParsed
