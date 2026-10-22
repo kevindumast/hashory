@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
 import { computeCostBasis } from "@/lib/cost-basis";
+import { fiatMovementDirection } from "@/lib/ledger";
 
 const DATASET_SPOT_TRADES = "spot_trades";
 
@@ -342,6 +343,13 @@ export function useDashboardMetrics(refreshToken: number) {
       : "skip"
   );
 
+  // Positions tirées du grand livre côté serveur : la même comptabilité que
+  // la courbe de performance et la saisonnalité.
+  const ledgerPositions = useQuery(
+    api.portfolioSnapshots.listPositions,
+    isConvexConfigured && isLoaded && user ? {} : "skip"
+  );
+
   const syncScopes = useQuery(
     api.integrations.listSyncScopes,
     isConvexConfigured && isLoaded && user
@@ -595,7 +603,7 @@ export function useDashboardMetrics(refreshToken: number) {
           feeAsset: fiat.fiatCurrency.toUpperCase(),
           executedAt: fiat.updateTime,
         });
-      } else if (fiat.txType === "0") {
+      } else if (fiatMovementDirection(fiat) === "deposit") {
         // Dépôt fiat pur (virement bancaire EUR)
         entries.push({
           type: "deposit",
@@ -659,6 +667,21 @@ export function useDashboardMetrics(refreshToken: number) {
       integrationsReportingBalances.add(integrationId);
       balanceSymbols.add(symbol);
     });
+
+    const positionBySymbol = new Map(
+      (ledgerPositions?.positions ?? []).map((position) => [position.asset, position])
+    );
+    // Soldes du grand livre, compte par compte : ils font foi pour les
+    // plateformes qui ne publient pas les leurs (wallets, imports CSV).
+    // Le calcul local, qui ignorait les swaps Finary ou les achats par
+    // carte, ne sert qu'en attendant le premier recalcul.
+    const ledgerBalances = ledgerPositions?.balances ?? null;
+    const ledgerQuantityBySymbol = new Map<string, Map<string, number>>();
+    for (const balance of ledgerBalances ?? []) {
+      const byAccount = ledgerQuantityBySymbol.get(balance.asset) ?? new Map<string, number>();
+      byAccount.set(balance.account, balance.quantity);
+      ledgerQuantityBySymbol.set(balance.asset, byAccount);
+    }
 
     const map = new Map<string, {
       symbol: string;
@@ -748,6 +771,9 @@ export function useDashboardMetrics(refreshToken: number) {
     );
 
     balanceSymbols.forEach((symbol) => {
+      ensureEntry(symbol);
+    });
+    ledgerQuantityBySymbol.forEach((_, symbol) => {
       ensureEntry(symbol);
     });
 
@@ -901,8 +927,18 @@ export function useDashboardMetrics(refreshToken: number) {
       .map((entry) => {
         const sortedEvents = [...entry.events].sort((a, b) => a.timestamp - b.timestamp);
 
-        // AVCO : prix d'achat moyen pondéré (même méthode que Binance "Prix garanti")
-        const { avgCostBasis, realizedPnlAvco } = computeCostBasis(sortedEvents, entry.symbol);
+        // Prix de revient et résultat réalisé : ceux du grand livre quand le
+        // serveur les a calculés — échanges lus par leurs deux jambes, euros
+        // convertis au change du jour, transferts internes neutres. Le calcul
+        // local ne sert qu'en attendant le premier recalcul.
+        const ledgerPosition = positionBySymbol.get(entry.symbol);
+        const local = computeCostBasis(sortedEvents, entry.symbol);
+        const avgCostBasis = ledgerPosition
+          ? ledgerPosition.quantity > 1e-12
+            ? ledgerPosition.costUsd / ledgerPosition.quantity
+            : 0
+          : local.avgCostBasis;
+        const realizedPnlAvco = ledgerPosition ? ledgerPosition.realizedUsd : local.realizedPnlAvco;
 
         const averageBuyPrice =
           entry.buyQuantity > 0 ? entry.buyValueUsd / entry.buyQuantity : undefined;
@@ -990,9 +1026,12 @@ export function useDashboardMetrics(refreshToken: number) {
           reconciled += quantity;
         };
 
-        quantityByIntegration.forEach((quantity, integrationId) => {
-          // Les sources sans solde publié (wallets on-chain, imports CSV)
-          // restent calculées à partir de leurs événements.
+        // Les sources sans solde publié (wallets on-chain, imports CSV) :
+        // soldes du grand livre, ou à défaut ceux des événements locaux.
+        const sourceQuantities = ledgerBalances
+          ? ledgerQuantityBySymbol.get(entry.symbol) ?? new Map<string, number>()
+          : quantityByIntegration;
+        sourceQuantities.forEach((quantity, integrationId) => {
           if (!integrationsReportingBalances.has(integrationId)) {
             pushSource(integrationId, quantity);
           }
@@ -1014,7 +1053,7 @@ export function useDashboardMetrics(refreshToken: number) {
       .sort((a, b) => b.investedUsd - a.investedUsd);
 
     return tokens;
-  }, [balanceList, depositList, portfolioTradesList, withdrawalList]);
+  }, [balanceList, depositList, portfolioTradesList, withdrawalList, ledgerPositions]);
 
   const profitSummary = useMemo<ProfitSummary>(() => {
     if (portfolioTokens.length === 0) {

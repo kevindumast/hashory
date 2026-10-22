@@ -262,24 +262,62 @@ export default defineSchema({
   })
     .index("by_symbol_day", ["symbol", "dayUtc"])
     .index("by_symbol", ["symbol"]),
+  /**
+   * Valeur et performance quotidiennes, calculées par `lib/portfolio-history`
+   * depuis le grand livre. Une série par périmètre : le portefeuille entier
+   * (`scope` = "all") et chaque compte (`scope` = identifiant du compte).
+   */
   portfolioSnapshots: defineTable({
     clerkId: v.string(),
+    /** "all" ou l'identifiant d'un compte. Absent sur l'ancien format. */
+    scope: v.optional(v.string()),
     dayUtc: v.number(),
     valueUsd: v.number(),
-    costBasisUsd: v.number(),
-    realizedPnlUsd: v.number(),
+    /** Apports nets cumulés (flux externes), en dollars. */
     netInvestedUsd: v.number(),
+    /** Apports (+) et retraits (−) externes du jour. */
+    flowUsd: v.optional(v.number()),
+    /** Rendement pondéré par le temps cumulé, en %. */
     profitPercent: v.number(),
     btcPercent: v.number(),
+    /** Champs de l'ancien moteur, plus écrits. */
+    costBasisUsd: v.optional(v.number()),
+    realizedPnlUsd: v.optional(v.number()),
     computedAt: v.number(),
   })
     .index("by_user_day", ["clerkId", "dayUtc"])
-    .index("by_user", ["clerkId"]),
+    .index("by_user", ["clerkId"])
+    .index("by_user_scope_day", ["clerkId", "scope", "dayUtc"]),
+  /**
+   * Positions du portefeuille entier au dernier recalcul, tirées du même
+   * déroulé que la performance : le dashboard affiche ainsi des prix de
+   * revient et des résultats cohérents avec la courbe.
+   */
+  portfolioPositions: defineTable({
+    clerkId: v.string(),
+    asset: v.string(),
+    /** Quantité selon le grand livre (hors soldes publiés par les plateformes). */
+    quantity: v.number(),
+    /** Prix de revient de la quantité détenue, en dollars. */
+    costUsd: v.number(),
+    /** Résultat réalisé cumulé, en dollars. */
+    realizedUsd: v.number(),
+    computedAt: v.number(),
+    /**
+     * Ligne de solde d'un compte (quantité seule), pour les plateformes qui
+     * ne publient pas leurs soldes. Absent sur une ligne de position globale.
+     */
+    account: v.optional(v.string()),
+  }).index("by_user", ["clerkId"]),
   portfolioSnapshotState: defineTable({
     clerkId: v.string(),
     earliestEventDay: v.optional(v.number()),
     lastComputedDay: v.optional(v.number()),
     lastTradeAt: v.optional(v.number()),
+    /** Empreinte des données : nombre d'opérations et dernière date. */
+    fingerprint: v.optional(v.string()),
+    /** Version du moteur de calcul : un changement force la reconstruction. */
+    engineVersion: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_user", ["clerkId"]),
   internalTransfers: defineTable({

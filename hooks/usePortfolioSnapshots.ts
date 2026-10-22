@@ -9,9 +9,11 @@ import { isConvexConfigured } from "@/convex/client";
 export type PortfolioSnapshot = {
   dayUtc: number;
   valueUsd: number;
-  costBasisUsd: number;
-  realizedPnlUsd: number;
+  /** Apports nets cumulés : ce qui est entré moins ce qui est sorti. */
   netInvestedUsd: number;
+  /** Apports (+) et retraits (−) du jour. */
+  flowUsd: number;
+  /** Rendement pondéré par le temps cumulé, en %. */
   profitPercent: number;
   btcPercent: number;
 };
@@ -19,11 +21,11 @@ export type PortfolioSnapshot = {
 const DAY_MS = 86_400_000;
 
 /**
- * Reads daily portfolio snapshots from Convex and triggers a recompute when
- * they're missing or stale. The Convex action is idempotent — it short-circuits
- * if `lastTradeAt` and `lastComputedDay` already match.
+ * Série quotidienne d'un périmètre — le portefeuille entier par défaut, ou
+ * un compte — et recalcul quand elle manque ou date. L'action Convex
+ * s'arrête aussitôt si rien n'a changé depuis le dernier calcul.
  */
-export function usePortfolioSnapshots(): {
+export function usePortfolioSnapshots(scope?: string): {
   snapshots: PortfolioSnapshot[];
   isComputing: boolean;
   lastComputedDay: number | null;
@@ -33,7 +35,7 @@ export function usePortfolioSnapshots(): {
 
   const snapshots = useQuery(
     api.portfolioSnapshots.listByUser,
-    isConvexConfigured && isLoaded && clerkId ? {} : "skip"
+    isConvexConfigured && isLoaded && clerkId ? { scope } : "skip"
   );
 
   const state = useQuery(
@@ -66,9 +68,8 @@ export function usePortfolioSnapshots(): {
     return snapshots.map((s) => ({
       dayUtc: s.dayUtc,
       valueUsd: s.valueUsd,
-      costBasisUsd: s.costBasisUsd,
-      realizedPnlUsd: s.realizedPnlUsd,
       netInvestedUsd: s.netInvestedUsd,
+      flowUsd: s.flowUsd ?? 0,
       profitPercent: s.profitPercent,
       btcPercent: s.btcPercent,
     }));
