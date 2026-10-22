@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { optionalUserId } from "./auth";
 
 export const ingestBatch = internalMutation({
@@ -147,7 +148,51 @@ export const listByUser = query({
       })
     );
 
-    const filtered = tradesPerIntegration.flat().sort((a, b) => b.createdAt - a.createdAt);
+    // Les swaps Finary et les imports KuCoin n'existent que dans la table des
+    // conversions : sans eux, ces échanges étaient invisibles. Binance range
+    // les siens dans les deux tables, d'où le dédoublonnage par identifiant.
+    const convertsPerIntegration = await Promise.all(
+      integrations.map((integration) =>
+        ctx.db
+          .query("convertTrades")
+          .withIndex("by_integration", (q) => q.eq("integrationId", integration._id))
+          .collect()
+      )
+    );
+    const knownTradeIds = new Set(
+      tradesPerIntegration.flat().map((trade) => `${trade.integrationId}|${trade.providerTradeId}`)
+    );
+    const convertsOnly = convertsPerIntegration
+      .flat()
+      .filter(
+        (convert) =>
+          /success|done|complete/i.test(convert.orderStatus) &&
+          !knownTradeIds.has(`${convert.integrationId}|${convert.providerTradeId}`)
+      )
+      .map((convert) => ({
+        // Identifiant d'une autre table : la liste ne s'en sert que comme clé.
+        _id: convert._id as unknown as Id<"trades">,
+        integrationId: convert.integrationId,
+        providerTradeId: convert.providerTradeId,
+        providerOrderId: undefined,
+        tradeType: "CONVERT" as const,
+        symbol: `${convert.toAsset}${convert.fromAsset}`,
+        side: "BUY" as const,
+        quantity: convert.toAmount,
+        price: convert.toAmount > 0 ? convert.fromAmount / convert.toAmount : 0,
+        quoteQuantity: convert.fromAmount,
+        fee: convert.fee,
+        feeAsset: convert.feeAsset,
+        isMaker: false,
+        executedAt: convert.executedAt,
+        fromAsset: convert.fromAsset,
+        fromAmount: convert.fromAmount,
+        toAsset: convert.toAsset,
+        toAmount: convert.toAmount,
+        createdAt: convert.createdAt,
+      }));
+
+    const filtered = [...tradesPerIntegration.flat(), ...convertsOnly].sort((a, b) => b.createdAt - a.createdAt);
     const limited = args.limit ? filtered.slice(0, args.limit) : filtered;
 
     return limited.map((trade) => {

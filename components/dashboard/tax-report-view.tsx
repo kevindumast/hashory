@@ -18,6 +18,13 @@ const usd = new Intl.NumberFormat("fr-FR", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
+/** Devise de la déclaration : au centime, comme sur le formulaire. */
+const eur = new Intl.NumberFormat("fr-FR", {
+  style: "currency",
+  currency: "EUR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 const qty = new Intl.NumberFormat("fr-FR", { maximumSignificantDigits: 6 });
 const pct = new Intl.NumberFormat("fr-FR", { style: "percent", minimumFractionDigits: 1 });
 
@@ -73,14 +80,18 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
             <th className="text-left py-2 px-3 font-medium">Actif</th>
             <th className="text-right py-2 px-3 font-medium">Quantité</th>
             <th className="text-right py-2 px-3 font-medium">Prix de cession</th>
-            <th className="text-right py-2 px-3 font-medium">Prix de revient</th>
+            <th className="text-right py-2 px-3 font-medium">Valeur globale</th>
+            <th className="text-right py-2 px-3 font-medium">Prix d&apos;acquisition imputé</th>
             <th className="text-right py-2 px-3 font-medium">Plus/moins-value</th>
             <th className="text-left py-2 px-3 font-medium">Source</th>
           </tr>
         </thead>
         <tbody>
           {events.map((e, i) => {
-            const isGain = e.gainLossUsd >= 0;
+            const gain = e.gainLossEur ?? e.gainLossUsd;
+            const isGain = gain >= 0;
+            const money = (amountEur: number | null, amountUsd: number) =>
+              amountEur !== null ? eur.format(amountEur) : usd.format(amountUsd);
             return (
               <tr
                 key={i}
@@ -94,10 +105,18 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
                   {qty.format(e.quantity)}
                 </td>
                 <td className="num py-2 px-3 text-right">
-                  {usd.format(e.proceedsUsd)}
+                  {money(e.proceedsEur, e.proceedsUsd)}
+                  {e.feesEur > 0 && (
+                    <span className="block text-[11px] text-muted-foreground">
+                      dont {eur.format(e.feesEur)} de frais
+                    </span>
+                  )}
                 </td>
                 <td className="num py-2 px-3 text-right text-muted-foreground">
-                  {usd.format(e.costBasisUsd)}
+                  {eur.format(e.portfolioValueEur)}
+                </td>
+                <td className="num py-2 px-3 text-right text-muted-foreground">
+                  {money(e.costBasisEur, e.costBasisUsd)}
                 </td>
                 <td
                   className={cn(
@@ -106,7 +125,7 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
                   )}
                 >
                   {isGain ? "+" : ""}
-                  {usd.format(e.gainLossUsd)}
+                  {money(e.gainLossEur, e.gainLossUsd)}
                 </td>
                 <td className="py-2 px-3">
                   <Badge variant="outline" className="text-[10px] capitalize">
@@ -123,13 +142,7 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 export function TaxReportView() {
-  const eur = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "EUR",
-  maximumFractionDigits: 0,
-});
-
-const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
+  const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
@@ -256,6 +269,43 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
               </div>
             )}
 
+            {/* Jetons détenus sans coût d'acquisition connu : comptés à coût nul,
+                ce qui ne minore jamais l'impôt, mais peut le majorer. */}
+            {result && result.unknownCostInflows.count > 0 && (
+              <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+                <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-chart-4">Origine inconnue :</span>{" "}
+                  <span className="text-muted-foreground">
+                    {result.unknownCostInflows.count} entrée
+                    {result.unknownCostInflows.count > 1 ? "s" : ""} de jetons (environ{" "}
+                    {eur.format(result.unknownCostInflows.valueEur)}) viennent d&apos;un compte non
+                    suivi ou d&apos;un historique incomplet. Leur prix d&apos;acquisition est compté{" "}
+                    <strong className="font-medium text-foreground">nul</strong>, par prudence : si
+                    vous les avez achetés, connectez la plateforme d&apos;origine pour réduire
+                    l&apos;impôt.
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Sorties vers un compte non suivi : une vente là-bas échappe au calcul. */}
+            {result && result.untrackedOutflows.count > 0 && (
+              <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
+                <AlertTriangle className="w-4 h-4 text-chart-4 mt-0.5 shrink-0" />
+                <div className="text-sm">
+                  <span className="font-medium text-chart-4">Sorties non suivies :</span>{" "}
+                  <span className="text-muted-foreground">
+                    {result.untrackedOutflows.count} envoi
+                    {result.untrackedOutflows.count > 1 ? "s" : ""} de jetons vers un compte que
+                    Hashory ne suit pas. Une cession réalisée là-bas n&apos;apparaît pas ici, et ces
+                    jetons sortent de la valeur globale du portefeuille : connectez ce compte pour un
+                    calcul complet.
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Threshold alert */}
             {report.isBelowThreshold && (
               <div className="flex items-start gap-3 border-l-2 border-chart-4 py-3 pl-4">
@@ -265,8 +315,12 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
                     Seuil non atteint :
                   </span>{" "}
                   <span className="text-muted-foreground">
-                    vos cessions totales ({usd.format(report.totalProceedsUsd)}) sont inférieures au
-                    seuil d&apos;exonération de 305 € — aucun impôt dû, mais vous devez quand même déclarer.
+                    vos cessions totales (
+                    {report.totalProceedsEur !== null
+                      ? eur.format(report.totalProceedsEur)
+                      : usd.format(report.totalProceedsUsd)}
+                    ) n&apos;excèdent pas le seuil d&apos;exonération de 305 € — aucun impôt dû, mais vous
+                    devez quand même déclarer.
                   </span>
                 </div>
               </div>
@@ -301,9 +355,9 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
                 sub={`${report.events.length} cession${report.events.length > 1 ? "s" : ""} taxable${report.events.length > 1 ? "s" : ""}`}
               />
               <SummaryCard
-                label="Prix de revient total"
-                value={usd.format(report.totalCostBasisUsd)}
-                sub="Méthode proportionnelle CGI"
+                label="Prix d'acquisition imputé"
+                value={eur.format(report.totalCostBasisEur)}
+                sub="Méthode proportionnelle, art. 150 VH bis"
               />
               <SummaryCard
                 label="Plus-value nette"
@@ -335,7 +389,7 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
                       : usd.format(report.estimatedTaxUsd)
                 }
                 sub={report.isBelowThreshold ? "Seuil 305 € non atteint" : "12,8% IR + 17,2% PS"}
-                variant={report.estimatedTaxUsd > 0 ? "warning" : "neutral"}
+                variant={(report.estimatedTaxEur ?? report.estimatedTaxUsd) > 0 ? "warning" : "neutral"}
               />
             </div>
 
@@ -378,14 +432,36 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
               <CardContent className="pt-0">
                 <div className="grid gap-2 text-sm">
                   {[
-                    { label: "Prix de cession total (case 3AN / 3BN)", value: usd.format(report.totalProceedsUsd) },
-                    { label: "Prix de revient total (case 3AO / 3BO)", value: usd.format(report.totalCostBasisUsd) },
                     {
-                      label: "Plus-value ou moins-value nette",
-                      value: (report.netGainLossUsd >= 0 ? "+" : "") + usd.format(report.netGainLossUsd),
+                      label: "Prix de cession, cumul des lignes 213 du 2086",
+                      value:
+                        report.totalProceedsEur !== null
+                          ? eur.format(report.totalProceedsEur)
+                          : usd.format(report.totalProceedsUsd),
+                    },
+                    { label: "Frais de cession, cumul des lignes 214", value: eur.format(report.totalFeesEur) },
+                    {
+                      label: "Prix d'acquisition imputé aux cessions",
+                      value: eur.format(report.totalCostBasisEur),
+                    },
+                    {
+                      label:
+                        (report.netGainLossEur ?? report.netGainLossUsd) >= 0
+                          ? "Plus-value nette — case 3AN de la 2042 C"
+                          : "Moins-value nette — case 3BN de la 2042 C",
+                      value:
+                        report.netGainLossEur !== null
+                          ? eur.format(Math.abs(report.netGainLossEur))
+                          : usd.format(Math.abs(report.netGainLossUsd)),
                       highlight: true,
                     },
-                    { label: "Impôt PFU estimé (30%)", value: usd.format(report.estimatedTaxUsd) },
+                    {
+                      label: "Impôt PFU estimé (30 %)",
+                      value:
+                        report.estimatedTaxEur !== null
+                          ? eur.format(report.estimatedTaxEur)
+                          : usd.format(report.estimatedTaxUsd),
+                    },
                   ].map(({ label, value, highlight }) => (
                     <div
                       key={label}
@@ -395,7 +471,7 @@ const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | und
                       )}
                     >
                       <span className={highlight ? "text-foreground" : "text-muted-foreground"}>{label}</span>
-                      <span className={cn("num", highlight && report.netGainLossUsd >= 0 ? "text-positive" : highlight ? "text-negative" : "")}>
+                      <span className={cn("num", highlight && (report.netGainLossEur ?? report.netGainLossUsd) >= 0 ? "text-positive" : highlight ? "text-negative" : "")}>
                         {value}
                       </span>
                     </div>

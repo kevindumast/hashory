@@ -293,7 +293,9 @@ export function DashboardNewLayout({
         timestamp: s.dayUtc,
         label: dayLabelFormatter.format(new Date(s.dayUtc)),
         valueUsd: s.valueUsd,
-        profitPercent: s.netInvestedUsd > 0 ? ((s.valueUsd - s.netInvestedUsd) / s.netInvestedUsd) * 100 : 0,
+        // Rendement pondéré par le temps : les apports ne comptent pas comme
+        // des gains, ce qui rend la comparaison au BTC honnête.
+        profitPercent: s.profitPercent,
         btcPercent: s.btcPercent,
         netInvestedUsd: s.netInvestedUsd,
       }));

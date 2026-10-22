@@ -3,17 +3,7 @@
 import React, { useMemo } from "react";
 import type { PortfolioSnapshot } from "@/hooks/usePortfolioSnapshots";
 import type { IntegrationRecord } from "@/hooks/dashboard/useIntegrations";
-import type { TradeRecord } from "@/hooks/dashboard/useDashboardMetrics";
-import {
-  buildDcaSnapshots,
-  buildTradeHistory,
-  compoundReturns,
-  computeMonthlyFromSnapshots,
-  computeMonthlyFromTrades,
-  computeQuarterlyReturns,
-  type EurPerUsdAt,
-  type PriceHistory,
-} from "@/lib/seasonality";
+import { compoundReturns, monthlyReturns, quarterlyReturns } from "@/lib/portfolio-history";
 
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const MONTHS_SHORT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
@@ -21,15 +11,12 @@ const QUARTERS = ["T1","T2","T3","T4"];
 const QUARTER_MONTHS = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
 
 type Props = {
+  /** Série du périmètre affiché : portefeuille entier ou compte choisi. */
   snapshots: PortfolioSnapshot[];
   integrations: IntegrationRecord[];
-  allTrades: TradeRecord[];
   selectedIntegration: string;
   onSelectIntegration: (id: string) => void;
-  isDcaOnly: boolean;
-  dcaPriceHistory: PriceHistory | null;
-  /** Change EUR/USD du jour : les achats payés en euros sont convertis. */
-  eurPerUsdAt: EurPerUsdAt;
+  isLoading: boolean;
 };
 
 // ─── Presentation ─────────────────────────────────────────────────────────────
@@ -122,50 +109,27 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function SeasonalReturnsView({ snapshots, integrations, allTrades, selectedIntegration, onSelectIntegration, isDcaOnly, dcaPriceHistory, eurPerUsdAt }: Props) {
-  const integrationsWithTrades = useMemo(() => {
-    const ids = new Set(allTrades.map((t) => String(t.integrationId)));
-    return integrations.filter((i) => ids.has(String(i._id)));
-  }, [integrations, allTrades]);
-
-  const monthlyReturns = useMemo(() => {
-    if (selectedIntegration === "all") {
-      return computeMonthlyFromSnapshots(snapshots);
-    }
-    if (isDcaOnly) {
-      if (!dcaPriceHistory) return new Map<number, (number | null)[]>();
-      const filtered = allTrades.filter((t) => String(t.integrationId) === selectedIntegration);
-      const dcaSnaps = buildDcaSnapshots(filtered, dcaPriceHistory, eurPerUsdAt);
-      return computeMonthlyFromSnapshots(dcaSnaps);
-    }
-    const filtered = allTrades.filter((t) => String(t.integrationId) === selectedIntegration);
-    return computeMonthlyFromTrades(buildTradeHistory(filtered, eurPerUsdAt));
-  }, [selectedIntegration, isDcaOnly, dcaPriceHistory, eurPerUsdAt, snapshots, allTrades]);
-
-  const quarterlyReturns = useMemo(() => computeQuarterlyReturns(monthlyReturns), [monthlyReturns]);
+export function SeasonalReturnsView({ snapshots, integrations, selectedIntegration, onSelectIntegration, isLoading }: Props) {
+  // Le calcul est fait côté serveur depuis le grand livre : la vue ne fait
+  // que lire l'indice de performance et le découper en mois.
+  const monthly = useMemo(
+    () => monthlyReturns(snapshots.map((s) => ({ dayUtc: s.dayUtc, twrIndex: 1 + s.profitPercent / 100 }))),
+    [snapshots]
+  );
+  const quarterly = useMemo(() => quarterlyReturns(monthly), [monthly]);
   const quarterColsFull = QUARTERS.map((q, qi) => `${q} (${QUARTER_MONTHS[qi].map((m) => MONTHS_SHORT[m]).join("-")})`);
-
-  const isEmpty = selectedIntegration === "all"
-    ? snapshots.length === 0
-    : allTrades.filter((t) => String(t.integrationId) === selectedIntegration).length === 0;
-
-  const isLoadingPrices = isDcaOnly && selectedIntegration !== "all" && dcaPriceHistory === null;
-
-  const footnote = selectedIntegration === "all" || isDcaOnly
-    ? "Performance mensuelle en valeur de marché, ajustée des flux de capitaux (méthode Dietz modifiée)."
-    : "Résultat réalisé mensuel en % du coût des positions en début de mois. Euros et stablecoins sont tenus au pair.";
 
   return (
     <div className="space-y-6">
       {/* Integration filter */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Portefeuille</span>
-        <div className="flex gap-1">
+        <div className="flex flex-wrap gap-1">
           <button onClick={() => onSelectIntegration("all")}
             className={`px-3 py-1 text-[11px] font-bold rounded transition-colors cursor-pointer ${selectedIntegration === "all" ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
             Tous
           </button>
-          {integrationsWithTrades.map((intg) => (
+          {integrations.map((intg) => (
             <button key={intg._id} onClick={() => onSelectIntegration(String(intg._id))}
               className={`px-3 py-1 text-[11px] font-bold rounded transition-colors cursor-pointer ${selectedIntegration === String(intg._id) ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
               {intg.displayName ?? intg.provider}
@@ -174,20 +138,24 @@ export function SeasonalReturnsView({ snapshots, integrations, allTrades, select
         </div>
       </div>
 
-      {isEmpty ? (
+      {isLoading ? (
+        <div className="flex h-64 items-center justify-center gap-2 text-muted-foreground text-sm">
+          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          Calcul de la performance…
+        </div>
+      ) : snapshots.length === 0 ? (
         <div className="flex h-64 items-center justify-center text-muted-foreground text-sm">
           Aucune donnée disponible. Synchronisez vos intégrations.
         </div>
-      ) : isLoadingPrices ? (
-        <div className="flex h-64 items-center justify-center gap-2 text-muted-foreground text-sm">
-          <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-          Chargement des prix historiques…
-        </div>
       ) : (
         <>
-          <ReturnsTable title="Retours mensuels (%)" data={monthlyReturns} cols={MONTHS_SHORT} colsFull={MONTHS} />
-          <ReturnsTable title="Rendements trimestriels (%)" data={quarterlyReturns} cols={QUARTERS} colsFull={quarterColsFull} />
-          <p className="text-[10px] text-muted-foreground/70 italic">{footnote}</p>
+          <ReturnsTable title="Retours mensuels (%)" data={monthly} cols={MONTHS_SHORT} colsFull={MONTHS} />
+          <ReturnsTable title="Rendements trimestriels (%)" data={quarterly} cols={QUARTERS} colsFull={quarterColsFull} />
+          <p className="text-[10px] text-muted-foreground/70 italic">
+            Rendement pondéré par le temps, en dollars : apports et retraits n&apos;entrent pas dans la
+            performance, seuls les cours et les frais la font varier. Euros et stablecoins détenus comptent
+            dans la valeur.
+          </p>
         </>
       )}
     </div>

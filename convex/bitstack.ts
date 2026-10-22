@@ -111,7 +111,9 @@ export const ingestCsv = mutation({
         integrationId,
         orderId,
         source: "fiat_orders",
-        txType: "1",
+        // « 0 » = dépôt, comme chez Binance. Les dépôts déjà importés sous
+        // « 1 » restent reconnus par `fiatMovementDirection`.
+        txType: "0",
         fiatCurrency: deposit.fiatCurrency,
         fiatAmount: deposit.fiatAmount,
         status: "SUCCESS",

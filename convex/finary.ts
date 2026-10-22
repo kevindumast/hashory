@@ -146,7 +146,12 @@ export const ingestCsv = mutation({
         coin: withdrawal.sentCurrency,
         amount: withdrawal.sentAmount,
         address: withdrawal.address,
-        fee: withdrawal.feeAmount ?? 0,
+        // La table des retraits ne porte pas de devise de frais : des frais
+        // en euros sur un retrait de BTC y deviendraient des BTC.
+        fee:
+          withdrawal.feeCurrency?.toUpperCase() === withdrawal.sentCurrency.toUpperCase()
+            ? withdrawal.feeAmount ?? 0
+            : 0,
         status: "SUCCESS",
         applyTime: withdrawal.executedAt,
         createdAt: now,
