@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { escapeCsvValue, portfolioSheet, serializeCsv, taxSheet, type Sheet } from "./export";
+import {
+  escapeCsvValue,
+  portfolioSheet,
+  serializeCsv,
+  taxSheet,
+  transactionsSheet,
+  type Sheet,
+} from "./export";
 
 describe("échappement CSV", () => {
   it("laisse intacte une valeur simple", () => {
@@ -27,6 +34,12 @@ describe("échappement CSV", () => {
   it("protège les retours à la ligne", () => {
     assert.equal(escapeCsvValue("ligne 1\nligne 2"), '"ligne 1\nligne 2"');
     assert.equal(escapeCsvValue("retour\r"), '"retour\r"');
+  });
+
+  it("n'écrit jamais un nombre en notation scientifique", () => {
+    // String(0.00000041) donne « 4.1e-7 », qu'un tableur ne lit pas.
+    assert.equal(escapeCsvValue(0.00000041), "0,00000041");
+    assert.equal(escapeCsvValue(1e21), "1000000000000000000000");
   });
 
   it("rend une cellule vide pour une valeur absente", () => {
@@ -116,10 +129,10 @@ describe("feuille du portefeuille", () => {
     quantity: 4,
     avgCostBasis: 2_000,
     currentPrice: 3_000,
-    valueUsd: 12_000,
-    costUsd: 8_000,
-    realizedPnlUsd: 500,
-    unrealizedPnlUsd: 4_000,
+    value: 12_000,
+    cost: 8_000,
+    realizedPnl: 500,
+    unrealizedPnl: 4_000,
     weight: 0.42,
     sources: "Binance · Wallet ETH",
   };
@@ -138,7 +151,7 @@ describe("feuille du portefeuille", () => {
 
   it("laisse l'écart vide sans cours ni prix de revient", () => {
     const sheet = portfolioSheet(
-      [{ ...position, currentPrice: null, valueUsd: null, unrealizedPnlUsd: null }],
+      [{ ...position, currentPrice: null, value: null, unrealizedPnl: null }],
       Date.UTC(2025, 8, 5)
     );
     assert.equal(sheet.rows[0][sheet.columns.indexOf("Écart au prix de revient (%)")], null);
@@ -148,6 +161,57 @@ describe("feuille du portefeuille", () => {
     assert.equal(
       portfolioSheet([], Date.UTC(2025, 8, 5)).filename,
       "hashory-portefeuille-2025-09-05.csv"
+    );
+  });
+});
+
+describe("feuille du portefeuille en euros", () => {
+  it("indique la devise dans les en-têtes", () => {
+    const sheet = portfolioSheet([], Date.UTC(2025, 8, 5), "EUR");
+    assert.ok(sheet.columns.includes("Capital investi (EUR)"));
+    assert.ok(!sheet.columns.some((column) => column.includes("USD")));
+  });
+
+  it("reste en dollars par défaut", () => {
+    assert.ok(portfolioSheet([], Date.UTC(2025, 8, 5)).columns.includes("Valeur actuelle (USD)"));
+  });
+});
+
+describe("feuille des transactions", () => {
+  const row = {
+    date: "01/10/2025",
+    time: "14:02",
+    label: "Échange",
+    outQuantity: 1500.5,
+    outCurrency: "USDC",
+    outAccount: "Binance",
+    inQuantity: 0.00000041,
+    inCurrency: "BTC",
+    inAccount: "Binance",
+    price: 114_000,
+    fee: 0.75,
+    feeAsset: "USDC",
+    amountUsd: 1500.456,
+    amountEur: 1290.004,
+    externalId: "8812;77",
+    txId: null,
+    id: "k57abc",
+  };
+
+  it("produit un CSV séparé par des points-virgules", () => {
+    const csv = serializeCsv(transactionsSheet([row], Date.UTC(2025, 9, 1)));
+    const [header, line] = csv.split("\r\n");
+    assert.equal(header.split(";").length, 17);
+    assert.equal(
+      line,
+      '01/10/2025;14:02;Échange;-1500,5;USDC;Binance;0,00000041;BTC;Binance;114000;0,75;USDC;1500,46;1290;"8812;77";;k57abc'
+    );
+  });
+
+  it("nomme le fichier par date", () => {
+    assert.equal(
+      transactionsSheet([], Date.UTC(2025, 9, 1)).filename,
+      "hashory-transactions-2025-10-01.csv"
     );
   });
 });

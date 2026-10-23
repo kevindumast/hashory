@@ -21,6 +21,7 @@ import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
 import { TokenPlatformBreakdown } from "@/components/dashboard/token-platform-breakdown";
 import { PortfolioStatement } from "@/components/dashboard/portfolio-statement";
+import { CurrencyToggle } from "@/components/dashboard/currency-toggle";
 import { PROVIDER_ICONS } from "@/lib/provider-icons";
 import { usePlatformValueHistory } from "@/hooks/dashboard/usePlatformValueHistory";
 import { useFxRates } from "@/hooks/useFxRates";
@@ -427,6 +428,9 @@ export function DashboardNewLayout({
         realizedPnlUsd={totalRealizedPnl}
         totalProfitUsd={totalProfit}
         profitPercent={profitPercent}
+        currency={displayCurrency}
+        onCurrencyChange={setDisplayCurrency}
+        eurPerUsd={fxRateAt(Date.now())?.eurPerUsd ?? null}
       />
 
 
@@ -882,28 +886,7 @@ export function DashboardNewLayout({
           </div>
           <div className="flex items-center gap-3">
             {pricesError && <span className="text-[10px] text-negative">{pricesError}</span>}
-            <div className="flex border border-border/60" role="group" aria-label="Devise d'affichage">
-              {(["USD", "EUR"] as const).map((currency) => (
-                <button
-                  key={currency}
-                  type="button"
-                  onClick={() => setDisplayCurrency(currency)}
-                  aria-pressed={displayCurrency === currency}
-                  title={
-                    currency === "EUR"
-                      ? "Converti au taux du jour publié par la BCE"
-                      : "Devise de référence des calculs"
-                  }
-                  className={`num cursor-pointer px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] transition-colors ${
-                    displayCurrency === currency
-                      ? "bg-muted/40 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
-                  }`}
-                >
-                  {currency}
-                </button>
-              ))}
-            </div>
+            <CurrencyToggle value={displayCurrency} onChange={setDisplayCurrency} />
             <button
               onClick={refreshPrices}
               disabled={pricesLoading}
