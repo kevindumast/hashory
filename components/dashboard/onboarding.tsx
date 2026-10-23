@@ -21,6 +21,7 @@ const QUICK_PROVIDERS = [
 ];
 
 const TAX_VISITED_KEY = "hashory:onboarding:tax-seen";
+const CHECKLIST_DISMISSED_KEY = "hashory:onboarding:checklist-dismissed";
 
 /** Étapes d'activation, déduites des données réelles du compte. */
 export function useOnboardingSteps() {
@@ -178,14 +179,34 @@ export function OnboardingHero() {
 
 /**
  * Checklist de progression affichée tant que l'activation n'est pas terminée.
- * Elle disparaît d'elle-même une fois les quatre étapes franchies.
+ * Elle disparaît d'elle-même une fois les quatre étapes franchies, ou pour
+ * de bon quand l'utilisateur la masque : le choix est retenu sur l'appareil.
  */
 export function OnboardingChecklist({ className }: { className?: string }) {
   const { steps, completed, total, isComplete } = useOnboardingSteps();
   const { openDialog } = useProviderDialog();
-  const [dismissed, setDismissed] = useState(false);
+  // null tant que le choix enregistré n'est pas lu : on n'affiche rien plutôt
+  // que de faire clignoter une checklist déjà masquée.
+  const [dismissed, setDismissed] = useState<boolean | null>(null);
 
-  if (isComplete || dismissed) return null;
+  useEffect(() => {
+    try {
+      setDismissed(window.localStorage.getItem(CHECKLIST_DISMISSED_KEY) === "true");
+    } catch {
+      setDismissed(false);
+    }
+  }, []);
+
+  const dismiss = () => {
+    setDismissed(true);
+    try {
+      window.localStorage.setItem(CHECKLIST_DISMISSED_KEY, "true");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (isComplete || dismissed !== false) return null;
 
   return (
     <section
@@ -202,10 +223,11 @@ export function OnboardingChecklist({ className }: { className?: string }) {
         </p>
         <button
           type="button"
-          onClick={() => setDismissed(true)}
+          onClick={dismiss}
+          title="Ne plus afficher"
           className="num cursor-pointer text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60 transition-colors hover:text-foreground"
         >
-          Masquer
+          Ne plus afficher
         </button>
       </div>
 
