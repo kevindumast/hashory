@@ -3,7 +3,8 @@
 import * as React from "react"
 import Image from "next/image"
 import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, LoaderCircle, ArrowUpDown, Search, X } from "lucide-react"
-import * as XLSX from "xlsx"
+import { transactionsSheet } from "@/lib/export"
+import { downloadCsv } from "@/lib/download"
 import { cn } from "@/lib/utils"
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap"
 import { Button } from "@/components/ui/button"
@@ -325,55 +326,29 @@ export function TransactionsView({
     // l'écran : « 0,0004 BTC » cachait 0,00040509 BTC, et un tableur doit
     // pouvoir faire ses propres sommes. Les identifiants permettent de
     // retrouver chaque ligne dans l'historique de la plateforme.
-    const exportData = sortedTransactions.map((tx) => ({
-      'Date': tx.date,
-      'Heure': tx.time,
-      'Type de transaction': tx.label,
-      'Quantité sortie': tx.out ? -tx.out.quantity : '',
-      'Devise sortie': tx.out?.currency ?? '',
-      'Plateforme sortie': tx.out?.account || '',
-      'Quantité entrée': tx.in ? tx.in.quantity : '',
-      'Devise entrée': tx.in?.currency ?? '',
-      'Plateforme entrée': tx.in?.account || '',
-      'Prix unitaire': tx.price != null ? tx.price : '',
-      'Frais': tx.fee != null ? tx.fee : '',
-      'Devise des frais': tx.feeAsset || '',
-      'Montant USD': tx.amountDisplay === '-' ? '' : Number(tx.amount.toFixed(2)),
-      'Montant EUR': tx.amountEur != null ? Number(tx.amountEur.toFixed(2)) : '',
-      'N° de transaction (plateforme)': tx.externalId ?? '',
-      'Hash on-chain': tx.txId ?? '',
-      'ID Hashory': tx.id,
+    const rows = sortedTransactions.map((tx) => ({
+      date: tx.date,
+      time: tx.time,
+      label: tx.label,
+      outQuantity: tx.out ? tx.out.quantity : null,
+      outCurrency: tx.out?.currency ?? null,
+      outAccount: tx.out?.account || null,
+      inQuantity: tx.in ? tx.in.quantity : null,
+      inCurrency: tx.in?.currency ?? null,
+      inAccount: tx.in?.account || null,
+      price: tx.price ?? null,
+      fee: tx.fee ?? null,
+      feeAsset: tx.feeAsset || null,
+      amountUsd: tx.amountDisplay === '-' ? null : tx.amount,
+      amountEur: tx.amountEur ?? null,
+      externalId: tx.externalId ?? null,
+      txId: tx.txId ?? null,
+      id: tx.id,
     }));
 
-    // Créer un workbook et une feuille
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
-
-    // Ajuster la largeur des colonnes
-    ws['!cols'] = [
-      { wch: 12 }, // Date
-      { wch: 8 }, // Heure
-      { wch: 16 }, // Type
-      { wch: 16 }, // Quantité sortie
-      { wch: 8 }, // Devise sortie
-      { wch: 16 }, // Plateforme sortie
-      { wch: 16 }, // Quantité entrée
-      { wch: 8 }, // Devise entrée
-      { wch: 16 }, // Plateforme entrée
-      { wch: 14 }, // Prix unitaire
-      { wch: 10 }, // Frais
-      { wch: 8 }, // Devise des frais
-      { wch: 12 }, // Montant USD
-      { wch: 12 }, // Montant EUR
-      { wch: 40 }, // N° plateforme
-      { wch: 40 }, // Hash
-      { wch: 34 }, // ID Hashory
-    ];
-
-    // Générer le fichier
-    const filename = `transactions_${new Date().toISOString().split('T')[0]}.xlsx`;
-    XLSX.writeFile(wb, filename);
+    // CSV au format des tableurs français (« ; », virgule décimale), comme
+    // les autres exports.
+    downloadCsv(transactionsSheet(rows, Date.now()));
   };
 
   return (

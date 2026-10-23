@@ -33,8 +33,15 @@ export function escapeCsvValue(value: CellValue, separator = SEPARATOR): string 
   if (value === null || value === undefined) return "";
 
   // Les nombres passent en notation française : la virgule décimale est ce
-  // qu'attend un tableur configuré en France.
-  const raw = typeof value === "number" ? String(value).replace(".", ",") : String(value);
+  // qu'attend un tableur configuré en France. Jamais de notation
+  // scientifique : 0,00000041 BTC s'écrirait « 4.1e-7 », illisible pour un
+  // tableur.
+  const raw =
+    typeof value === "number"
+      ? value
+          .toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 20 })
+          .replace(".", ",")
+      : String(value);
 
   const needsQuoting =
     raw.includes(separator) || raw.includes('"') || raw.includes("\n") || raw.includes("\r");
@@ -120,28 +127,35 @@ export type PortfolioSheetPosition = {
   quantity: number;
   avgCostBasis: number;
   currentPrice: number | null;
-  valueUsd: number | null;
-  costUsd: number;
-  realizedPnlUsd: number;
-  unrealizedPnlUsd: number | null;
+  value: number | null;
+  cost: number;
+  realizedPnl: number;
+  unrealizedPnl: number | null;
   weight: number;
   sources: string;
 };
 
-/** État du portefeuille, position par position. */
-export function portfolioSheet(positions: PortfolioSheetPosition[], asOf: number): Sheet {
+/**
+ * État du portefeuille, position par position, dans la devise affichée :
+ * les montants sont fournis déjà exprimés dans `currency`.
+ */
+export function portfolioSheet(
+  positions: PortfolioSheetPosition[],
+  asOf: number,
+  currency: "USD" | "EUR" = "USD"
+): Sheet {
   return {
     filename: `hashory-portefeuille-${isoDate(asOf)}.csv`,
     columns: [
       "Actif",
       "Quantité",
-      "Prix de revient unitaire (USD)",
-      "Cours actuel (USD)",
+      `Prix de revient unitaire (${currency})`,
+      `Cours actuel (${currency})`,
       "Écart au prix de revient (%)",
-      "Capital investi (USD)",
-      "Valeur actuelle (USD)",
-      "Plus-value latente (USD)",
-      "Résultat réalisé (USD)",
+      `Capital investi (${currency})`,
+      `Valeur actuelle (${currency})`,
+      `Plus-value latente (${currency})`,
+      `Résultat réalisé (${currency})`,
       "Poids (%)",
       "Sources",
     ],
@@ -153,12 +167,81 @@ export function portfolioSheet(positions: PortfolioSheetPosition[], asOf: number
       position.currentPrice !== null && position.avgCostBasis > 0
         ? Math.round((position.currentPrice / position.avgCostBasis - 1) * 1000) / 10
         : null,
-      money(position.costUsd),
-      money(position.valueUsd),
-      money(position.unrealizedPnlUsd),
-      money(position.realizedPnlUsd),
+      money(position.cost),
+      money(position.value),
+      money(position.unrealizedPnl),
+      money(position.realizedPnl),
       Math.round(position.weight * 1000) / 10,
       position.sources,
+    ]),
+  };
+}
+
+export type TransactionSheetRow = {
+  date: string;
+  time: string;
+  label: string;
+  outQuantity: number | null;
+  outCurrency: string | null;
+  outAccount: string | null;
+  inQuantity: number | null;
+  inCurrency: string | null;
+  inAccount: string | null;
+  price: number | null;
+  fee: number | null;
+  feeAsset: string | null;
+  amountUsd: number | null;
+  amountEur: number | null;
+  externalId: string | null;
+  txId: string | null;
+  id: string;
+};
+
+/**
+ * Historique des transactions. Quantités exactes, et non les libellés
+ * arrondis de l'écran : un tableur doit pouvoir refaire ses propres sommes.
+ * Les identifiants permettent de retrouver chaque ligne sur la plateforme.
+ */
+export function transactionsSheet(rows: TransactionSheetRow[], asOf: number): Sheet {
+  return {
+    filename: `hashory-transactions-${isoDate(asOf)}.csv`,
+    columns: [
+      "Date",
+      "Heure",
+      "Type de transaction",
+      "Quantité sortie",
+      "Devise sortie",
+      "Plateforme sortie",
+      "Quantité entrée",
+      "Devise entrée",
+      "Plateforme entrée",
+      "Prix unitaire",
+      "Frais",
+      "Devise des frais",
+      "Montant USD",
+      "Montant EUR",
+      "N° de transaction (plateforme)",
+      "Hash on-chain",
+      "ID Hashory",
+    ],
+    rows: rows.map((row) => [
+      row.date,
+      row.time,
+      row.label,
+      row.outQuantity === null ? null : -row.outQuantity,
+      row.outCurrency,
+      row.outAccount,
+      row.inQuantity,
+      row.inCurrency,
+      row.inAccount,
+      row.price,
+      row.fee,
+      row.feeAsset,
+      money(row.amountUsd),
+      money(row.amountEur),
+      row.externalId,
+      row.txId,
+      row.id,
     ]),
   };
 }

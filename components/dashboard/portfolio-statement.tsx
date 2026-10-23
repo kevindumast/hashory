@@ -11,13 +11,23 @@ import { downloadCsv } from "@/lib/download";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
+import { CurrencyToggle, type DisplayCurrency } from "@/components/dashboard/currency-toggle";
 import { cn } from "@/lib/utils";
 
-const usd = new Intl.NumberFormat("fr-FR", {
-  style: "currency",
-  currency: "USD",
-  maximumFractionDigits: 0,
-});
+const formatters: Record<DisplayCurrency, Intl.NumberFormat> = {
+  USD: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
+  EUR: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }),
+};
+
+/** Somme d'un montant tenu en euros par le grand livre ; null si une ligne en manque. */
+function sumEur(values: (number | null)[]): number | null {
+  let total = 0;
+  for (const value of values) {
+    if (value === null) return null;
+    total += value;
+  }
+  return total;
+}
 
 const percent = (value: number) =>
   `${value >= 0 ? "+" : ""}${value.toLocaleString("fr-FR", {
@@ -38,6 +48,10 @@ type PortfolioStatementProps = {
   realizedPnlUsd: number;
   totalProfitUsd: number;
   profitPercent: number;
+  currency: DisplayCurrency;
+  onCurrencyChange: (currency: DisplayCurrency) => void;
+  /** Taux du jour ; null tant qu'il n'est pas chargé. */
+  eurPerUsd: number | null;
 };
 
 function Figure({
@@ -80,6 +94,13 @@ function Figure({
  * de l'argent disponible : en France, la liquider déclenche une imposition
  * assise sur le portefeuille entier. Afficher la valeur brute sans son coût
  * fiscal donne une image fausse de ce dont on dispose.
+ *
+ * En euros, le capital investi et le résultat réalisé sont les montants
+ * historiques du grand livre — les euros réellement payés et encaissés —,
+ * et non leur contre-valeur en dollars reconvertie au change du jour. Seule
+ * la valeur actuelle passe par le taux du jour. L'impôt est calculé sur le
+ * prix d'acquisition fiscal en euros : c'est celui que retient l'article
+ * 150 VH bis.
  */
 export function PortfolioStatement({
   tokens,
@@ -91,8 +112,16 @@ export function PortfolioStatement({
   realizedPnlUsd,
   totalProfitUsd,
   profitPercent,
+  currency: requestedCurrency,
+  onCurrencyChange,
+  eurPerUsd,
 }: PortfolioStatementProps) {
   const report = useQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
+
+  // Sans taux du jour, on reste en dollars plutôt que d'afficher un faux montant.
+  const currency: DisplayCurrency = requestedCurrency === "EUR" && eurPerUsd ? "EUR" : "USD";
+  const rate = currency === "EUR" ? eurPerUsd! : 1;
+  const fmt = formatters[currency];
 
   const stablecoinValueUsd = useMemo(
     () =>
@@ -104,13 +133,48 @@ export function PortfolioStatement({
 
   // Le prix d'acquisition fiscal vient du rapport, seule source qui tienne
   // compte des réintégrations opérées lors des cessions passées.
+  // Chiffres du relevé dans la devise affichée.
+  const figures = useMemo(() => {
+    const held = tokens.filter((token) => token.currentQuantity > 0);
+    const costEur =
+      currency === "EUR"
+        ? sumEur(held.map((t) => (t.avgCostBasisEur === null ? null : t.avgCostBasisEur * t.currentQuantity)))
+        : null;
+    const realizedEur = currency === "EUR" ? sumEur(tokens.map((t) => t.realizedPnlEur)) : null;
+
+    const value = totalValueUsd * rate;
+    const cost = costEur ?? costBasisUsd * rate;
+    const realized = realizedEur ?? realizedPnlUsd * rate;
+    if (currency === "USD") {
+      return {
+        value,
+        cost,
+        realized,
+        unrealized: unrealizedPnlUsd,
+        total: totalProfitUsd,
+        percent: profitPercent,
+      };
+    }
+    const unrealized = hasPrices ? value - cost : null;
+    const total = hasPrices ? value - cost + realized : totalProfitUsd * rate;
+    return {
+      value,
+      cost,
+      realized,
+      unrealized,
+      total,
+      percent: cost > 0 ? (total / cost) * 100 : profitPercent,
+    };
+  }, [tokens, currency, rate, totalValueUsd, costBasisUsd, realizedPnlUsd, unrealizedPnlUsd, totalProfitUsd, profitPercent, hasPrices]);
+
   const liquidation = useMemo(() => {
-    if (!hasPrices || totalValueUsd <= 0 || report === undefined) return null;
-    return taxOnSale(totalValueUsd, {
-      portfolioValue: totalValueUsd,
-      totalAcquisitionCost: report.currentAcquisitionCost,
+    if (!hasPrices || figures.value <= 0 || report === undefined) return null;
+    return taxOnSale(figures.value, {
+      portfolioValue: figures.value,
+      totalAcquisitionCost:
+        currency === "EUR" ? report.currentAcquisitionCostEur : report.currentAcquisitionCost,
     });
-  }, [hasPrices, totalValueUsd, report]);
+  }, [hasPrices, figures.value, report, currency]);
 
   const stablecoinShare = totalValueUsd > 0 ? stablecoinValueUsd / totalValueUsd : 0;
 
@@ -118,28 +182,39 @@ export function PortfolioStatement({
     const positions = tokens
       .filter((token) => token.currentQuantity > 0)
       .map((token) => {
-        const price = currentPrices[token.symbol] ?? null;
+        const priceUsd = currentPrices[token.symbol] ?? null;
+        const price = priceUsd === null ? null : priceUsd * rate;
         const value = price !== null ? token.currentQuantity * price : null;
-        const cost = token.currentQuantity * token.avgCostBasis;
+        // En euros, le coût et le réalisé historiques du grand livre ; à défaut,
+        // la contre-valeur au taux du jour.
+        const avgCostBasis =
+          currency === "EUR" && token.avgCostBasisEur !== null
+            ? token.avgCostBasisEur
+            : token.avgCostBasis * rate;
+        const realizedPnl =
+          currency === "EUR" && token.realizedPnlEur !== null
+            ? token.realizedPnlEur
+            : token.realizedPnlAvco * rate;
+        const cost = token.currentQuantity * avgCostBasis;
         return {
           symbol: token.symbol,
           quantity: token.currentQuantity,
-          avgCostBasis: token.avgCostBasis,
+          avgCostBasis,
           currentPrice: price,
-          valueUsd: value,
-          costUsd: cost,
-          realizedPnlUsd: token.realizedPnlAvco,
-          unrealizedPnlUsd: value === null ? null : value - cost,
-          weight: totalValueUsd > 0 && value !== null ? value / totalValueUsd : 0,
+          value,
+          cost,
+          realizedPnl,
+          unrealizedPnl: value === null ? null : value - cost,
+          weight: priceUsd !== null && totalValueUsd > 0 ? (token.currentQuantity * priceUsd) / totalValueUsd : 0,
           // Le détail par source est déjà réconcilié : on l'emporte tel quel.
           sources: token.quantityBySource
             .map((source) => source.providerDisplayName)
             .join(" · "),
         };
       })
-      .sort((a, b) => (b.valueUsd ?? 0) - (a.valueUsd ?? 0));
+      .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
 
-    downloadCsv(portfolioSheet(positions, Date.now()));
+    downloadCsv(portfolioSheet(positions, Date.now(), currency));
   };
 
   return (
@@ -152,33 +227,36 @@ export function PortfolioStatement({
               Valeur du portefeuille
             </p>
             <p className="num mt-3 text-5xl font-normal tracking-tight text-foreground">
-              {hasPrices ? usd.format(totalValueUsd) : "—"}
+              {hasPrices ? fmt.format(figures.value) : "—"}
             </p>
           </div>
 
           <div className="text-right">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExport}
-              disabled={tokens.length === 0}
-              className="num mb-2 h-7 cursor-pointer px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
-            >
-              <Download className="mr-1.5 size-3" />
-              Exporter
-            </Button>
+            <div className="mb-2 flex items-center justify-end gap-2">
+              <CurrencyToggle value={currency} onChange={onCurrencyChange} />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleExport}
+                disabled={tokens.length === 0}
+                className="num h-7 cursor-pointer px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+              >
+                <Download className="mr-1.5 size-3" />
+                Exporter
+              </Button>
+            </div>
             <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
               Résultat total
             </p>
             <p
               className={cn(
                 "num mt-3 text-2xl font-normal",
-                totalProfitUsd >= 0 ? "text-positive" : "text-negative"
+                figures.total >= 0 ? "text-positive" : "text-negative"
               )}
             >
-              {totalProfitUsd >= 0 ? "+" : ""}
-              {usd.format(totalProfitUsd)}
-              <span className="ml-3 text-base">{percent(profitPercent)}</span>
+              {figures.total >= 0 ? "+" : ""}
+              {fmt.format(figures.total)}
+              <span className="ml-3 text-base">{percent(figures.percent)}</span>
             </p>
           </div>
         </div>
@@ -189,30 +267,30 @@ export function PortfolioStatement({
         <div className="grid border-b border-border/60 sm:grid-cols-2 lg:grid-cols-4">
           <Figure
             label="Capital investi"
-            value={usd.format(costBasisUsd)}
+            value={fmt.format(figures.cost)}
             hint="Prix de revient des positions détenues"
           />
           <Figure
             label="Plus-value latente"
             value={
-              unrealizedPnlUsd === null
+              figures.unrealized === null
                 ? "—"
-                : `${unrealizedPnlUsd >= 0 ? "+" : ""}${usd.format(unrealizedPnlUsd)}`
+                : `${figures.unrealized >= 0 ? "+" : ""}${fmt.format(figures.unrealized)}`
             }
             hint="Non réalisée : sensible au marché"
             tone={
-              unrealizedPnlUsd === null ? "muted" : unrealizedPnlUsd >= 0 ? "positive" : "negative"
+              figures.unrealized === null ? "muted" : figures.unrealized >= 0 ? "positive" : "negative"
             }
           />
           <Figure
             label="Résultat réalisé"
-            value={`${realizedPnlUsd >= 0 ? "+" : ""}${usd.format(realizedPnlUsd)}`}
+            value={`${figures.realized >= 0 ? "+" : ""}${fmt.format(figures.realized)}`}
             hint="Déjà encaissé, définitivement acquis"
-            tone={realizedPnlUsd >= 0 ? "positive" : "negative"}
+            tone={figures.realized >= 0 ? "positive" : "negative"}
           />
           <Figure
             label="Réserve mobilisable"
-            value={usd.format(stablecoinValueUsd)}
+            value={fmt.format(stablecoinValueUsd * rate)}
             hint={`${(stablecoinShare * 100).toFixed(1)} % du portefeuille, sans vendre`}
             tone="muted"
           />
@@ -229,14 +307,14 @@ export function PortfolioStatement({
 
             <div className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-2">
               <span className="num text-lg text-muted-foreground">
-                {usd.format(liquidation.proceeds)}
+                {fmt.format(liquidation.proceeds)}
               </span>
               <span className="num text-xs text-muted-foreground/60">moins</span>
-              <span className="num text-lg text-negative">{usd.format(liquidation.tax)}</span>
+              <span className="num text-lg text-negative">{fmt.format(liquidation.tax)}</span>
               <span className="num text-xs text-muted-foreground/60">d&apos;impôt</span>
               <span className="num text-xs text-muted-foreground/60">soit</span>
               <span className="num text-3xl font-normal text-foreground">
-                {usd.format(liquidation.net)}
+                {fmt.format(liquidation.net)}
               </span>
               <span className="num text-xs text-muted-foreground/60">en poche</span>
             </div>
