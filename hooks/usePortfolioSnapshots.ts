@@ -21,6 +21,34 @@ export type PortfolioSnapshot = {
 const DAY_MS = 86_400_000;
 
 /**
+ * Lance le recalcul du portefeuille (séries et rapport fiscal) à
+ * l'affichage, au plus une fois par minute. L'action s'arrête aussitôt si
+ * rien n'a changé depuis le dernier calcul : l'appeler souvent ne coûte rien.
+ */
+export function useRecomputeTrigger(ready: boolean, deps: unknown): boolean {
+  const { user } = useUser();
+  const clerkId = user?.id ?? null;
+  const recompute = useAction(api.portfolioSnapshots.recomputeForUser);
+  const [isComputing, setIsComputing] = useState(false);
+  const lastTriggerRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!clerkId || !isConvexConfigured || !ready) return;
+
+    const now = Date.now();
+    if (now - lastTriggerRef.current < 60_000) return;
+    lastTriggerRef.current = now;
+
+    setIsComputing(true);
+    recompute({})
+      .catch((err) => console.error("[snapshots] recompute failed", err))
+      .finally(() => setIsComputing(false));
+  }, [clerkId, ready, deps, recompute]);
+
+  return isComputing;
+}
+
+/**
  * Série quotidienne d'un périmètre — le portefeuille entier par défaut, ou
  * un compte — et recalcul quand elle manque ou date. L'action Convex
  * s'arrête aussitôt si rien n'a changé depuis le dernier calcul.
@@ -43,25 +71,7 @@ export function usePortfolioSnapshots(scope?: string): {
     isConvexConfigured && isLoaded && clerkId ? {} : "skip"
   );
 
-  const recompute = useAction(api.portfolioSnapshots.recomputeForUser);
-  const [isComputing, setIsComputing] = useState(false);
-  const lastTriggerRef = useRef<number>(0);
-
-  useEffect(() => {
-    if (!clerkId || !isConvexConfigured) return;
-    if (state === undefined) return; // still loading
-
-    // Throttle to one call per minute — the action itself short-circuits cheaply
-    // if `lastTradeAt` and `lastComputedDay` haven't moved, so over-calling is fine.
-    const now = Date.now();
-    if (now - lastTriggerRef.current < 60_000) return;
-    lastTriggerRef.current = now;
-
-    setIsComputing(true);
-    recompute({})
-      .catch((err) => console.error("[snapshots] recompute failed", err))
-      .finally(() => setIsComputing(false));
-  }, [clerkId, state, recompute]);
+  const isComputing = useRecomputeTrigger(state !== undefined, state);
 
   const list = useMemo<PortfolioSnapshot[]>(() => {
     if (!Array.isArray(snapshots)) return [];

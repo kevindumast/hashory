@@ -315,6 +315,16 @@ export default defineSchema({
      */
     account: v.optional(v.string()),
   }).index("by_user", ["clerkId"]),
+  /**
+   * Rapport fiscal enregistré par le recalcul du portefeuille (JSON de
+   * `TaxReportResult`) : la requête lit ce document au lieu de tout
+   * l'historique.
+   */
+  taxReports: defineTable({
+    clerkId: v.string(),
+    report: v.string(),
+    computedAt: v.number(),
+  }).index("by_user", ["clerkId"]),
   portfolioSnapshotState: defineTable({
     clerkId: v.string(),
     earliestEventDay: v.optional(v.number()),
