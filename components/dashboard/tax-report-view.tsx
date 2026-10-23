@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
 import { taxSheet } from "@/lib/export";
 import { downloadCsv } from "@/lib/download";
+import { useRecomputeTrigger } from "@/hooks/usePortfolioSnapshots";
 
 const usd = new Intl.NumberFormat("fr-FR", {
   style: "currency",
@@ -143,6 +144,9 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 
 export function TaxReportView() {
   const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
+  // Le rapport est enregistré par le recalcul : on le relance à l'ouverture,
+  // pour qu'une synchronisation récente soit prise en compte.
+  useRecomputeTrigger(true, null);
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 

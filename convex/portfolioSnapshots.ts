@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { optionalUserId, requireUserId } from "./auth";
 import { buildLedger, type LedgerInput } from "../lib/ledger";
+import { buildTaxReport, findInSeries } from "./taxReport";
 import { buildPortfolioHistory } from "../lib/portfolio-history";
 import {
   assetsToPrice,
@@ -23,8 +24,9 @@ import {
  * 4 — écriture sans doublon quand deux recalculs se chevauchent.
  * 5 — soldes par compte pour le dashboard.
  * 6 — positions par compte, en dollars et en euros historiques.
+ * 7 — rapport fiscal enregistré avec les séries.
  */
-const ENGINE_VERSION = 6;
+const ENGINE_VERSION = 7;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";
@@ -323,6 +325,32 @@ export const recomputeForUser = action({
     const book = createPriceBook({ prices, fx, implied: impliedPrices(operations, fx) });
     const eurBook = inEuros(book);
 
+    // Déclaration fiscale, calculée ici une fois et enregistrée : les écrans
+    // la lisent en un document. Les actifs que la chaîne demande sont ceux
+    // déjà chargés ; un actif manquant est lu à la demande.
+    const report = await buildTaxReport(operations, fx, async (asset, day) => {
+      if (!(asset in prices)) {
+        prices[asset] = await ctx.runQuery(internal.ledgerData.loadPriceSeriesInternal, {
+          symbol: asset,
+          fromDay,
+          toDay: todayUtc,
+        });
+      }
+      return findInSeries(prices, asset, day);
+    });
+    await ctx.runMutation(internal.taxReport.storeTaxReport, { clerkId, report: JSON.stringify(report) });
+
+    // Rien de neuf depuis le dernier calcul, sinon la date : l'historique
+    // passé est inchangé, seuls les derniers jours sont à réécrire. Relire
+    // et comparer chaque jour de chaque compte coûtait des dizaines de
+    // milliers de lectures par jour et par utilisateur.
+    const onlyNewDays =
+      !force &&
+      state?.engineVersion === ENGINE_VERSION &&
+      state.fingerprint === fingerprint &&
+      state.lastComputedDay !== undefined;
+    const rewriteFrom = onlyNewDays ? state!.lastComputedDay! - 86_400_000 : Number.NEGATIVE_INFINITY;
+
     const btcStart = book.usd("BTC", fromDay);
 
     const prune = async (scope: string | undefined, from: number, to: number) => {
@@ -365,12 +393,13 @@ export const recomputeForUser = action({
         };
       });
 
+      const toWrite = rows.filter((row) => row.dayUtc >= rewriteFrom);
       const CHUNK = 400;
-      for (let i = 0; i < rows.length; i += CHUNK) {
+      for (let i = 0; i < toWrite.length; i += CHUNK) {
         await ctx.runMutation(internal.portfolioSnapshots.insertSnapshots, {
           clerkId,
           scope: account ?? ALL_SCOPE,
-          snapshots: rows.slice(i, i + CHUNK),
+          snapshots: toWrite.slice(i, i + CHUNK),
         });
       }
       await prune(account ?? ALL_SCOPE, rows[0].dayUtc, rows[rows.length - 1].dayUtc);
