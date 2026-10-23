@@ -16,6 +16,18 @@ import {
 } from "@/components/ui/dialog"
 import { type TransactionEntry, numberFormatter, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 
+const quantityLarge = new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 4 });
+const quantitySmall = new Intl.NumberFormat("fr-FR", { maximumSignificantDigits: 6 });
+
+/**
+ * Quantité lisible sans perte : au-delà de 1, quatre décimales suffisent ;
+ * en deçà, six chiffres significatifs — sinon 0,00040509 BTC s'affichait
+ * « 0,0004 », et toutes les petites lignes se ressemblaient.
+ */
+function formatQuantity(value: number): string {
+  return Math.abs(value) >= 1 ? quantityLarge.format(value) : quantitySmall.format(value);
+}
+
 /**
  * Numéro de transaction tel que la plateforme l'affiche : l'import préfixe
  * ses identifiants par la source (« bitstack:… », « convert:… ») pour les
@@ -158,21 +170,21 @@ export function TransactionsView({
 
         if (tx.side === 'BUY') {
             // Achat: Sortie Quote -> Entrée Base
-            outTx = { amount: numberFormatter.format(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
-            inTx = { amount: numberFormatter.format(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+            outTx = { amount: formatQuantity(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: formatQuantity(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
         } else {
             // Vente: Sortie Base -> Entrée Quote
-            outTx = { amount: numberFormatter.format(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
-            inTx = { amount: numberFormatter.format(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
+            outTx = { amount: formatQuantity(tx.quantity), quantity: tx.quantity, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+            inTx = { amount: formatQuantity(quoteQty), quantity: quoteQty, currency: quoteAsset, account: tx.providerDisplayName, address: undefined };
         }
       } else if (tx.type === 'deposit') {
         type = 'deposit';
         label = "Entrée";
-        inTx = { amount: numberFormatter.format(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+        inTx = { amount: formatQuantity(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       } else if (tx.type === 'withdrawal') {
         type = 'withdrawal';
         label = "Sortie";
-        outTx = { amount: numberFormatter.format(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
+        outTx = { amount: formatQuantity(tx.amount), quantity: tx.amount, currency: tx.baseAsset, account: tx.providerDisplayName, address: undefined };
       }
 
       // Calculer le montant pour tri et affichage
@@ -369,14 +381,14 @@ export function TransactionsView({
       {/* Header Tabs & Actions */}
       <div className="flex flex-col md:flex-row md:items-center justify-between shrink-0 bg-muted/40">
         {/* Tabs */}
-        <div className="flex border-b md:border-b-0 border-border w-full md:w-auto overflow-x-auto">
+        <div className="no-scrollbar flex border-b md:border-b-0 border-border w-full md:w-auto overflow-x-auto">
           <Tab label="Transactions" count={sortedTransactions.length} active />
           <Tab label="Transactions imposables" count={0} />
           <Tab label="Corrections" count={1} />
         </div>
 
         {/* Top Actions */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border flex-1 justify-end bg-muted/40">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-border flex-1 justify-end bg-muted/40">
           <Button
             variant="outline"
             className="bg-card border-border text-foreground hover:bg-muted h-9 text-sm font-medium"
@@ -388,23 +400,23 @@ export function TransactionsView({
           </Button>
           <Button className="bg-primary/15 text-primary hover:bg-primary/25 border-none h-9 text-sm font-medium shadow-none">
             <Plus className="w-4 h-4 mr-2" />
-            Ajouter des transactions
+            Ajouter<span className="hidden sm:inline">&nbsp;des transactions</span>
           </Button>
         </div>
       </div>
 
       {/* Filters Bar */}
-      <div className="flex items-center justify-between px-5 h-14 bg-card border-b border-border shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 md:px-5 md:h-14 md:py-0 bg-card border-b border-border shrink-0">
+        <div className="flex flex-1 items-center gap-2 md:flex-none">
           {/* Recherche par token */}
-          <div className="relative">
+          <div className="relative min-w-0 flex-1 md:flex-none">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Rechercher un token..."
               value={tokenSearch}
               onChange={(e) => setTokenSearch(e.target.value)}
-              className="h-9 w-48 pl-8 pr-8 rounded border border-border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              className="h-9 w-full md:w-48 pl-8 pr-8 rounded border border-border bg-muted/40 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
             {tokenSearch && (
               <button
@@ -429,7 +441,7 @@ export function TransactionsView({
               {symbolFilter !== "all" || tokenSearch ? "1" : "0"}
             </span>
           </Button>
-          <Button variant="ghost" className="bg-muted/40 text-foreground hover:bg-muted h-9 text-sm font-medium border border-border">
+          <Button variant="ghost" className="hidden md:inline-flex bg-muted/40 text-foreground hover:bg-muted h-9 text-sm font-medium border border-border">
             <Eye className="w-4 h-4 mr-2" />
             Affichage
             <span className="num ml-2 bg-primary text-white rounded-full px-1.5 py-0.5 text-[10px] leading-none">2</span>
@@ -438,7 +450,7 @@ export function TransactionsView({
         
         {/* Pagination simple */}
         <div className="flex items-center gap-3 text-sm">
-          <span className="text-muted-foreground">Page {currentPage} sur {totalPages || 1}</span>
+          <span className="whitespace-nowrap text-muted-foreground">Page {currentPage} sur {totalPages || 1}</span>
           <div className="flex items-center gap-1">
              <Button
                variant="ghost"
@@ -473,7 +485,48 @@ export function TransactionsView({
                 Aucune transaction trouvée.
             </div>
         ) : (
-        <table className="w-full text-left border-collapse">
+        <>
+        {/* Téléphone : neuf colonnes ne tiennent pas en 400 px. Une carte
+            par opération : type et date, ce qui sort → ce qui entre, puis
+            plateforme, frais et montant. */}
+        <ul className="md:hidden divide-y divide-border">
+          {paginatedTransactions.map((tx) => (
+            <li key={tx.id} className="flex items-start gap-3 px-4 py-3">
+              <div className={cn("mt-0.5 w-8 h-8 shrink-0 rounded-full flex items-center justify-center bg-muted",
+                  tx.type === 'trade' && "bg-violet-soft",
+                  tx.type === 'deposit' && "bg-jade-soft",
+                  tx.type === 'withdrawal' && "bg-destructive/10"
+              )}>
+                  {tx.type === 'trade' && <ArrowLeftRight className="w-4 h-4 text-violet" />}
+                  {tx.type === 'deposit' && <ArrowRight className="w-4 h-4 text-jade rotate-90" />}
+                  {tx.type === 'withdrawal' && <ArrowRight className="w-4 h-4 text-destructive -rotate-90" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-sm font-bold text-foreground">{tx.label}</span>
+                  <span className="num shrink-0 whitespace-nowrap text-[11px] text-muted-foreground">
+                    {tx.date} · {tx.time}
+                  </span>
+                </div>
+                <div className="num mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] font-semibold text-foreground">
+                  {tx.out && <span className="whitespace-nowrap">{`-${tx.out.amount} ${tx.out.currency}`}</span>}
+                  {tx.out && tx.in && <ArrowRight className="w-3 h-3 text-muted-foreground" />}
+                  {tx.in && <span className="whitespace-nowrap">{`+${tx.in.amount} ${tx.in.currency}`}</span>}
+                </div>
+                <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                  <span className="truncate">
+                    {tx.provider}
+                    {tx.fee != null && tx.fee > 0 ? ` · frais ${numberFormatter.format(tx.fee)} ${tx.feeAsset ?? ""}` : ""}
+                  </span>
+                  <span className="num shrink-0">
+                    {tx.amountEur != null && tx.amountEur > 0 ? `€${tx.amountEur.toFixed(2)}` : tx.amountDisplay}
+                  </span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <table className="hidden md:table w-full text-left border-collapse">
           <thead className="bg-card sticky top-0 z-10">
             <tr className="border-b border-border h-10">
               <th className="w-12 px-4 py-2 bg-card"><Checkbox className="border-border data-[state=checked]:bg-primary data-[state=checked]:border-primary" /></th>
@@ -604,6 +657,7 @@ export function TransactionsView({
             ))}
           </tbody>
         </table>
+        </>
         )}
       </div>
 
