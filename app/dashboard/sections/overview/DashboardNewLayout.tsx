@@ -492,7 +492,7 @@ export function DashboardNewLayout({
 
         {/* Avoirs — portfolio market value over time */}
         <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/40">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-border/40">
             <div>
               <h2 className="text-sm font-bold tracking-tight text-foreground">Avoirs</h2>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
@@ -500,7 +500,7 @@ export function DashboardNewLayout({
                 {snapshotsComputing && " · calcul en cours…"}
               </p>
             </div>
-            <div className="flex items-center gap-3 text-[10px] font-bold">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px] font-bold">
               <div className="flex border border-border/60" role="group" aria-label="Mode d'affichage">
                 {([
                   { id: "total" as const, label: "Total" },
@@ -748,7 +748,7 @@ export function DashboardNewLayout({
 
         {/* Performance — portfolio profit% vs BTC trend% */}
         <div className="bg-[var(--surface-low)] border border-border/60 rounded-lg p-5">
-          <div className="flex items-center justify-between mb-5 pb-4 border-b border-border/40">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b border-border/40">
             <div>
               <h2 className="text-sm font-bold tracking-tight text-foreground">Performance</h2>
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">% depuis le début</p>
@@ -991,7 +991,41 @@ export function DashboardNewLayout({
               );
 
               return (
-                <div className="overflow-x-auto">
+                <>
+                {/* Téléphone : une ligne par jeton — valeur et résultat d'un
+                    coup d'œil, au lieu d'un tableau de neuf colonnes coupé. */}
+                <ul className="md:hidden divide-y divide-border/50">
+                  {sorted.map(({ token, currentValue, totalPnl, totalPnlEur }) => {
+                    const pnl = totalPnlEur ?? totalPnl;
+                    return (
+                      <li key={token.symbol} className="flex items-center gap-3 px-4 py-3">
+                        {getCmcIconUrl(token.symbol) ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={getCmcIconUrl(token.symbol) || ""} alt="" className="w-7 h-7 shrink-0 rounded-full object-cover bg-muted" />
+                        ) : (
+                          <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary">
+                            {token.symbol.slice(0, 2)}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-foreground">{token.symbol}</div>
+                          <div className="num truncate text-[11px] text-muted-foreground">
+                            {token.currentQuantity.toLocaleString("fr-FR", { maximumSignificantDigits: 6 })}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className="num text-sm font-bold text-foreground">
+                            {currentValue !== null ? money(currentValue) : "—"}
+                          </div>
+                          <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
+                            {totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}` : "—"}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left border-collapse tabular-nums">
                     <thead>
                       <tr className="bg-muted/20">
@@ -1185,6 +1219,7 @@ export function DashboardNewLayout({
                       })}
                     </tbody>
                   </table>
+                </div>
 
                   {filteredTokens.length === 0 && (
                     <div className="text-center py-10 text-muted-foreground text-sm">
@@ -1200,7 +1235,7 @@ export function DashboardNewLayout({
                       )}
                     </div>
                   )}
-                </div>
+                </>
               );
             })()}
           </>
@@ -1395,7 +1430,34 @@ export function DashboardNewLayout({
           }
 
           return (
-            <div className="overflow-x-auto">
+            <>
+            {/* Téléphone : une ligne par plateforme. */}
+            <ul className="md:hidden divide-y divide-border/50">
+              {stats.map((s) => {
+                const pnl = s.totalPnlEur ?? s.totalPnl;
+                return (
+                  <li key={s.provider} className="flex items-center gap-3 px-4 py-3">
+                    <ProviderAvatar provider={s.provider} name={s.providerDisplayName} />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-bold text-foreground">{s.providerDisplayName}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">
+                        {s.tokenCount} jeton{s.tokenCount > 1 ? "s" : ""}
+                        {s.costBasisUsd > 0 ? ` · investi ${amount(s.costBasisUsd, s.costBasisEur)}` : ""}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="num text-sm font-bold text-foreground">
+                        {hasCurrentPrices && s.currentValueUsd > 0 ? money(s.currentValueUsd) : "—"}
+                      </div>
+                      <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
+                        {s.totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}` : "—"}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left border-collapse tabular-nums">
                 <thead>
                   <tr className="bg-muted/20">
@@ -1589,6 +1651,7 @@ export function DashboardNewLayout({
                 </tbody>
               </table>
             </div>
+            </>
           );
         })()}
       </section>

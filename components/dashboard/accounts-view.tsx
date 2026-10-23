@@ -607,8 +607,10 @@ export function AccountsView() {
           filteredAccounts.map((account) => (
             <Accordion type="single" collapsible key={account.id} className="bg-card rounded-lg border border-border overflow-hidden transition-colors hover:border-primary/30">
               <AccordionItem value={account.id} className="border-none">
-                <AccordionTrigger className="px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
-                  <div className="flex items-center justify-between w-full pr-2 gap-3">
+                <AccordionTrigger className="min-w-0 px-4 sm:px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
+                  {/* min-w-0 : sans lui, la ligne refusait de rétrécir sous la
+                      taille de son contenu et débordait de la carte sur mobile. */}
+                  <div className="flex min-w-0 items-center justify-between w-full pr-2 gap-3">
                     <div className="flex items-center gap-3 min-w-0">
                       <Avatar className="w-11 h-11 rounded-full border border-border bg-muted shrink-0">
                         <AvatarImage src={account.iconUrl} alt={account.name} />
@@ -619,7 +621,7 @@ export function AccountsView() {
                         {account.accountCreatedAt && (
                           <span className="text-xs text-muted-foreground hidden sm:inline">depuis le {account.accountCreatedAt}</span>
                         )}
-                        <div className="flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50">
+                        <div className="flex shrink-0 items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50">
                           <span className="text-[11px] font-medium text-muted-foreground">{account.subAccountsCount}</span>
                         </div>
                       </div>
@@ -938,7 +940,7 @@ function MissingKeyChip({ provider }: { provider: string }) {
       className="chip chip-violet whitespace-nowrap py-0.5 text-[11px] hover:opacity-80"
     >
       <KeyRound className="h-3 w-3" />
-      Clé {dataProviderLabel(provider)} requise
+      Clé <span className="hidden sm:inline">{dataProviderLabel(provider)}</span> requise
     </Link>
   )
 }

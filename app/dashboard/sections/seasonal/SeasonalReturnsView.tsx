@@ -71,7 +71,34 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
   return (
     <div className="space-y-3">
       <h2 className="text-sm font-bold tracking-tight text-foreground">{title}</h2>
-      <div className="overflow-x-auto rounded-lg border border-border/60 bg-[var(--surface-low)]">
+      {/* Téléphone : le tableau pivote — une ligne par période, une colonne
+          par année. Treize colonnes ne tiennent pas en 400 px ; trois ou
+          quatre années, si. */}
+      <div className="md:hidden overflow-hidden rounded-lg border border-border/60 bg-[var(--surface-low)]">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b border-border/60">
+              <th className="px-3 py-2.5 text-left num text-[10px] uppercase tracking-[0.2em] text-muted-foreground" />
+              {years.map((year) => (
+                <th key={year} className="px-1 py-2.5 text-center num text-[11px] font-bold text-foreground">{year}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cols.map((col, i) => (
+              <tr key={col} className="border-b border-border/30">
+                <td title={colsFull[i]} className="px-3 py-1 num text-[10px] uppercase tracking-[0.16em] text-muted-foreground">{col}</td>
+                {years.map((year) => <ReturnCell key={year} value={data.get(year)?.[i] ?? null} />)}
+              </tr>
+            ))}
+            <tr>
+              <td className="px-3 py-1.5 num text-[10px] font-bold uppercase tracking-[0.16em] text-foreground">Total</td>
+              {yearTotals.map((total, yi) => <ReturnCell key={years[yi]} value={total} />)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="hidden md:block overflow-x-auto rounded-lg border border-border/60 bg-[var(--surface-low)]">
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border/60">
