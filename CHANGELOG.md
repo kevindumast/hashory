@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.14](https://github.com/kevindumast/hashory/compare/hashory-v0.1.13...hashory-v0.1.14) (2026-10-23)
+
+
+### Features
+
+* **portefeuille:** relevé en EUR ou USD, export des transactions en CSV « ; » ([#76](https://github.com/kevindumast/hashory/issues/76)) ([bf94e5e](https://github.com/kevindumast/hashory/commit/bf94e5e256a950f4773234087441b40b519b2c22))
+
+
+### Bug Fixes
+
+* **chart:** le tooltip de l'historique d'un jeton affiche le bon jour ([#75](https://github.com/kevindumast/hashory/issues/75)) ([ea45338](https://github.com/kevindumast/hashory/commit/ea45338dfe471b23b75f99a337b06dd9a124208d))
+* **logo:** un H lisible à petite taille ([#71](https://github.com/kevindumast/hashory/issues/71)) ([6cb6ba4](https://github.com/kevindumast/hashory/commit/6cb6ba45980f11bb0ea86e3033d4b2ff39b1917c))
+* **mobile:** pages lisibles sur iPhone, sans débordement ([#73](https://github.com/kevindumast/hashory/issues/73)) ([94f3786](https://github.com/kevindumast/hashory/commit/94f37868d659f2850368aa272abc9a69612051f3))
+* **onboarding:** « Ne plus afficher » masque la checklist pour de bon ([#74](https://github.com/kevindumast/hashory/issues/74)) ([d4c4922](https://github.com/kevindumast/hashory/commit/d4c492259efb9132696f8d71fa91492a10749017))
+
+
+### Performance
+
+* **convex:** rapport fiscal enregistré, historique réécrit seulement au besoin ([#77](https://github.com/kevindumast/hashory/issues/77)) ([3a3a12d](https://github.com/kevindumast/hashory/commit/3a3a12d00f48019a572027c176df178557dd47d0))
+
 ## [0.1.13](https://github.com/kevindumast/hashory/compare/hashory-v0.1.12...hashory-v0.1.13) (2026-10-22)
 
 
