@@ -20,9 +20,16 @@ import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { currencyFormatter, type TokenTimelineEvent } from "@/hooks/dashboard/useDashboardMetrics";
 
-const dayLabelFormatter = new Intl.DateTimeFormat("fr-FR", {
+// L'historique couvre souvent plusieurs années : sans l'année, « 1 oct. »
+// désignerait deux jours différents.
+const dayTickFormatter = new Intl.DateTimeFormat("fr-FR", {
   month: "short",
   day: "numeric",
+  year: "2-digit",
+  timeZone: "UTC",
+});
+const dayTooltipFormatter = new Intl.DateTimeFormat("fr-FR", {
+  dateStyle: "medium",
   timeZone: "UTC",
 });
 
@@ -108,7 +115,6 @@ export function TokenHistoryChart({
       .sort((a, b) => a.dayUtc - b.dayUtc)
       .map((p) => ({
         timestamp: p.dayUtc,
-        label: dayLabelFormatter.format(new Date(p.dayUtc)),
         price: p.closeUsd,
         buyMarker: buySellDays.buys.has(p.dayUtc) ? p.closeUsd : null,
         sellMarker: buySellDays.sells.has(p.dayUtc) ? p.closeUsd : null,
@@ -170,8 +176,11 @@ export function TokenHistoryChart({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.3} />
+              {/* Clé unique par jour : avec un libellé sans année comme clé,
+                  le tooltip retrouvait le même jour de l'année précédente. */}
               <XAxis
-                dataKey="label"
+                dataKey="timestamp"
+                tickFormatter={(ts) => dayTickFormatter.format(new Date(Number(ts)))}
                 tickLine={false}
                 axisLine={false}
                 interval="preserveStartEnd"
@@ -193,7 +202,7 @@ export function TokenHistoryChart({
                     className="num"
                     active={active}
                     payload={payload}
-                    label={label}
+                    label={label != null ? dayTooltipFormatter.format(new Date(Number(label))) : label}
                     formatter={(value) => currencyFormatter.format(Number(value))}
                   />
                 }
