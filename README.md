@@ -173,6 +173,11 @@ Tous les outils sont en **lecture seule**.
    `https://<votre-domaine>/api/mcp`. Avec Claude Code :
    `claude mcp add --transport http hashory https://<votre-domaine>/api/mcp`.
 
+Côté utilisateur, le mode d'emploi est dans l'application : *Réglages → Connecter Claude*
+(`/dashboard/settings/claude`), aussi accessible depuis le menu du compte et la fenêtre du profil
+(onglet « Claude »). Il donne l'adresse à copier et les étapes pour claude.ai, Claude Desktop et
+Claude Code.
+
 Le jeton OAuth est vérifié par Clerk à chaque requête ; le serveur interroge ensuite Convex avec
 l'identifiant vérifié et le secret partagé (`convex/mcp.ts`). Sans ce secret, Convex refuse
 toute lecture.
