@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
 
 export const metadata = { title: "Connecter Claude" };
@@ -22,6 +23,9 @@ export default async function ClaudeConnectorPage() {
         questions à partir de vos vrais chiffres : valeur, performance, transactions et
         plus-values à déclarer. Rien à activer ici, tout se règle en deux minutes dans Claude.
       </p>
+      <div className="mt-10">
+        <ClaudeAccessPanel />
+      </div>
       <div className="mt-10">
         <ClaudeConnectorGuide />
       </div>

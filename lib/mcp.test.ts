@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { Operation } from "./ledger";
-import { MAX_TRANSACTIONS, parseDay, samplePoints, secretsMatch, selectTransactions } from "./mcp";
+import { MAX_TRANSACTIONS, nextRateWindow, parseDay, samplePoints, secretsMatch, selectTransactions } from "./mcp";
 
 const DAY = 86_400_000;
 const day = (index: number) => Date.UTC(2025, 0, 1) + index * DAY;
@@ -128,5 +128,27 @@ describe("parseDay", () => {
 
   it("refuse une date illisible", () => {
     assert.throws(() => parseDay("demain"), /Date invalide/);
+  });
+});
+
+describe("nextRateWindow", () => {
+  const t0 = Date.UTC(2025, 0, 1);
+
+  it("ouvre une fenêtre à la première requête", () => {
+    assert.deepEqual(nextRateWindow(null, t0), { rateWindowStart: t0, rateCount: 1 });
+  });
+
+  it("compte les requêtes de la même minute", () => {
+    assert.deepEqual(nextRateWindow({ rateWindowStart: t0, rateCount: 5 }, t0 + 59_999), {
+      rateWindowStart: t0,
+      rateCount: 6,
+    });
+  });
+
+  it("repart à un quand la minute est écoulée", () => {
+    assert.deepEqual(nextRateWindow({ rateWindowStart: t0, rateCount: 60 }, t0 + 60_000), {
+      rateWindowStart: t0 + 60_000,
+      rateCount: 1,
+    });
   });
 });

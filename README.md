@@ -178,9 +178,18 @@ Côté utilisateur, le mode d'emploi est dans l'application : *Réglages → Con
 (onglet « Claude »). Il donne l'adresse à copier et les étapes pour claude.ai, Claude Desktop et
 Claude Code.
 
-Le jeton OAuth est vérifié par Clerk à chaque requête ; le serveur interroge ensuite Convex avec
-l'identifiant vérifié et le secret partagé (`convex/mcp.ts`). Sans ce secret, Convex refuse
-toute lecture.
+**Sécurité** (`lib/mcp-handler.ts`, testé dans `lib/mcp-handler.test.ts`) :
+
+- le jeton OAuth est vérifié par Clerk à chaque requête ; Convex est ensuite interrogé avec
+  l'identifiant vérifié et le secret partagé (`convex/mcp.ts`), sans lequel il refuse toute lecture ;
+- l'utilisateur peut **couper l'accès** depuis *Réglages → Connecter Claude* : la requête suivante
+  est refusée, sans attendre l'expiration du jeton ;
+- 60 requêtes par minute et par utilisateur, HTTPS obligatoire, origines navigateur limitées à
+  claude.ai et claude.com, corps limité à 64 Ko, délai de 25 s, réponses plafonnées ;
+- chaque appel d'outil est journalisé (outil, nombre d'éléments, IP — jamais le contenu) pendant
+  90 jours et affiché à l'utilisateur ; les erreurs internes ne sont jamais renvoyées à Claude ;
+- les consignes du serveur rappellent à Claude que les libellés sont des données, jamais des
+  instructions.
 
 ## Scripts
 

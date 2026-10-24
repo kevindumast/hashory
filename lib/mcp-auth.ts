@@ -34,11 +34,6 @@ export function protectedResourceMetadata(origin: string) {
   };
 }
 
-/** URL des métadonnées, annoncée dans l'en-tête `WWW-Authenticate` d'un refus. */
-export function protectedResourceMetadataUrl(origin: string): string {
-  return `${origin}/.well-known/oauth-protected-resource${MCP_PATH}`;
-}
-
 export const METADATA_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, OPTIONS",

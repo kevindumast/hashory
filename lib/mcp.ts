@@ -15,6 +15,27 @@ export const MAX_TRANSACTIONS = 500;
 /** Points d'une série de performance au-delà desquels on échantillonne. */
 export const MAX_PERFORMANCE_POINTS = 120;
 
+/** Requêtes par minute et par utilisateur. */
+export const RATE_LIMIT_PER_MINUTE = 60;
+
+/** Durée de conservation du journal des appels. */
+export const AUDIT_RETENTION_DAYS = 90;
+
+/** Appels affichés dans les réglages. */
+export const ACTIVITY_LIMIT = 20;
+
+/**
+ * Compteur de débit après une requête : fenêtre fixe d'une minute, remise
+ * à un quand elle est écoulée.
+ */
+export function nextRateWindow(
+  state: { rateWindowStart: number; rateCount: number } | null,
+  now: number
+): { rateWindowStart: number; rateCount: number } {
+  if (!state || now - state.rateWindowStart >= 60_000) return { rateWindowStart: now, rateCount: 1 };
+  return { rateWindowStart: state.rateWindowStart, rateCount: state.rateCount + 1 };
+}
+
 /**
  * Compare deux secrets en temps constant : la durée ne dit pas combien de
  * caractères étaient justes. Un secret vide ne correspond jamais.

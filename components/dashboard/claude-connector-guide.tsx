@@ -176,8 +176,8 @@ export function ClaudeConnectorGuide({ compact = false }: { compact?: boolean })
             pour les mettre à jour avant de poser une question.
           </p>
           <p>
-            Pour couper l&apos;accès, supprimez le connecteur Hashory dans les paramètres de
-            Claude. Les montants fiscaux sont indicatifs et ne remplacent pas un conseil.
+            Pour couper l&apos;accès, désactivez l&apos;interrupteur « Accès de Claude » : la requête
+            suivante est refusée. Les montants fiscaux sont indicatifs et ne remplacent pas un conseil.
           </p>
         </div>
       </div>

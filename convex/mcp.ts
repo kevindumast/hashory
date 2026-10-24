@@ -1,11 +1,19 @@
-import { query, type QueryCtx } from "./_generated/server";
+import { mutation, query, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { optionalUserId, requireUserId } from "./auth";
 import { loadLedgerInput } from "./ledgerData";
 import { loadTaxReport } from "./taxReport";
 import { ALL_SCOPE } from "./portfolioSnapshots";
 import { buildLedger } from "../lib/ledger";
 import { createPriceBook, isCashLike, startOfUtcDay, type PriceSeries } from "../lib/valuation";
-import { samplePoints, secretsMatch, selectTransactions } from "../lib/mcp";
+import {
+  ACTIVITY_LIMIT,
+  AUDIT_RETENTION_DAYS,
+  nextRateWindow,
+  samplePoints,
+  secretsMatch,
+  selectTransactions,
+} from "../lib/mcp";
 
 /**
  * Lecture des données d'un utilisateur pour le serveur MCP (`app/api/mcp`).
@@ -16,7 +24,8 @@ import { samplePoints, secretsMatch, selectTransactions } from "../lib/mcp";
  * défini à la fois dans Convex et côté Next.js. Sans ce secret, ou s'il
  * n'est pas configuré, chaque requête refuse de répondre.
  *
- * Tout est en lecture seule : aucune mutation n'est exposée.
+ * Les données sont en lecture seule. Les seules écritures sont celles du
+ * contrôle d'accès : compteur de débit et journal des appels.
  */
 
 const serverArgs = { secret: v.string(), clerkId: v.string() };
@@ -30,6 +39,103 @@ function assertServer(secret: string) {
 const DAY_MS = 86_400_000;
 /** Au-delà, un cours est trop ancien pour valoriser une ligne. */
 const PRICE_LOOKBACK_DAYS = 30;
+
+// ─── Contrôle d'accès ─────────────────────────────────────────────────
+
+/**
+ * Appelée une fois par requête MCP, avant tout outil : refuse si
+ * l'utilisateur a coupé l'accès, compte la requête dans la minute en cours.
+ */
+export const authorize = mutation({
+  args: serverArgs,
+  handler: async (ctx, { secret, clerkId }): Promise<{ status: "ok"; requestsThisMinute: number } | { status: "disabled" }> => {
+    assertServer(secret);
+    const now = Date.now();
+    const access = await ctx.db
+      .query("mcpAccess")
+      .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
+      .unique();
+    if (access?.disabled) return { status: "disabled" };
+
+    const window = nextRateWindow(access, now);
+    if (access) {
+      await ctx.db.patch(access._id, { ...window, lastUsedAt: now });
+    } else {
+      await ctx.db.insert("mcpAccess", { clerkId, disabled: false, ...window, lastUsedAt: now, updatedAt: now });
+    }
+    return { status: "ok", requestsThisMinute: window.rateCount };
+  },
+});
+
+/** Journalise un appel d'outil, et efface au passage les entrées périmées. */
+export const audit = mutation({
+  args: {
+    ...serverArgs,
+    tool: v.string(),
+    rowCount: v.number(),
+    ip: v.optional(v.string()),
+    clientId: v.optional(v.string()),
+  },
+  handler: async (ctx, { secret, clerkId, ...entry }) => {
+    assertServer(secret);
+    const now = Date.now();
+    await ctx.db.insert("mcpAuditLog", { clerkId, ...entry, createdAt: now });
+    const expired = await ctx.db
+      .query("mcpAuditLog")
+      .withIndex("by_user_created", (q) => q.eq("clerkId", clerkId).lt("createdAt", now - AUDIT_RETENTION_DAYS * DAY_MS))
+      .take(20);
+    for (const row of expired) await ctx.db.delete(row._id);
+  },
+});
+
+/** Pour les réglages : état de l'accès et derniers appels de Claude. */
+export const myAccess = query({
+  args: {},
+  handler: async (ctx) => {
+    const clerkId = await optionalUserId(ctx);
+    if (!clerkId) return null;
+    const access = await ctx.db
+      .query("mcpAccess")
+      .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
+      .unique();
+    const activity = await ctx.db
+      .query("mcpAuditLog")
+      .withIndex("by_user_created", (q) => q.eq("clerkId", clerkId))
+      .order("desc")
+      .take(ACTIVITY_LIMIT);
+    return {
+      enabled: !access?.disabled,
+      lastUsedAt: access?.lastUsedAt ?? null,
+      activity: activity.map((row) => ({
+        id: row._id,
+        tool: row.tool,
+        rowCount: row.rowCount,
+        ip: row.ip ?? null,
+        createdAt: row.createdAt,
+      })),
+    };
+  },
+});
+
+/** Ouvre ou coupe l'accès de Claude ; une coupure vaut dès la requête suivante. */
+export const setEnabled = mutation({
+  args: { enabled: v.boolean() },
+  handler: async (ctx, { enabled }) => {
+    const clerkId = await requireUserId(ctx);
+    const now = Date.now();
+    const access = await ctx.db
+      .query("mcpAccess")
+      .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
+      .unique();
+    if (access) {
+      await ctx.db.patch(access._id, { disabled: !enabled, updatedAt: now });
+    } else {
+      await ctx.db.insert("mcpAccess", { clerkId, disabled: !enabled, rateWindowStart: 0, rateCount: 0, updatedAt: now });
+    }
+  },
+});
+
+// ─── Lecture ──────────────────────────────────────────────────────────
 
 async function accountNames(ctx: QueryCtx, clerkId: string): Promise<Record<string, string>> {
   const integrations = await ctx.db

@@ -17,6 +17,7 @@ import { isConvexConfigured } from "@/convex/client";
 import { useTheme } from "next-themes";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
+import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
@@ -285,7 +286,10 @@ export function DashboardTopbar({
                   <p className="mt-2 mb-6 text-sm text-muted-foreground">
                     Interrogez votre portefeuille depuis Claude, en lecture seule.
                   </p>
-                  <ClaudeConnectorGuide compact />
+                  <ClaudeAccessPanel />
+                  <div className="mt-6">
+                    <ClaudeConnectorGuide compact />
+                  </div>
                 </div>
               </UserButton.UserProfilePage>
             </UserButton>
