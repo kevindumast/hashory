@@ -371,6 +371,33 @@ export default defineSchema({
    * apportées par chaque utilisateur : la lecture de ses wallets consomme
    * son crédit, jamais celui de l'hébergeur. Liste dans `lib/data-providers.ts`.
    */
+  /**
+   * Accès de Claude (serveur MCP) d'un utilisateur : interrupteur et
+   * compteur de débit. Absent = accès ouvert, jamais encore utilisé.
+   */
+  mcpAccess: defineTable({
+    clerkId: v.string(),
+    /** Coupé depuis les réglages : chaque requête de Claude est refusée. */
+    disabled: v.boolean(),
+    /** Début de la fenêtre d'une minute du compteur de débit. */
+    rateWindowStart: v.number(),
+    rateCount: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+  }).index("by_user", ["clerkId"]),
+  /**
+   * Journal des appels d'outils de Claude : quel outil, combien d'éléments
+   * renvoyés, d'où — jamais le contenu. Conservé 90 jours.
+   */
+  mcpAuditLog: defineTable({
+    clerkId: v.string(),
+    tool: v.string(),
+    rowCount: v.number(),
+    ip: v.optional(v.string()),
+    /** Client OAuth (application Claude) à l'origine de l'appel. */
+    clientId: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_user_created", ["clerkId", "createdAt"]),
   dataProviderKeys: defineTable({
     clerkUserId: v.string(),
     provider: v.string(),

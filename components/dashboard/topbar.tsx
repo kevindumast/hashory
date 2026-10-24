@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useEffect, useState } from "react";
-import { AlertCircle, Bell, CheckCircle2, HelpCircle, PanelLeft, Plug, RefreshCw, Search, Sun, Moon } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, HelpCircle, PanelLeft, Plug, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
 import { ClerkLoaded, ClerkLoading, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -17,6 +17,8 @@ import { isConvexConfigured } from "@/convex/client";
 import { useTheme } from "next-themes";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
+import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
+import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
@@ -269,7 +271,28 @@ export function DashboardTopbar({
             <UserButton
               appearance={{ elements: { avatarBox: "size-7 border border-sidebar-border" } }}
               afterSignOutUrl="/"
-            />
+            >
+              <UserButton.MenuItems>
+                <UserButton.Link
+                  label="Connecter Claude"
+                  labelIcon={<Sparkles className="size-4" />}
+                  href="/dashboard/settings/claude"
+                />
+              </UserButton.MenuItems>
+              {/* Le même guide, directement dans la fenêtre du profil. */}
+              <UserButton.UserProfilePage label="Claude" url="claude" labelIcon={<Sparkles className="size-4" />}>
+                <div className="pb-4">
+                  <h1 className="title text-2xl text-foreground">Connecter Claude</h1>
+                  <p className="mt-2 mb-6 text-sm text-muted-foreground">
+                    Interrogez votre portefeuille depuis Claude, en lecture seule.
+                  </p>
+                  <ClaudeAccessPanel />
+                  <div className="mt-6">
+                    <ClaudeConnectorGuide compact />
+                  </div>
+                </div>
+              </UserButton.UserProfilePage>
+            </UserButton>
           </ClerkLoaded>
         </div>
       </div>

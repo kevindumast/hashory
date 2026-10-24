@@ -1,4 +1,4 @@
-import { internalMutation, query } from "./_generated/server";
+import { internalMutation, query, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { optionalUserId } from "./auth";
 import { loadLedgerInput } from "./ledgerData";
@@ -250,37 +250,41 @@ export const computeTaxReport = query({
   handler: async (ctx): Promise<TaxReportResult> => {
     const clerkId = await optionalUserId(ctx);
     if (!clerkId) return emptyReport();
-
-    const stored = await ctx.db
-      .query("taxReports")
-      .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
-      .first();
-    if (stored) return JSON.parse(stored.report) as TaxReportResult;
-
-    const { input } = await loadLedgerInput(ctx, clerkId);
-    const operations: Operation[] = buildLedger(input);
-    if (operations.length === 0) return emptyReport();
-
-    const fromDay = startOfUtcDay(operations[0].timestamp) - 10 * DAY_MS;
-    const toDay = startOfUtcDay(Date.now());
-    const fxRows = await ctx.db
-      .query("fxRateHistory")
-      .withIndex("by_day", (q) => q.gte("dayUtc", fromDay).lte("dayUtc", toDay))
-      .collect();
-    const fx = fxRows.map((row) => ({ dayUtc: row.dayUtc, eurPerUsd: row.eurPerUsd }));
-
-    return buildTaxReport(operations, fx, async (asset, day) => {
-      const row = await ctx.db
-        .query("tokenPriceHistory")
-        .withIndex("by_symbol_day", (q) =>
-          q.eq("symbol", asset).gte("dayUtc", day - PRICE_LOOKBACK_DAYS * DAY_MS).lte("dayUtc", day)
-        )
-        .order("desc")
-        .first();
-      return row ? row.closeUsd : null;
-    });
+    return loadTaxReport(ctx, clerkId);
   },
 });
+
+/** Rapport fiscal d'un utilisateur : l'enregistré, sinon le calcul en direct. */
+export async function loadTaxReport(ctx: QueryCtx, clerkId: string): Promise<TaxReportResult> {
+  const stored = await ctx.db
+    .query("taxReports")
+    .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
+    .first();
+  if (stored) return JSON.parse(stored.report) as TaxReportResult;
+
+  const { input } = await loadLedgerInput(ctx, clerkId);
+  const operations: Operation[] = buildLedger(input);
+  if (operations.length === 0) return emptyReport();
+
+  const fromDay = startOfUtcDay(operations[0].timestamp) - 10 * DAY_MS;
+  const toDay = startOfUtcDay(Date.now());
+  const fxRows = await ctx.db
+    .query("fxRateHistory")
+    .withIndex("by_day", (q) => q.gte("dayUtc", fromDay).lte("dayUtc", toDay))
+    .collect();
+  const fx = fxRows.map((row) => ({ dayUtc: row.dayUtc, eurPerUsd: row.eurPerUsd }));
+
+  return buildTaxReport(operations, fx, async (asset, day) => {
+    const row = await ctx.db
+      .query("tokenPriceHistory")
+      .withIndex("by_symbol_day", (q) =>
+        q.eq("symbol", asset).gte("dayUtc", day - PRICE_LOOKBACK_DAYS * DAY_MS).lte("dayUtc", day)
+      )
+      .order("desc")
+      .first();
+    return row ? row.closeUsd : null;
+  });
+}
 
 /** Taille au-delà de laquelle on ne stocke pas (limite d'un document : 1 Mo). */
 const MAX_STORED_REPORT_BYTES = 900_000;

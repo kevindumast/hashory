@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays, Activity,
-  User, Settings, LogOut, Menu, MoreHorizontal, Plug, KeyRound,
+  User, Settings, LogOut, Menu, MoreHorizontal, Plug, KeyRound, Sparkles,
 } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
@@ -45,6 +45,7 @@ const navSections = [
     title: "Réglages",
     links: [
       { href: "/dashboard/settings/api-keys", label: "Clés d'API", badge: null, icon: KeyRound },
+      { href: "/dashboard/settings/claude", label: "Connecter Claude", badge: null, icon: Sparkles },
     ],
   },
 ]
@@ -172,6 +173,11 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
         <DropdownMenuItem asChild className="cursor-pointer text-sm">
           <Link href="/dashboard/accounts">
             <Settings className="mr-2 h-3.5 w-3.5" /> Comptes connectés
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild className="cursor-pointer text-sm">
+          <Link href="/dashboard/settings/claude">
+            <Sparkles className="mr-2 h-3.5 w-3.5" /> Connecter Claude
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
