@@ -7,6 +7,7 @@ import {
   PROVIDERS,
   SUPPORTED_PROVIDERS,
   WALLET_PROVIDERS,
+  isFileImportAccount,
   isSupportedProvider,
   isSyncable,
   providerLabel,
@@ -42,5 +43,13 @@ describe("référentiel des sources", () => {
   it("retombe sur l'identifiant quand le libellé est inconnu", () => {
     assert.equal(providerLabel("kraken"), "Kraken");
     assert.equal(providerLabel("inconnu"), "inconnu");
+  });
+
+  it("range un compte KuCoin alimenté par ses exports parmi les imports de fichiers", () => {
+    assert.equal(isFileImportAccount({ provider: "kucoin" }), false);
+    assert.equal(isFileImportAccount({ provider: "kucoin", source: null }), false);
+    assert.equal(isFileImportAccount({ provider: "kucoin", source: "api" }), false);
+    assert.equal(isFileImportAccount({ provider: "kucoin", source: "file" }), true);
+    assert.equal(isFileImportAccount({ provider: "strike" }), true);
   });
 });

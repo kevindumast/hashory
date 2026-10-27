@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
 import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers";
 import { parseStrikeCsv, type StrikeImport } from "@/lib/strike";
+import { KucoinImportPanel } from "@/components/dashboard/kucoin-import-dialog";
 import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText } from "lucide-react";
 import Image from "next/image";
 import {
@@ -350,7 +351,7 @@ const providerConfigs: ProviderConfig[] = [
   {
     value: "kucoin",
     label: "KuCoin",
-    description: "Connexion par clé API avec passphrase.",
+    description: "Par ses fichiers d'export, ou par clé API avec passphrase.",
     category: "platform",
     fields: [
       {
@@ -397,6 +398,11 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [completed, setCompleted] = useState(false);
+  // KuCoin accepte les deux modes. Les exports d'abord : ils couvrent tout
+  // l'historique, que l'API tronque, et la plateforme n'est plus ouverte
+  // aux résidents européens, qui ne peuvent souvent plus créer de clé.
+  const [kucoinMode, setKucoinMode] = useState<"file" | "api">("file");
+  const kucoinFiles = provider.value === "kucoin" && kucoinMode === "file";
 
   // CSV import state (shared UI, per-provider data)
   const fileRef = useRef<HTMLInputElement>(null);
@@ -437,6 +443,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       setCsvParsed(null);
       setFinaryParsed(null);
       setCsvImportResult(null);
+      setKucoinMode("file");
       if (fileRef.current) fileRef.current.value = "";
     }
   }, [open]);
@@ -509,7 +516,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (provider.disabled) {
+    // Mode fichiers : l'import a ses propres boutons ; Entrée dans le
+    // champ du nom ne doit pas enregistrer une connexion sans clé.
+    if (provider.disabled || kucoinFiles) {
       return;
     }
     setSubmitting(true);
@@ -598,12 +607,14 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         <DialogHeader className="space-y-1">
           <DialogTitle className="title text-2xl leading-tight">Connecter une plateforme</DialogTitle>
           <DialogDescription className="text-xs">
-            Saisissez les identifiants pour activer la synchronisation.
+            {kucoinFiles
+              ? "Déposez vos exports : l'historique est importé sans clé ni synchronisation."
+              : "Saisissez les identifiants pour activer la synchronisation."}
           </DialogDescription>
         </DialogHeader>
 
         {/* Rassurance sécurité */}
-        {!provider.fileImport && (
+        {!provider.fileImport && !kucoinFiles && (
           <div className="flex items-start gap-2.5 border-y border-border/60 py-2.5 text-xs text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-positive" />
             <span className="leading-snug">
@@ -698,6 +709,35 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </Select>
             <p className="text-[11px] text-muted-foreground leading-tight">{provider.description}</p>
           </div>
+
+          {provider.value === "kucoin" && (
+            <div className="space-y-1.5">
+              <Label className="text-sm">Source des données</Label>
+              <div className="grid grid-cols-2 border border-border/60">
+                {([["file", "Fichiers d'export"], ["api", "Clé API"]] as const).map(([mode, modeLabel]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    aria-pressed={kucoinMode === mode}
+                    onClick={() => { setKucoinMode(mode); setError(null); }}
+                    className={cn(
+                      "num h-9 cursor-pointer text-[11px] uppercase tracking-[0.16em] transition-colors",
+                      kucoinMode === mode
+                        ? "bg-muted/40 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+                    )}
+                  >
+                    {modeLabel}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-tight">
+                {kucoinMode === "file"
+                  ? "Tout l'historique, sans clé. À privilégier si KuCoin ne vous est plus accessible ou que votre clé est récente : l'API ne remonte pas au-delà."
+                  : "Synchronisation automatique, mais historique limité. Les exports pourront compléter le passé ensuite, sans doublon."}
+              </p>
+            </div>
+          )}
 
           {!provider.disabled ? (
             <div className="grid gap-3">
@@ -805,7 +845,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : kucoinFiles ? null : (
                 provider.fields.map((field) => {
                   const value =
                     field.name === "apiKey" ? apiKey
@@ -859,6 +899,13 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </div>
           )}
 
+          {kucoinFiles && (
+            <KucoinImportPanel
+              displayName={label.trim() || undefined}
+              onClose={() => onOpenChange(false)}
+            />
+          )}
+
           {missingKey ? (
             <div className="rounded-xl bg-violet-soft px-4 py-3 text-xs leading-relaxed text-foreground">
               Ce wallet est lu via {dataProviderLabel(missingKey)}, avec{" "}
@@ -878,6 +925,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             </div>
           ) : null}
 
+          {!kucoinFiles && (
           <DialogFooter className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={submitting} className="h-9 text-sm cursor-pointer">
               Annuler
@@ -918,6 +966,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
               )}
             </Button>
           </DialogFooter>
+          )}
         </form>
       </DialogContent>
     </Dialog>

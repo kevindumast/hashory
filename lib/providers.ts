@@ -78,6 +78,15 @@ export function providerLabel(id: string): string {
 }
 
 /**
+ * Vrai si ce compte-là est alimenté par fichier. Une plateforme à API
+ * (KuCoin) peut aussi être suivie par ses seuls exports : c'est alors le
+ * compte, et non la plateforme, qui le dit.
+ */
+export function isFileImportAccount(account: { provider: string; source?: string | null }): boolean {
+  return account.source === "file" || FILE_IMPORT_PROVIDERS.has(account.provider);
+}
+
+/**
  * Vrai si la source peut être resynchronisée — par API ou par lecture de
  * chaîne. Un import de fichier ne se met jamais à jour tout seul.
  */

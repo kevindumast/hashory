@@ -48,7 +48,7 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
-import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
+import { isFileImportAccount } from "@/lib/providers"
 import { PROVIDER_ICONS } from "@/lib/provider-icons"
 import { toast, withToast } from "@/lib/toast"
 import { assessSyncHealth, formatElapsed, type SyncHealth } from "@/lib/sync-health"
@@ -186,7 +186,7 @@ export function AccountsView() {
       return {
         id: integration._id,
         name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider || "Compte",
-        type: (FILE_IMPORT_PROVIDERS.has(integration.provider) ? "File" : "API") as "API" | "File",
+        type: (isFileImportAccount(integration) ? "File" : "API") as "API" | "File",
         platformId: integration.provider,
         iconUrl: PROVIDER_ICONS[integration.provider] || "",
         subAccountsCount: 1,
@@ -760,12 +760,21 @@ export function AccountsView() {
                           <DropdownMenuItem className="cursor-pointer">
                             <span className="text-sm">Renommer</span>
                           </DropdownMenuItem>
-                          {FILE_IMPORT_PROVIDERS.has(account.platformId) ? (
+                          {account.type === "File" ? (
                             <DropdownMenuItem
-                              onClick={() => account.platformId === "finary" ? setIsFinaryImportOpen(true) : setIsBitstackImportOpen(true)}
+                              onClick={() => {
+                                if (account.platformId === "kucoin") {
+                                  setKucoinImportIntegrationId(account.id)
+                                  setIsKucoinImportOpen(true)
+                                } else if (account.platformId === "finary") {
+                                  setIsFinaryImportOpen(true)
+                                } else {
+                                  setIsBitstackImportOpen(true)
+                                }
+                              }}
                               className="cursor-pointer flex items-center justify-between"
                             >
-                              <span className="text-sm">Importer un fichier CSV</span>
+                              <span className="text-sm">{account.platformId === "kucoin" ? "Importer les exports (.xlsx, .csv)" : "Importer un fichier CSV"}</span>
                               <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
                             </DropdownMenuItem>
                           ) : (
@@ -778,7 +787,7 @@ export function AccountsView() {
                               <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
                             </DropdownMenuItem>
                           )}
-                          {!FILE_IMPORT_PROVIDERS.has(account.platformId) && (<>
+                          {account.type !== "File" && (<>
                           <DropdownMenuItem
                             onClick={() => handleSyncFiatOnly(account.id)}
                             disabled={account.status === "syncing"}
@@ -821,7 +830,7 @@ export function AccountsView() {
                             onClick={() => { setKucoinImportIntegrationId(account.id); setIsKucoinImportOpen(true); }}
                             className="cursor-pointer flex items-center justify-between"
                           >
-                            <span className="text-sm">Importer fichiers CSV</span>
+                            <span className="text-sm">Importer les exports (.xlsx, .csv)</span>
                             <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
                           </DropdownMenuItem>
                           )}

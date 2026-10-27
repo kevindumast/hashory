@@ -721,11 +721,13 @@ export const syncAccount = action({
     })) as {
       provider: string;
       clerkUserId: string;
+      source?: "api" | "file";
       encryptedCredentials: { apiKey: string; apiSecret: string; passphrase?: string };
     } | null;
 
     if (!integration || integration.clerkUserId !== clerkUserId) throw new Error("Intégration introuvable.");
     if (integration.provider !== "kucoin") throw new Error("Cette intégration n'est pas de type KuCoin.");
+    if (integration.source === "file") throw new Error("Ce compte KuCoin est alimenté par ses exports : ajoutez une clé API pour le synchroniser.");
 
     const { apiKey, apiSecret, passphrase: encPassphrase } = integration.encryptedCredentials;
     if (!encPassphrase) throw new Error("Passphrase manquante pour cette intégration KuCoin.");
@@ -793,11 +795,13 @@ export const syncConvertsOnly = action({
     })) as {
       provider: string;
       clerkUserId: string;
+      source?: "api" | "file";
       encryptedCredentials: { apiKey: string; apiSecret: string; passphrase?: string };
     } | null;
 
     if (!integration || integration.clerkUserId !== clerkUserId) throw new Error("Intégration introuvable.");
     if (integration.provider !== "kucoin") throw new Error("Cette intégration n'est pas de type KuCoin.");
+    if (integration.source === "file") throw new Error("Ce compte KuCoin est alimenté par ses exports : ajoutez une clé API pour le synchroniser.");
 
     const { apiKey, apiSecret, passphrase: encPassphrase } = integration.encryptedCredentials;
     if (!encPassphrase) throw new Error("Passphrase manquante pour cette intégration KuCoin.");

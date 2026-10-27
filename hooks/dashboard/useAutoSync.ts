@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
-import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
+import { isFileImportAccount } from "@/lib/providers";
 import { dataProviderForSource } from "@/lib/data-providers";
 import type { Id } from "@/convex/_generated/dataModel";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
@@ -116,7 +116,7 @@ export function useAutoSync() {
       // Compte volontairement mis en pause : son historique reste exploité,
       // mais on cesse d'interroger son API.
       if (integration.syncEnabled === false) return false;
-      if (FILE_IMPORT_PROVIDERS.has(integration.provider)) return false;
+      if (isFileImportAccount(integration)) return false;
       // Une synchronisation déjà en cours ne doit pas être doublée.
       if (integration.syncStatus === "syncing") return false;
       // Wallet lu via un fournisseur dont l'utilisateur n'a pas fourni la
