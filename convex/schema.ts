@@ -137,6 +137,12 @@ export default defineSchema({
      * dormant, dont on veut garder l'historique sans plus l'interroger.
      */
     syncEnabled: v.optional(v.boolean()),
+    /**
+     * Mode d'alimentation, pour une plateforme qui accepte les deux (KuCoin) :
+     * « file » = historique importé depuis ses exports, sans clé ni
+     * synchronisation. Absent = le mode de la plateforme (`lib/providers`).
+     */
+    source: v.optional(v.union(v.literal("api"), v.literal("file"))),
   })
     .index("by_user", ["clerkUserId"])
     .index("by_user_provider", ["clerkUserId", "provider"]),

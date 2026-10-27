@@ -24,6 +24,8 @@ export type IntegrationRecord = {
   accountCreatedAt?: number | null;
   /** Synchronisation automatique active. Vrai par défaut. */
   syncEnabled: boolean;
+  /** « file » : compte d'une plateforme à API suivi par ses seuls exports. */
+  source?: "api" | "file" | null;
   publicAddress?: string | null;
 };
 

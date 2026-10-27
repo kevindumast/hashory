@@ -69,6 +69,7 @@ export const list = query({
         accountCreatedAt: integration.accountCreatedAt ?? null,
         // Absent = actif : le champ n'existe pas sur les comptes antérieurs.
         syncEnabled: integration.syncEnabled ?? true,
+        source: integration.source ?? null,
         publicAddress,
       };
     }));
@@ -191,6 +192,24 @@ export const upsert = mutation({
         encryptedCredentials,
         readOnly: args.readOnly,
         displayName: args.displayName,
+        updatedAt: now,
+      });
+      return { status: "updated", provider: args.provider };
+    }
+
+    // Un compte jusqu'ici alimenté par ses exports passe en API : on le
+    // complète plutôt que d'en créer un second, qui compterait chaque
+    // mouvement deux fois. Ses imports et la synchronisation se recoupent
+    // ensuite par hash de transaction.
+    const fileAccount = existingForProvider.find((integration) => integration.source === "file");
+    if (fileAccount) {
+      await ctx.db.patch(fileAccount._id, {
+        encryptedCredentials,
+        readOnly: args.readOnly,
+        displayName: args.displayName ?? fileAccount.displayName,
+        source: "api",
+        syncEnabled: true,
+        scopes: args.readOnly ? ["read"] : [],
         updatedAt: now,
       });
       return { status: "updated", provider: args.provider };
