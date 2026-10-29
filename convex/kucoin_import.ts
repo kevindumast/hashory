@@ -348,9 +348,12 @@ export const ingestXlsx = mutation({
       deposits.some((d) => String(d._id) === id && d.depositId.startsWith(CARD_PREFIX))
     ).length;
 
+    // `updatedAt` signale aux pages que les positions sont à recalculer.
     const integration = await ctx.db.get(integrationId);
     if (integration?.source === "file") {
       await ctx.db.patch(integrationId, { lastSyncedAt: now, syncStatus: "synced", updatedAt: now });
+    } else {
+      await ctx.db.patch(integrationId, { updatedAt: now });
     }
 
     return {

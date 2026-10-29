@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useAction, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
+import { useIntegrations } from "@/hooks/dashboard/useIntegrations";
 
 export type PortfolioSnapshot = {
   dayUtc: number;
@@ -24,26 +25,61 @@ const DAY_MS = 86_400_000;
  * Lance le recalcul du portefeuille (séries et rapport fiscal) à
  * l'affichage, au plus une fois par minute. L'action s'arrête aussitôt si
  * rien n'a changé depuis le dernier calcul : l'appeler souvent ne coûte rien.
+ *
+ * Un changement des données d'un compte — import, synchronisation, compte
+ * vidé ou supprimé — relance le calcul sans attendre : rien d'autre ne le
+ * signale à la page, qui gardait sinon les positions d'avant. Un seul calcul
+ * à la fois ; un changement survenu pendant le calcul en relance un.
  */
 export function useRecomputeTrigger(ready: boolean, deps: unknown): boolean {
   const { user } = useUser();
   const clerkId = user?.id ?? null;
   const recompute = useAction(api.portfolioSnapshots.recomputeForUser);
+  const { integrations, isLoading: integrationsLoading } = useIntegrations();
   const [isComputing, setIsComputing] = useState(false);
   const lastTriggerRef = useRef<number>(0);
+  const runningRef = useRef(false);
+  const pendingRef = useRef(false);
+  const lastSignatureRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!clerkId || !isConvexConfigured || !ready) return;
+  // Chaque écriture sur un compte déplace son `updatedAt`.
+  const dataSignature = integrationsLoading
+    ? null
+    : integrations.map((integration) => `${integration._id}:${integration.updatedAt}`).join("|");
 
-    const now = Date.now();
-    if (now - lastTriggerRef.current < 60_000) return;
-    lastTriggerRef.current = now;
-
+  const run = useCallback(() => {
+    if (runningRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+    runningRef.current = true;
+    lastTriggerRef.current = Date.now();
     setIsComputing(true);
     recompute({})
       .catch((err) => console.error("[snapshots] recompute failed", err))
-      .finally(() => setIsComputing(false));
-  }, [clerkId, ready, deps, recompute]);
+      .finally(() => {
+        runningRef.current = false;
+        setIsComputing(false);
+        if (pendingRef.current) {
+          pendingRef.current = false;
+          run();
+        }
+      });
+  }, [recompute]);
+
+  useEffect(() => {
+    if (!clerkId || !isConvexConfigured || !ready) return;
+    if (Date.now() - lastTriggerRef.current < 60_000) return;
+    run();
+  }, [clerkId, ready, deps, run]);
+
+  useEffect(() => {
+    if (!clerkId || !isConvexConfigured || !ready || dataSignature === null) return;
+    const previous = lastSignatureRef.current;
+    lastSignatureRef.current = dataSignature;
+    // Le premier relevé n'est pas un changement : le déclencheur ci-dessus s'en charge.
+    if (previous !== null && previous !== dataSignature) run();
+  }, [clerkId, ready, dataSignature, run]);
 
   return isComputing;
 }

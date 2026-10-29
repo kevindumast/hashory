@@ -398,6 +398,8 @@ export const purgeAllData = mutation({
     const syncStates = await purgeTable(() =>
       ctx.db.query("integrationSyncStates").withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", id)).collect()
     );
+    // Signale aux pages que les positions sont à recalculer.
+    await ctx.db.patch(id, { updatedAt: Date.now() });
 
     return { trades, orders, convertTrades, deposits, withdrawals, fiatTransactions, balances, syncStates };
   },
