@@ -8,6 +8,9 @@ import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 
 const DATASET_SPOT_TRADES = "spot_trades";
+const DATASET_ORDERS = "orders";
+/** Statuts définitifs d'un ordre Binance : il ne changera plus. */
+const FINAL_ORDER_STATUSES = new Set(["FILLED", "CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"]);
 const DATASET_CONVERT_TRADES = "convert_trades";
 const DATASET_FIAT_ORDERS = "fiat_orders";
 const DATASET_DEPOSITS = "capital_deposits";
@@ -959,8 +962,19 @@ export const syncOrdersScheduled = internalAction({
         const scope = symbol.toUpperCase();
         const symbolMeta = symbolCatalog.get(scope);
 
-        // Always start from the beginning for a manual sync — ingestBatch deduplicates
+        // Reprise là où la lecture précédente s'est arrêtée : au plus ancien
+        // ordre encore ouvert, sinon après le dernier lu. Relire toutes les
+        // paires depuis leur premier ordre à chaque synchronisation coûtait
+        // des centaines d'appels pour rien.
+        const syncState = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
+          integrationId: args.integrationId,
+          dataset: DATASET_ORDERS,
+          scope,
+        });
+        const savedNext = Number((syncState?.cursor as { nextOrderId?: unknown } | null)?.nextOrderId);
+        const startOrderId = Number.isFinite(savedNext) && savedNext > 0 ? savedNext : 0;
         let lastOrderId: number | null = null;
+        let oldestOpenOrderId: number | null = null;
 
         let iterations = 0;
 
@@ -974,9 +988,8 @@ export const syncOrdersScheduled = internalAction({
             // Continue from last seen orderId
             paramsMap.orderId = (lastOrderId + 1).toString();
           } else {
-            // First page: start from orderId=0 to get ALL historical orders.
-            // startTime="0" only covers a 24h window — orderId pagination has no time limit.
-            paramsMap.orderId = "0";
+            // Pagination par orderId : startTime seul ne couvre que 24 h.
+            paramsMap.orderId = startOrderId.toString();
           }
 
           const orders = (await signedGet(decryptedKey, decryptedSecret, "/api/v3/allOrders", paramsMap)) as Array<{
@@ -1050,12 +1063,26 @@ export const syncOrdersScheduled = internalAction({
             totalInserted += result.inserted;
           }
 
+          for (const order of orders) {
+            if (!FINAL_ORDER_STATUSES.has(order.status) && (oldestOpenOrderId === null || order.orderId < oldestOpenOrderId)) {
+              oldestOpenOrderId = order.orderId;
+            }
+          }
           const lastOrder = orders[orders.length - 1];
           lastOrderId = lastOrder.orderId;
 
           iterations += 1;
           if (orders.length < MAX_LIMIT || iterations > 1_000) break;
           await sleep(DELAY_FORWARD_REQUEST);
+        }
+
+        if (lastOrderId !== null) {
+          await ctx.runMutation(internal.integrations.updateSyncState, {
+            integrationId: args.integrationId,
+            dataset: DATASET_ORDERS,
+            scope,
+            cursor: { nextOrderId: oldestOpenOrderId ?? lastOrderId + 1 },
+          });
         }
       }
 
