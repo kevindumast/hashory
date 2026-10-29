@@ -16,6 +16,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import { reconcileBalances } from "@/lib/ledger";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
@@ -137,7 +138,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, integrations } =
+  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, reportedBalances, integrations } =
     useDashboardData();
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
@@ -1267,6 +1268,10 @@ export function DashboardNewLayout({
             lastActivityAt: number;
             hasAllPrices: boolean;
             tokens: PlatformTokenBreakdown[];
+            /** Écarts entre quantité calculée et solde publié, par jeton. */
+            balanceGaps: Map<string, { computed: number; reported: number }>;
+            /** Date du relevé des soldes publiés, null si la plateforme n'en publie pas. */
+            reportedAt: number | null;
           };
 
           const eurRateNow = fxRateAt(Date.now())?.eurPerUsd ?? null;
@@ -1286,6 +1291,32 @@ export function DashboardNewLayout({
               provider: integration.provider,
               displayName: integration.displayName ?? integration.provider,
             });
+          }
+
+          // Contrôle des soldes : ce que le grand livre calcule contre ce que la
+          // plateforme publie (« Sync Balances »). Un écart trahit un mouvement
+          // manquant — un trade non synchronisé laissait 112 USDC fantômes.
+          const computedByAccount = new Map<string, Map<string, number>>();
+          for (const position of ledgerAccounts) {
+            const byAsset = computedByAccount.get(position.account) ?? new Map<string, number>();
+            byAsset.set(position.asset, position.quantity);
+            computedByAccount.set(position.account, byAsset);
+          }
+          const gapsByProvider = new Map<string, Map<string, { computed: number; reported: number }>>();
+          for (const gap of reconcileBalances(computedByAccount, reportedBalances, 0.01, { includeUnreported: true })) {
+            // Moins de 50 centimes : des frais de quelques miettes, pas un mouvement manquant.
+            const price = priceUsdOf(gap.asset);
+            if (price !== undefined && Math.abs(gap.computed - gap.reported) * price < 0.5) continue;
+            const provider = metaByAccount.get(gap.account)?.provider ?? gap.account;
+            const byAsset = gapsByProvider.get(provider) ?? new Map<string, { computed: number; reported: number }>();
+            const line = byAsset.get(gap.asset) ?? { computed: 0, reported: 0 };
+            byAsset.set(gap.asset, { computed: line.computed + gap.computed, reported: line.reported + gap.reported });
+            gapsByProvider.set(provider, byAsset);
+          }
+          const reportedAtByProvider = new Map<string, number>();
+          for (const balance of reportedBalances) {
+            const provider = metaByAccount.get(balance.account)?.provider ?? balance.account;
+            reportedAtByProvider.set(provider, Math.max(reportedAtByProvider.get(provider) ?? 0, balance.updatedAt));
           }
 
           const lastActivityByProvider = new Map<string, number>();
@@ -1403,6 +1434,8 @@ export function DashboardNewLayout({
               lastActivityAt: lastActivityByProvider.get(p.provider) ?? 0,
               hasAllPrices,
               tokens,
+              balanceGaps: gapsByProvider.get(p.provider) ?? new Map(),
+              reportedAt: reportedAtByProvider.get(p.provider) ?? null,
             };
           }).sort((a, b) => b.currentValueUsd - a.currentValueUsd);
 
@@ -1508,7 +1541,25 @@ export function DashboardNewLayout({
                           <ProviderAvatar provider={s.provider} name={s.providerDisplayName} />
                           <div>
                             <div className="font-bold text-foreground text-xs">{s.providerDisplayName}</div>
-                            <div className="text-[10px] text-muted-foreground uppercase">{s.provider}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">
+                              {s.provider}
+                              {s.reportedAt !== null && (
+                                <span
+                                  className={`ml-1.5 normal-case ${s.balanceGaps.size > 0 ? "text-orange-600 dark:text-orange-400" : "text-positive"}`}
+                                  title={[
+                                    `Soldes publiés relevés le ${new Date(s.reportedAt).toLocaleString("fr-FR")}`,
+                                    ...[...s.balanceGaps].map(
+                                      ([asset, gap]) =>
+                                        `${asset} : calculé ${gap.computed.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}, publié ${gap.reported.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}`
+                                    ),
+                                  ].join("\n")}
+                                >
+                                  {s.balanceGaps.size > 0
+                                    ? `· ${s.balanceGaps.size} écart${s.balanceGaps.size > 1 ? "s" : ""} de solde`
+                                    : "· soldes vérifiés"}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1606,6 +1657,14 @@ export function DashboardNewLayout({
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
+                                        {s.balanceGaps.has(t.symbol) && (
+                                          <div
+                                            className="text-[10px] text-orange-600 dark:text-orange-400"
+                                            title={`Calculé : ${s.balanceGaps.get(t.symbol)!.computed.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}`}
+                                          >
+                                            publié : {s.balanceGaps.get(t.symbol)!.reported.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}
+                                          </div>
+                                        )}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.costBasis > 0 ? amount(t.costBasis, t.costBasisEur) : "—"}
