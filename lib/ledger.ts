@@ -588,20 +588,37 @@ export type BalanceGap = {
  * Compare les soldes recalculés depuis les transactions à ceux que publient
  * les plateformes. Un écart signale une opération manquante (staking,
  * airdrop, historique tronqué) : c'est le contrôle de cohérence du livre.
+ *
+ * `includeUnreported` : un actif calculé sur un compte qui publie ses soldes,
+ * mais absent de sa liste, vaut zéro chez la plateforme — qui ne liste pas
+ * les soldes nuls. Sans cela, un trade manqué laissant un reste fantôme
+ * passait inaperçu.
  */
 export function reconcileBalances(
   computed: Map<string, Map<string, number>>,
   reported: { account: string; asset: string; quantity: number }[],
-  tolerance = 0.01
+  tolerance = 0.01,
+  { includeUnreported = false }: { includeUnreported?: boolean } = {}
 ): BalanceGap[] {
   const gaps: BalanceGap[] = [];
+  const check = (account: string, asset: string, value: number, quantity: number) => {
+    const scale = Math.max(Math.abs(quantity), Math.abs(value), 1e-12);
+    const relativeGap = Math.abs(value - quantity) / scale;
+    if (relativeGap > tolerance && Math.abs(value - quantity) > 1e-8) {
+      gaps.push({ account, asset, computed: value, reported: quantity, relativeGap });
+    }
+  };
+  const seen = new Set<string>();
   for (const line of reported) {
     const asset = normalizeAsset(line.asset);
-    const value = computed.get(line.account)?.get(asset) ?? 0;
-    const scale = Math.max(Math.abs(line.quantity), Math.abs(value), 1e-12);
-    const relativeGap = Math.abs(value - line.quantity) / scale;
-    if (relativeGap > tolerance && Math.abs(value - line.quantity) > 1e-8) {
-      gaps.push({ account: line.account, asset, computed: value, reported: line.quantity, relativeGap });
+    seen.add(`${line.account}|${asset}`);
+    check(line.account, asset, computed.get(line.account)?.get(asset) ?? 0, line.quantity);
+  }
+  if (includeUnreported) {
+    for (const account of new Set(reported.map((line) => line.account))) {
+      for (const [asset, value] of computed.get(account) ?? []) {
+        if (!seen.has(`${account}|${asset}`)) check(account, asset, value, 0);
+      }
     }
   }
   return gaps;

@@ -479,10 +479,12 @@ export const getUserAssets = action({
         };
       });
 
-    // Persist to balances table
+    // `/api/v3/account` liste tous les actifs de Binance, à zéro compris :
+    // seuls ceux détenus sont gardés. Les lignes à zéro déjà enregistrées
+    // disparaissent, `upsertBatch` retirant les actifs absents.
     await ctx.runMutation(internal.balances.upsertBatch, {
       integrationId: args.integrationId,
-      assets: mapped,
+      assets: mapped.filter((asset) => resolveNumber(asset.totalPosition) > 0),
     });
 
     return mapped;

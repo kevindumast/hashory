@@ -47,6 +47,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // En développement, les fichiers de build ne changent pas de nom quand
+  // leur contenu change : un worker resté enregistré servait du code périmé.
+  if (["localhost", "127.0.0.1", "[::1]"].includes(self.location.hostname)) {
+    return;
+  }
+
   // Fichiers de build : leur nom change avec leur contenu, le cache ne peut
   // pas les périmer.
   if (url.pathname.startsWith("/_next/static/")) {
