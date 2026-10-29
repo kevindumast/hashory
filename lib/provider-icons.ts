@@ -23,6 +23,7 @@ export const PROVIDER_ICONS: Record<string, string> = {
   kucoin: `${CMC_EXCHANGE}/311.png`,
   bitcoin: `${CMC_COIN}/1.png`,
   ethereum: `${CMC_COIN}/1027.png`,
+  bsc: `${CMC_COIN}/1839.png`,
   arbitrum: `${CMC_COIN}/11841.png`,
   solana: `${CMC_COIN}/5426.png`,
   kaspa: `${CMC_COIN}/20396.png`,

@@ -9,6 +9,8 @@ const PLATFORMS = [
   { name: "Kraken", id: "kraken", kind: "API" },
   { name: "Bitcoin", id: "bitcoin", kind: "Wallet" },
   { name: "Ethereum", id: "ethereum", kind: "Wallet" },
+  { name: "BNB Smart Chain", id: "bsc", kind: "Wallet" },
+  { name: "Arbitrum", id: "arbitrum", kind: "Wallet" },
   { name: "Solana", id: "solana", kind: "Wallet" },
   { name: "Kaspa", id: "kaspa", kind: "Wallet" },
   { name: "Bittensor", id: "tao", kind: "Wallet" },

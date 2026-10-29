@@ -1,11 +1,30 @@
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
 import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 
-const ETHERSCAN_API_BASE = "https://api.etherscan.io/v2/api?chainid=1";
+/**
+ * Chaînes compatibles EVM lues par l'API Etherscan V2 : une seule clé
+ * Etherscan couvre toutes les chaînes, seul le `chainid` change. Le jeton
+ * natif, lui, diffère — de l'ETH sur Arbitrum, du BNB sur BSC.
+ */
+type EvmChain = {
+  provider: "ethereum" | "bsc" | "arbitrum";
+  label: string;
+  chainId: number;
+  nativeSymbol: string;
+};
+
+const EVM_CHAINS = {
+  ethereum: { provider: "ethereum", label: "Ethereum", chainId: 1, nativeSymbol: "ETH" },
+  bsc: { provider: "bsc", label: "BNB Smart Chain", chainId: 56, nativeSymbol: "BNB" },
+  arbitrum: { provider: "arbitrum", label: "Arbitrum One", chainId: 42161, nativeSymbol: "ETH" },
+} as const satisfies Record<string, EvmChain>;
+
+const ETHERSCAN_API_BASE = "https://api.etherscan.io/v2/api";
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 
@@ -43,71 +62,108 @@ interface SyncCursor {
   lastBlockNumber: number;
 }
 
+const walletArgs = { integrationId: v.id("integrations") };
+
 export const syncEthereumWallet = action({
-  args: {
-    integrationId: v.id("integrations"),
-  },
-  handler: async (ctx, args) => {
-    const clerkUserId = await requireUserId(ctx);
-    const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
-      integrationId: args.integrationId,
-    });
+  args: walletArgs,
+  handler: (ctx, args) => syncEvmWallet(ctx, EVM_CHAINS.ethereum, args),
+});
 
-    if (!integration || integration.clerkUserId !== clerkUserId) {
-      throw new Error("Integration not found");
-    }
+export const syncBscWallet = action({
+  args: walletArgs,
+  handler: (ctx, args) => syncEvmWallet(ctx, EVM_CHAINS.bsc, args),
+});
 
-    if (integration.provider !== "ethereum") {
-      throw new Error("Cette intégration n'est pas de type Ethereum");
-    }
+export const syncArbitrumWallet = action({
+  args: walletArgs,
+  handler: (ctx, args) => syncEvmWallet(ctx, EVM_CHAINS.arbitrum, args),
+});
 
-    // La clé de l'utilisateur, jamais celle de l'hébergeur.
-    const apiKey = await requireDataProviderKey(ctx, clerkUserId, "etherscan");
+async function syncEvmWallet(
+  ctx: ActionCtx,
+  chain: EvmChain,
+  args: { integrationId: Id<"integrations"> }
+) {
+  const clerkUserId = await requireUserId(ctx);
+  const integration = await ctx.runQuery(internal.integrations.getByIdInternal, {
+    integrationId: args.integrationId,
+  });
 
-    const walletAddress = decryptSecret(integration.encryptedCredentials.apiKey);
-    if (!walletAddress) {
-      throw new Error("Wallet address not found");
-    }
+  if (!integration || integration.clerkUserId !== clerkUserId) {
+    throw new Error("Integration not found");
+  }
 
-    const address = walletAddress.toLowerCase();
+  if (integration.provider !== chain.provider) {
+    throw new Error(`Cette intégration n'est pas de type ${chain.label}`);
+  }
+
+  // La clé de l'utilisateur, jamais celle de l'hébergeur.
+  const apiKey = await requireDataProviderKey(ctx, clerkUserId, "etherscan");
+
+  const walletAddress = decryptSecret(integration.encryptedCredentials.apiKey);
+  if (!walletAddress) {
+    throw new Error("Wallet address not found");
+  }
+
+  const address = walletAddress.toLowerCase();
+
+  await ctx.runMutation(internal.integrations.updateSyncStatus, {
+    integrationId: args.integrationId,
+    syncStatus: "syncing",
+  });
+
+  try {
+    await syncNativeTransfers(ctx, chain, args.integrationId, address, apiKey);
+    await syncTokenTransfers(ctx, chain, args.integrationId, address, apiKey);
 
     await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId: args.integrationId,
-      syncStatus: "syncing",
+      syncStatus: "synced",
     });
 
-    try {
-      await syncNativeEth(ctx, args.integrationId, address, apiKey);
-      await syncErc20(ctx, args.integrationId, address, apiKey);
+    // Date de dernière réussite : c'est elle qui permet de savoir quand
+    // une source doit être resynchronisée.
+    await ctx.runMutation(internal.integrations.updateMetadata, {
+      integrationId: args.integrationId,
+      lastSyncedAt: Date.now(),
+    });
+  } catch (error) {
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "error",
+    });
+    throw error;
+  }
+}
 
-      await ctx.runMutation(internal.integrations.updateSyncStatus, {
-        integrationId: args.integrationId,
-        syncStatus: "synced",
-      });
+/**
+ * Erreur métier tirée d'une réponse Etherscan en échec, ou null si la
+ * réponse dit seulement qu'il n'y a rien à lire.
+ */
+function etherscanError(chain: EvmChain, data: EtherscanResponse<unknown>): Error | null {
+  if (data.message === "No transactions found") return null;
+  const detail = typeof data.result === "string" ? data.result : "";
+  // Etherscan répond 200 même à une clé refusée : seul le détail le dit.
+  if (/invalid api key/i.test(detail)) {
+    return rejectedDataProviderKey("etherscan");
+  }
+  // L'offre gratuite d'Etherscan ne couvre pas toutes les chaînes.
+  if (/not supported for this chain|upgrade your api plan/i.test(detail)) {
+    return new Error(
+      `Votre offre Etherscan ne donne pas accès à ${chain.label} : une offre payante est nécessaire pour cette chaîne.`
+    );
+  }
+  return new Error(`Etherscan error: ${data.message} ${detail}`.trim());
+}
 
-      // Date de dernière réussite : c'est elle qui permet de savoir quand
-      // une source doit être resynchronisée.
-      await ctx.runMutation(internal.integrations.updateMetadata, {
-        integrationId: args.integrationId,
-        lastSyncedAt: Date.now(),
-      });
-    } catch (error) {
-      await ctx.runMutation(internal.integrations.updateSyncStatus, {
-        integrationId: args.integrationId,
-        syncStatus: "error",
-      });
-      throw error;
-    }
-  },
-});
-
-async function syncNativeEth(
+async function syncNativeTransfers(
   ctx: any,
+  chain: EvmChain,
   integrationId: any,
   address: string,
   apiKey: string
 ) {
-  const dataset = "ethereum_native";
+  const dataset = `${chain.provider}_native`;
   const scope = address;
 
   const state = await ctx.runQuery(api.integrations.getSyncState, {
@@ -124,7 +180,7 @@ async function syncNativeEth(
   let hasMore = true;
 
   while (hasMore) {
-    const url = `${ETHERSCAN_API_BASE}&module=account&action=txlist&address=${address}&startblock=${startBlock}&endblock=99999999&page=${page}&offset=${PAGE_SIZE}&sort=asc&apikey=${apiKey}`;
+    const url = `${ETHERSCAN_API_BASE}?chainid=${chain.chainId}&module=account&action=txlist&address=${address}&startblock=${startBlock}&endblock=99999999&page=${page}&offset=${PAGE_SIZE}&sort=asc&apikey=${apiKey}`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -134,13 +190,9 @@ async function syncNativeEth(
     const data = (await response.json()) as EtherscanResponse<EtherscanTx>;
 
     if (data.status !== "1") {
-      if (data.message === "No transactions found") break;
-      const detail = typeof data.result === "string" ? data.result : "";
-      // Etherscan répond 200 même à une clé refusée : seul le détail le dit.
-      if (/invalid api key/i.test(detail)) {
-        throw rejectedDataProviderKey("etherscan");
-      }
-      throw new Error(`Etherscan error: ${data.message} ${detail}`.trim());
+      const error = etherscanError(chain, data);
+      if (!error) break;
+      throw error;
     }
 
     const txs = Array.isArray(data.result) ? data.result : [];
@@ -175,16 +227,16 @@ async function syncNativeEth(
       if (value === BigInt(0)) continue;
 
       const timeStamp = parseInt(tx.timeStamp, 10) * 1000;
-      const amountEth = Number(value) / 1e18;
+      const amountNative = Number(value) / 1e18;
       const from = tx.from.toLowerCase();
       const to = tx.to.toLowerCase();
 
       if (to === address && from !== address) {
         deposits.push({
-          depositId: `${tx.hash}-eth-in`,
-          coin: "ETH",
-          amount: amountEth,
-          network: "ethereum",
+          depositId: `${tx.hash}-${chain.nativeSymbol.toLowerCase()}-in`,
+          coin: chain.nativeSymbol,
+          amount: amountNative,
+          network: chain.provider,
           status: "CONFIRMED",
           insertTime: timeStamp,
           txId: tx.hash,
@@ -192,10 +244,10 @@ async function syncNativeEth(
       } else if (from === address) {
         const gasFee = Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
         withdrawals.push({
-          withdrawId: `${tx.hash}-eth-out`,
-          coin: "ETH",
-          amount: amountEth,
-          network: "ethereum",
+          withdrawId: `${tx.hash}-${chain.nativeSymbol.toLowerCase()}-out`,
+          coin: chain.nativeSymbol,
+          amount: amountNative,
+          network: chain.provider,
           status: "CONFIRMED",
           applyTime: timeStamp,
           txId: tx.hash,
@@ -227,13 +279,14 @@ async function syncNativeEth(
   });
 }
 
-async function syncErc20(
+async function syncTokenTransfers(
   ctx: any,
+  chain: EvmChain,
   integrationId: any,
   address: string,
   apiKey: string
 ) {
-  const dataset = "ethereum_erc20";
+  const dataset = `${chain.provider}_erc20`;
   const scope = address;
 
   const state = await ctx.runQuery(api.integrations.getSyncState, {
@@ -250,7 +303,7 @@ async function syncErc20(
   let hasMore = true;
 
   while (hasMore) {
-    const url = `${ETHERSCAN_API_BASE}&module=account&action=tokentx&address=${address}&startblock=${startBlock}&endblock=99999999&page=${page}&offset=${PAGE_SIZE}&sort=asc&apikey=${apiKey}`;
+    const url = `${ETHERSCAN_API_BASE}?chainid=${chain.chainId}&module=account&action=tokentx&address=${address}&startblock=${startBlock}&endblock=99999999&page=${page}&offset=${PAGE_SIZE}&sort=asc&apikey=${apiKey}`;
 
     const response = await fetch(url);
     if (!response.ok) {
@@ -260,13 +313,9 @@ async function syncErc20(
     const data = (await response.json()) as EtherscanResponse<EtherscanTokenTx>;
 
     if (data.status !== "1") {
-      if (data.message === "No transactions found") break;
-      const detail = typeof data.result === "string" ? data.result : "";
-      // Etherscan répond 200 même à une clé refusée : seul le détail le dit.
-      if (/invalid api key/i.test(detail)) {
-        throw rejectedDataProviderKey("etherscan");
-      }
-      throw new Error(`Etherscan error: ${data.message} ${detail}`.trim());
+      const error = etherscanError(chain, data);
+      if (!error) break;
+      throw error;
     }
 
     const txs = Array.isArray(data.result) ? data.result : [];
@@ -313,7 +362,7 @@ async function syncErc20(
           depositId: `${tx.hash}-${contract}-in`,
           coin: symbol,
           amount,
-          network: "ethereum",
+          network: chain.provider,
           status: "CONFIRMED",
           insertTime: timeStamp,
           txId: tx.hash,
@@ -323,7 +372,7 @@ async function syncErc20(
           withdrawId: `${tx.hash}-${contract}-out`,
           coin: symbol,
           amount,
-          network: "ethereum",
+          network: chain.provider,
           status: "CONFIRMED",
           applyTime: timeStamp,
           txId: tx.hash,

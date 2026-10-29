@@ -6,12 +6,17 @@
 
 const BASE58 = "1-9A-HJ-NP-Za-km-z";
 
+/** Les chaînes EVM partagent le même format d'adresse. */
+const EVM_ADDRESS = { pattern: /^0x[0-9a-fA-F]{40}$/, example: "0x suivi de 40 caractères hexadécimaux" };
+
 const PATTERNS: Record<string, { pattern: RegExp; example: string }> = {
   bitcoin: {
     pattern: new RegExp(`^(bc1[02-9ac-hj-np-z]{11,71}|[13][${BASE58}]{25,34})$`),
     example: "bc1q…, 1… ou 3…",
   },
-  ethereum: { pattern: /^0x[0-9a-fA-F]{40}$/, example: "0x suivi de 40 caractères hexadécimaux" },
+  ethereum: EVM_ADDRESS,
+  bsc: EVM_ADDRESS,
+  arbitrum: EVM_ADDRESS,
   solana: { pattern: new RegExp(`^[${BASE58}]{32,44}$`), example: "32 à 44 caractères base58" },
   kaspa: { pattern: /^kaspa:[a-z0-9]{61,63}$/, example: "kaspa:q…" },
   tao: { pattern: new RegExp(`^5[${BASE58}]{46,47}$`), example: "5… (SS58)" },

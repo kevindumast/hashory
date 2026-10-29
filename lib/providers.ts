@@ -31,6 +31,8 @@ export const PROVIDERS = [
   { id: "kucoin", label: "KuCoin", kind: "api" },
   { id: "bitcoin", label: "Bitcoin", kind: "wallet" },
   { id: "ethereum", label: "Ethereum", kind: "wallet" },
+  { id: "bsc", label: "BNB Smart Chain", kind: "wallet" },
+  { id: "arbitrum", label: "Arbitrum One", kind: "wallet" },
   { id: "solana", label: "Solana", kind: "wallet" },
   { id: "kaspa", label: "Kaspa", kind: "wallet" },
   { id: "tao", label: "Bittensor", kind: "wallet" },

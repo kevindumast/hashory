@@ -15,6 +15,13 @@ describe("adresses de wallet", () => {
     assert.notEqual(walletAddressError("ethereum", "bc1qqawl77d0nexhv2sx2vxr50ega65f67qqy35w6r"), null);
   });
 
+  it("applique le format EVM à BSC et Arbitrum", () => {
+    for (const chain of ["bsc", "arbitrum"]) {
+      assert.equal(walletAddressError(chain, "0xE62cD3e7b0Afe4D43b03435C737072E77cbF1FB4"), null, chain);
+      assert.notEqual(walletAddressError(chain, "5YNmS1R9nNSCDzb5a7mMJ1dwK9uHeAAF4CmPEwKgVWr8"), null, chain);
+    }
+  });
+
   it("ne contrôle pas les plateformes sans adresse", () => {
     assert.equal(walletAddressError("binance", "n'importe quoi"), null);
   });

@@ -73,6 +73,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   kucoin: "KuCoin",
   ethereum: "Ethereum",
   bitcoin: "Bitcoin",
+  bsc: "BNB Smart Chain",
   arbitrum: "Arbitrum One",
   solana: "Solana",
   kaspa: "Kaspa",
@@ -135,6 +136,8 @@ export function AccountsView() {
   const syncSpotTrades = useAction(api.binance.syncSpotTradesOnly)
   const syncKaspaWallet = useAction(api.kaspa.syncKaspaWallet)
   const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
+  const syncBscWallet = useAction(api.ethereum.syncBscWallet)
+  const syncArbitrumWallet = useAction(api.ethereum.syncArbitrumWallet)
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
   const syncBitcoinWallet = useAction(api.bitcoin.syncBitcoinWallet)
   const syncTaoWallet = useAction(api.tao.syncTaoWallet)
@@ -272,6 +275,10 @@ export function AccountsView() {
           await syncKaspaWallet({ integrationId: accountId })
         } else if (providerKey === "ethereum") {
           await syncEthereumWallet({ integrationId: accountId })
+        } else if (providerKey === "bsc") {
+          await syncBscWallet({ integrationId: accountId })
+        } else if (providerKey === "arbitrum") {
+          await syncArbitrumWallet({ integrationId: accountId })
         } else if (providerKey === "solana") {
           await syncSolanaWallet({ integrationId: accountId })
         } else if (providerKey === "bitcoin") {
@@ -310,7 +317,7 @@ export function AccountsView() {
     // Wait a brief moment before refreshing
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncBscWallet, syncArbitrumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {

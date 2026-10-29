@@ -284,6 +284,34 @@ const providerConfigs: ProviderConfig[] = [
     ],
   },
   {
+    value: "bsc",
+    label: "BNB Smart Chain",
+    description: "Connexion par adresse publique BNB Smart Chain (BSC).",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse BSC",
+        placeholder: "0x...",
+        helper: "Adresse publique — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "arbitrum",
+    label: "Arbitrum One",
+    description: "Connexion par adresse publique Arbitrum One.",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Arbitrum",
+        placeholder: "0x...",
+        helper: "Adresse publique — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
     value: "solana",
     label: "Solana",
     description: "Connexion par adresse publique Solana.",
