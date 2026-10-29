@@ -197,7 +197,12 @@ export function AccountsView() {
       return {
         id: integration._id,
         // Le nom choisi par l'utilisateur d'abord : celui de la plateforme masquait tout renommage.
-        name: integration.displayName || PROVIDER_NAMES[integration.provider] || integration.provider || "Compte",
+        // Des comptes ont reçu l'identifiant de la plateforme pour nom (« kraken ») : ce n'en est pas un.
+        name:
+          (integration.displayName !== integration.provider && integration.displayName) ||
+          PROVIDER_NAMES[integration.provider] ||
+          integration.provider ||
+          "Compte",
         type: (isFileImportAccount(integration) ? "File" : "API") as "API" | "File",
         platformId: integration.provider,
         iconUrl: PROVIDER_ICONS[integration.provider] || "",
