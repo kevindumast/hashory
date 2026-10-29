@@ -474,8 +474,14 @@ export function useDashboardMetrics(refreshToken: number) {
 
   // Une plateforme peut lister des centaines d'actifs à zéro : ils ne
   // disent rien et gonflaient la liste des jetons.
-  const balanceList: BalanceRecord[] = (Array.isArray(balances) ? balances : []).filter(
-    (balance) => parseAmount(balance.totalPosition ?? balance.free ?? "0") > 0
+  // Mémorisé : un nouveau tableau à chaque rendu recalculait les jetons,
+  // donc les paires de prix, donc une requête de prix… en boucle.
+  const balanceList: BalanceRecord[] = useMemo(
+    () =>
+      (Array.isArray(balances) ? balances : []).filter(
+        (balance) => parseAmount(balance.totalPosition ?? balance.free ?? "0") > 0
+      ),
+    [balances]
   );
   const reportedBalances = useMemo(
     () =>
