@@ -52,6 +52,7 @@ import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-d
 import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
 import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
+import { TransactionsPerYear } from "@/components/dashboard/transactions-per-year"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
@@ -884,6 +885,8 @@ export function AccountsView() {
           ))
         )}
       </div>
+
+      {!isLoading && <TransactionsPerYear transactions={transactions} />}
 
       <ConnectProviderDialog open={isConnectOpen} onOpenChange={(open) => {
         setIsConnectOpen(open)
