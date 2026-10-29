@@ -2626,13 +2626,12 @@ async function syncSymbolTrades(
       recvWindow: RECEIPT_WINDOW_MS.toString(),
     };
 
-    if (lastTradeId !== null) {
-      paramsMap.fromId = (lastTradeId + 1).toString();
-    } else if (lastTradeTime !== null) {
-      paramsMap.startTime = lastTradeTime.toString();
-    } else {
-      paramsMap.startTime = "0";
-    }
+    // Pagination par identifiant uniquement : `startTime` seul ne couvre que
+    // 24 h chez Binance. Une paire sans identifiant connu était lue sur la
+    // journée suivant son curseur, et tout trade postérieur échappait à la
+    // synchronisation. Sans identifiant, on repart du premier trade —
+    // `ingestBatch` écarte les doublons.
+    paramsMap.fromId = lastTradeId !== null ? (lastTradeId + 1).toString() : "0";
 
     const trades = (await signedGet(params.apiKey, params.apiSecret, "/api/v3/myTrades", paramsMap)) as BinanceTrade[];
 
