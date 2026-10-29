@@ -131,6 +131,7 @@ export function AccountsView() {
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
   const syncOrders = useAction(api.binance.syncOrdersOnly)
+  const syncSpotTrades = useAction(api.binance.syncSpotTradesOnly)
   const syncKaspaWallet = useAction(api.kaspa.syncKaspaWallet)
   const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
@@ -432,6 +433,31 @@ export function AccountsView() {
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
   }, [handleRefresh, syncOrders])
+
+  const handleSyncSpotTrades = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
+      return
+    }
+
+    const result = await withToast(
+      () => syncSpotTrades({ integrationId: accountId }),
+      {
+        loading: "Synchronisation des trades spot…",
+        success: (r) =>
+          r.inserted > 0
+            ? `${r.inserted} trade${r.inserted > 1 ? "s" : ""} ajouté${r.inserted > 1 ? "s" : ""} (${r.symbols} paires lues)`
+            : `Trades à jour (${r.symbols} paires lues)`,
+        error: "Échec de la synchronisation des trades spot",
+      }
+    )
+
+    if (!result) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
+  }, [handleRefresh, syncSpotTrades])
 
   const handlePurgeData = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -838,6 +864,13 @@ export function AccountsView() {
                             className="cursor-pointer"
                           >
                             <span className="text-sm">Sync Order History</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncSpotTrades(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer"
+                          >
+                            <span className="text-sm">Sync Trades spot</span>
                           </DropdownMenuItem>
                           {account.platformId === "kucoin" && (
                           <DropdownMenuItem

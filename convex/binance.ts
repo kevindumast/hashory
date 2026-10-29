@@ -714,20 +714,48 @@ export const syncSpotTradesScheduled = internalAction({
   },
 });
 
-/** Version appelable depuis l'interface : mêmes étapes, appelant vérifié. */
+/**
+ * Version appelable depuis l'interface : mêmes étapes, appelant vérifié.
+ * Sans liste de paires, celles d'une synchronisation complète — soldes,
+ * paires déjà lues, paires courantes — : de quoi rattraper un trade manqué
+ * sans relancer dépôts, retraits, conversions et ordres.
+ */
 export const syncSpotTradesOnly = action({
   args: {
     integrationId: v.id("integrations"),
-    symbols: v.array(v.string()),
+    symbols: v.optional(v.array(v.string())),
     startTime: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<{ fetched: number; inserted: number }> => {
-    await authorizeIntegration(ctx, args.integrationId);
-    const result = (await ctx.runAction(internal.binance.syncSpotTradesScheduled, args)) as {
-      fetched: number;
-      inserted: number;
+  handler: async (ctx, args): Promise<{ symbols: number; fetched: number; inserted: number }> => {
+    const integration = (await authorizeIntegration(ctx, args.integrationId)) as IntegrationRecord & {
+      encryptedCredentials: { apiKey: string; apiSecret: string };
     };
-    return { fetched: result.fetched, inserted: result.inserted };
+    if (integration.provider !== "binance") {
+      throw new Error("Cette intégration n'est pas de type Binance.");
+    }
+
+    let symbols = args.symbols;
+    if (!symbols) {
+      const detection = await detectSymbols(ctx, {
+        integrationId: args.integrationId,
+        clerkUserId: integration.clerkUserId,
+        apiKey: decryptSecret(integration.encryptedCredentials.apiKey),
+        apiSecret: decryptSecret(integration.encryptedCredentials.apiSecret),
+        explicitSymbols: [],
+      });
+      symbols = detection.symbols;
+    }
+
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+    const result = (await ctx.runAction(internal.binance.syncSpotTradesScheduled, {
+      integrationId: args.integrationId,
+      symbols,
+      startTime: args.startTime,
+    })) as { fetched: number; inserted: number };
+    return { symbols: symbols.length, fetched: result.fetched, inserted: result.inserted };
   },
 });
 
