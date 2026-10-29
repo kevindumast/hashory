@@ -386,6 +386,15 @@ export function DashboardNewLayout({
    */
   const amount = (usd: number, eur: number | null | undefined): string =>
     displayCurrency === "EUR" && eur !== null && eur !== undefined ? eurFormatter.format(eur) : money(usd);
+  /** La valeur que `amount` affiche : c'est elle qui donne le signe et la couleur. */
+  const shown = (usd: number, eur: number | null | undefined): number =>
+    displayCurrency === "EUR" && eur !== null && eur !== undefined ? eur : usd;
+  /**
+   * Résultat signé. Le signe suit la devise affichée : un coût en euros
+   * historiques peut laisser un gain en euros et une perte en dollars.
+   */
+  const signed = (usd: number, eur: number | null | undefined): string =>
+    `${shown(usd, eur) >= 0 ? "+" : ""}${amount(usd, eur)}`;
 
   const chartDays = useMemo(
     () => filteredHoldings.map((point) => point.timestamp),
@@ -1001,7 +1010,7 @@ export function DashboardNewLayout({
                             {currentValue !== null ? money(currentValue) : "—"}
                           </div>
                           <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
-                            {totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}` : "—"}
+                            {totalPnl !== null ? signed(totalPnl, totalPnlEur) : "—"}
                           </div>
                         </div>
                       </li>
@@ -1169,19 +1178,19 @@ export function DashboardNewLayout({
                                 <span className="text-muted-foreground/70">—</span>
                               )}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${shown(realized, realizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
-                                ? `${realized >= 0 ? "+" : ""}${amount(realized, realizedEur)}`
+                                ? signed(realized, realizedEur)
                                 : <span className="text-muted-foreground/70">—</span>}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : shown(unrealized, unrealizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
-                                ? `${(unrealizedEur ?? unrealized) >= 0 ? "+" : ""}${amount(unrealized, unrealizedEur)}`
+                                ? signed(unrealized, unrealizedEur)
                                 : "—"}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : shown(totalPnl, totalPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
-                                ? `${(totalPnlEur ?? totalPnl) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}`
+                                ? signed(totalPnl, totalPnlEur)
                                 : amount(realized, realizedEur)}
                             </td>
                           </tr>
@@ -1433,7 +1442,7 @@ export function DashboardNewLayout({
                         {hasCurrentPrices && s.currentValueUsd > 0 ? money(s.currentValueUsd) : "—"}
                       </div>
                       <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
-                        {s.totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}` : "—"}
+                        {s.totalPnl !== null ? signed(s.totalPnl, s.totalPnlEur) : "—"}
                       </div>
                     </div>
                   </li>
@@ -1534,19 +1543,19 @@ export function DashboardNewLayout({
                           <span className="text-muted-foreground/70">—</span>
                         )}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${shown(s.realizedPnl, s.realizedPnlEur) > 0 ? "text-positive" : shown(s.realizedPnl, s.realizedPnlEur) < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                         {s.realizedPnl !== 0
-                          ? `${s.realizedPnl >= 0 ? "+" : ""}${amount(s.realizedPnl, s.realizedPnlEur)}`
+                          ? signed(s.realizedPnl, s.realizedPnlEur)
                           : "—"}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : shown(s.unrealizedPnl, s.unrealizedPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.unrealizedPnl !== null
-                          ? `${(s.unrealizedPnlEur ?? s.unrealizedPnl) >= 0 ? "+" : ""}${amount(s.unrealizedPnl, s.unrealizedPnlEur)}`
+                          ? signed(s.unrealizedPnl, s.unrealizedPnlEur)
                           : "—"}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : shown(s.totalPnl, s.totalPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.totalPnl !== null
-                          ? `${(s.totalPnlEur ?? s.totalPnl) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}`
+                          ? signed(s.totalPnl, s.totalPnlEur)
                           : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground text-[11px]">
@@ -1609,14 +1618,14 @@ export function DashboardNewLayout({
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
                                         {t.currentValue !== null ? money(t.currentValue) : "—"}
                                       </td>
-                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${shown(t.realized, t.realizedEur) > 0 ? "text-positive" : shown(t.realized, t.realizedEur) < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                                         {t.realized !== 0
-                                          ? `${t.realized >= 0 ? "+" : ""}${amount(t.realized, t.realizedEur)}`
+                                          ? signed(t.realized, t.realizedEur)
                                           : "—"}
                                       </td>
-                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : shown(t.unrealized, t.unrealizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                                         {t.unrealized !== null
-                                          ? `${(t.unrealizedEur ?? t.unrealized) >= 0 ? "+" : ""}${amount(t.unrealized, t.unrealizedEur)}`
+                                          ? signed(t.unrealized, t.unrealizedEur)
                                           : "—"}
                                       </td>
                                     </tr>

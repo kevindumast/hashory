@@ -201,6 +201,14 @@ export const ingestXlsx = mutation({
       if (docId) await ctx.db.delete(docId);
     }
 
+    // Conversions importées à l'heure de leur mise à jour : ramenées à
+    // l'heure réelle, sous le même identifiant.
+    for (const { providerTradeId, executedAt } of plan.retimedConverts) {
+      for (const doc of [...trades, ...converts]) {
+        if (doc.providerTradeId === providerTradeId) await ctx.db.patch(doc._id, { executedAt });
+      }
+    }
+
     for (const trade of plan.spotTrades) {
       await ctx.db.insert("trades", {
         integrationId,
@@ -350,6 +358,7 @@ export const ingestXlsx = mutation({
       createdAccount,
       spotInserted: plan.spotTrades.length,
       convertsInserted: plan.converts.length,
+      convertsRetimed: plan.retimedConverts.length,
       depositsInserted: plan.deposits.length,
       withdrawalsInserted: plan.withdrawals.length,
       cardPurchasesInserted: plan.cardTrades.length + plan.cardDeposits.length - plan.deleteTradeIds.length - replacedCards,
