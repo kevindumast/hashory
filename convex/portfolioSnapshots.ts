@@ -312,7 +312,11 @@ export const recomputeForUser = action({
     if (!force && isUpToDate) return { status: "up-to-date" };
 
     const operations = buildLedger(input);
-    if (operations.length === 0) return { status: "no-events" };
+    if (operations.length === 0) {
+      // Comptes vidés ou supprimés : leurs positions ne doivent pas survivre.
+      await ctx.runMutation(internal.portfolioSnapshots.replacePositions, { clerkId, positions: [], accounts: [] });
+      return { status: "no-events" };
+    }
     const earliest = operations[0].timestamp;
     const fromDay = startOfUtcDay(earliest);
 
