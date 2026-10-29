@@ -31,6 +31,14 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -99,6 +107,8 @@ export function AccountsView() {
   const [isBitstackImportOpen, setIsBitstackImportOpen] = React.useState(false)
   const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
   const [isKucoinImportOpen, setIsKucoinImportOpen] = React.useState(false)
+  const [renameTarget, setRenameTarget] = React.useState<{ id: Id<"integrations">; name: string } | null>(null)
+  const [renameValue, setRenameValue] = React.useState("")
   const [kucoinImportIntegrationId, setKucoinImportIntegrationId] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
@@ -130,6 +140,7 @@ export function AccountsView() {
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
   const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
   const cancelSync = useMutation(api.integrations.cancelSync)
+  const renameIntegration = useMutation(api.integrations.rename)
   const dataProviderKeys = useQuery(api.dataProviderKeys.list)
   const now = useNow()
 
@@ -185,7 +196,8 @@ export function AccountsView() {
 
       return {
         id: integration._id,
-        name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider || "Compte",
+        // Le nom choisi par l'utilisateur d'abord : celui de la plateforme masquait tout renommage.
+        name: integration.displayName || PROVIDER_NAMES[integration.provider] || integration.provider || "Compte",
         type: (isFileImportAccount(integration) ? "File" : "API") as "API" | "File",
         platformId: integration.provider,
         iconUrl: PROVIDER_ICONS[integration.provider] || "",
@@ -757,7 +769,13 @@ export function AccountsView() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem className="cursor-pointer">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setRenameTarget({ id: account.id as Id<"integrations">, name: account.name })
+                              setRenameValue(account.name)
+                            }}
+                            className="cursor-pointer"
+                          >
                             <span className="text-sm">Renommer</span>
                           </DropdownMenuItem>
                           {account.type === "File" ? (
@@ -886,6 +904,41 @@ export function AccountsView() {
           onSuccess={handleRefresh}
         />
       )}
+
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent className="max-w-sm gap-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle>Renommer le compte</DialogTitle>
+            <DialogDescription className="text-xs">Laissez vide pour reprendre le nom de la plateforme.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              if (!renameTarget) return
+              const done = await withToast(
+                () => renameIntegration({ integrationId: renameTarget.id, displayName: renameValue }),
+                { loading: "Renommage…", success: "Compte renommé", error: "Échec du renommage" }
+              )
+              if (done) setRenameTarget(null)
+            }}
+          >
+            <Input
+              autoFocus
+              value={renameValue}
+              maxLength={80}
+              onChange={(event) => setRenameValue(event.target.value)}
+              aria-label="Nom du compte"
+            />
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setRenameTarget(null)}>
+                Annuler
+              </Button>
+              <Button type="submit">Enregistrer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -315,7 +315,10 @@ type WithdrawalRecord = {
   network?: string | null;
   address?: string | null;
   addressTag?: string | null;
-  fee: string;
+  /** Frais du retrait : c'est le champ que l'API renvoie. */
+  transactionFee?: string;
+  /** Absent de l'API ; gardé pour les anciennes réponses. */
+  fee?: string;
   status: number | string;
   applyTime: number | string;
   updateTime?: number | string | null;
@@ -2244,7 +2247,7 @@ async function backfillWithdrawals(
             network: withdrawal.network ?? undefined,
             address: withdrawal.address ?? undefined,
             addressTag: withdrawal.addressTag ?? undefined,
-            fee: Number(withdrawal.fee),
+            fee: withdrawalFeeOf(withdrawal),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
             updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
@@ -2351,7 +2354,7 @@ async function syncWithdrawalsForward(
             network: withdrawal.network ?? undefined,
             address: withdrawal.address ?? undefined,
             addressTag: withdrawal.addressTag ?? undefined,
-            fee: Number(withdrawal.fee),
+            fee: withdrawalFeeOf(withdrawal),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
             updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
@@ -2431,6 +2434,12 @@ async function fetchAccountBalances(apiKey: string, apiSecret: string): Promise<
     return [];
   }
   return account.balances;
+}
+
+/** Frais d'un retrait Binance, zéro s'ils manquent. */
+function withdrawalFeeOf(withdrawal: WithdrawalRecord): number {
+  const fee = Number(withdrawal.transactionFee ?? withdrawal.fee);
+  return Number.isFinite(fee) && fee >= 0 ? fee : 0;
 }
 
 function deriveSymbolsToSync(params: {
