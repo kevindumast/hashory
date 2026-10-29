@@ -1,6 +1,6 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { optionalUserId } from "./auth";
 
 export const getByWithdrawId = internalQuery({
@@ -18,6 +18,18 @@ export const getByWithdrawId = internalQuery({
     return record ?? null;
   },
 });
+
+/**
+ * Frais d'un retrait enregistré. La synchronisation Binance lisait un champ
+ * absent de l'API (`fee` au lieu de `transactionFee`) : ses retraits portent
+ * `NaN`, que le grand livre comptait pour zéro — d'où un reste fantôme de
+ * chaque actif retiré. Le brut conservé, lui, a la bonne valeur.
+ */
+export function storedWithdrawalFee(withdrawal: Pick<Doc<"withdrawals">, "fee" | "raw">): number {
+  if (Number.isFinite(withdrawal.fee)) return withdrawal.fee;
+  const raw = Number((withdrawal.raw as { transactionFee?: unknown } | undefined)?.transactionFee);
+  return Number.isFinite(raw) && raw >= 0 ? raw : 0;
+}
 
 export const listByUser = query({
   args: {
@@ -70,7 +82,7 @@ export const listByUser = query({
           addressTag: withdrawal.addressTag ?? undefined,
           applyTime: withdrawal.applyTime,
           updateTime: withdrawal.updateTime ?? undefined,
-          fee: withdrawal.fee,
+          fee: storedWithdrawalFee(withdrawal),
           txId: withdrawal.txId ?? undefined,
           withdrawId: withdrawal.withdrawId,
         });

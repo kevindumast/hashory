@@ -638,3 +638,28 @@ export const setSyncEnabled = mutation({
     return { syncEnabled: enabled };
   },
 });
+
+/**
+ * Renomme un compte. Un nom vide rend celui de la plateforme.
+ *
+ * `updatedAt` n'est pas touché : il signale aux pages un changement de
+ * données, et un nom n'en est pas un — inutile de recalculer le portefeuille.
+ */
+export const rename = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { integrationId, displayName }) => {
+    const clerkUserId = await requireUserId(ctx);
+
+    const integration = await ctx.db.get(integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    const name = displayName.trim().slice(0, 80);
+    await ctx.db.patch(integrationId, { displayName: name || undefined });
+    return { displayName: name || null };
+  },
+});
