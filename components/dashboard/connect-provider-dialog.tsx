@@ -603,7 +603,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md gap-4">
+      <DialogContent className="max-h-[90dvh] max-w-md gap-4 overflow-y-auto">
         <DialogHeader className="space-y-1">
           <DialogTitle className="title text-2xl leading-tight">Connecter une plateforme</DialogTitle>
           <DialogDescription className="text-xs">

@@ -121,6 +121,19 @@ describe("exports KuCoin", () => {
     assert.equal(result.skipped, 5);
   });
 
+  it("date une conversion de son crédit au relevé de compte, pas de sa mise à jour", () => {
+    // Réel : USDT reçus à 17:12:27, dépensés à 17:12:46, conversion « mise à jour » à 17:14:01.
+    const converts = parseKucoinExport([CONVERT, ["1", "mainAccount", "MAIN", "80.7596 USDC", "80.60785318 USDT", "", "", "2025-02-15 17:14:01", "SUCCESS"]]);
+    const account = parseKucoinExport([
+      ACCOUNT,
+      ["1", "mainAccount", "USDT", "Deposit", "80.60785318", "0", "2025-02-15 17:12:27", "", "Convert Market"],
+      ["1", "mainAccount", "USDC", "Withdrawal", "80.7596", "0", "2025-02-15 17:12:27", "", "Convert Market"],
+    ]);
+    assert.equal(mergeKucoinExports([converts, account]).converts[0].executedAt, Date.UTC(2025, 1, 15, 9, 12, 27));
+    // Sans relevé, l'heure de mise à jour reste.
+    assert.equal(mergeKucoinExports([converts]).converts[0].executedAt, Date.UTC(2025, 1, 15, 9, 14, 1));
+  });
+
   it("lit les achats par carte de « Fast Trade Orders », en UTC, et écarte les paiements refusés", () => {
     const rows = parseCsvRows(
       "Order ID,Currency (Crypto),Crypto Quantity,Currency (Fiat),Fiat Amount,Fee Currency (Fiat),Fee (Fiat),Payment Method,Status,Time(UTC)\n" +

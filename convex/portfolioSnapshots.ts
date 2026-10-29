@@ -250,8 +250,13 @@ export const upsertState = internalMutation({
  * Empreinte des données : si elle n'a pas bougé, les séries sont à jour.
  * Toutes les tables comptent — un dépôt ou un retrait change la
  * performance autant qu'un trade.
+ *
+ * Le contenu entier est haché, comptes compris : le nombre de lignes et la
+ * date la plus récente ne suffisaient pas. Une conversion redatée, ou un
+ * compte supprimé puis réimporté sous un autre identifiant, laissaient
+ * l'un et l'autre intacts — et les positions périmées.
  */
-function fingerprintOf(input: LedgerInput): string {
+function fingerprintOf(input: LedgerInput, accounts: string[]): string {
   const timestamps = [
     ...input.trades.map((row) => row.executedAt),
     ...(input.converts ?? []).map((row) => row.executedAt),
@@ -269,7 +274,17 @@ function fingerprintOf(input: LedgerInput): string {
     input.withdrawals.length,
     input.fiat?.length ?? 0,
   ];
-  return `${counts.join("-")}@${latest}`;
+  return `${counts.join("-")}@${latest}#${fnv1a(JSON.stringify([accounts, input]))}`;
+}
+
+/** Hachage FNV-1a 32 bits, en hexadécimal. */
+function fnv1a(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16);
 }
 
 export const recomputeForUser = action({
@@ -288,7 +303,7 @@ export const recomputeForUser = action({
       internal.ledgerData.loadLedgerInputInternal,
       { clerkId }
     );
-    const fingerprint = fingerprintOf(input);
+    const fingerprint = fingerprintOf(input, accounts);
 
     const isUpToDate =
       state?.engineVersion === ENGINE_VERSION &&

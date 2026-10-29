@@ -13,6 +13,7 @@
 
 import { USD_STABLECOINS } from "./ledger";
 import {
+  CONVERT_SETTLE_MS,
   cardPurchaseId,
   sameCardPurchase,
   type KucoinCardPurchase,
@@ -59,6 +60,11 @@ export type KucoinImportInput = {
 export type KucoinImportPlan = {
   spotTrades: KucoinSpotTrade[];
   converts: KucoinConvert[];
+  /**
+   * Conversions déjà importées à l'heure de leur mise à jour, à ramener à
+   * l'heure réelle que le relevé de compte donne.
+   */
+  retimedConverts: { providerTradeId: string; executedAt: number }[];
   deposits: KucoinTransfer[];
   withdrawals: KucoinTransfer[];
   /**
@@ -78,6 +84,7 @@ export type KucoinImportPlan = {
 /** Préfixes des identifiants posés par les imports de fichiers. */
 export const IMPORTED_DEPOSIT_PREFIX = "kucoin-deposit:";
 export const IMPORTED_WITHDRAWAL_PREFIX = "kucoin-withdrawal:";
+const IMPORTED_CONVERT_PREFIX = "kucoin-xlsx-convert:";
 const LEGACY_DEPOSIT_PREFIX = "kucoin-deposit:acct-deposit:";
 const LEGACY_WITHDRAWAL_PREFIX = "kucoin-withdrawal:acct-withdraw:";
 
@@ -115,17 +122,25 @@ export function planKucoinImport(existing: ExistingKucoinData, input: KucoinImpo
   );
 
   // ── Conversions : l'API les range sous son propre identifiant ; on les
-  // reconnaît à l'actif cédé, au montant et à l'heure.
+  // reconnaît à l'actif cédé, au montant et à l'heure. Un import antérieur
+  // a pu les dater de leur mise à jour, quelques minutes après l'heure réelle.
+  const retimedConverts: KucoinImportPlan["retimedConverts"] = [];
   const converts = input.converts.filter((convert) => {
     if (!ASSET.test(convert.sellAsset) || !ASSET.test(convert.buyAsset)) return false;
     if (!valid(convert.sellAmount) || !valid(convert.buyAmount) || !validTime(convert.executedAt)) return false;
     if (tradeIds.has(convertKey(convert))) return false;
-    return !existing.converts.some(
-      (known) =>
-        known.fromAsset.toUpperCase() === convert.sellAsset &&
-        close(known.fromAmount, convert.sellAmount) &&
-        Math.abs(known.executedAt - convert.executedAt) <= CONVERT_WINDOW_MS
+    const known = existing.converts.find(
+      (record) =>
+        record.fromAsset.toUpperCase() === convert.sellAsset &&
+        close(record.fromAmount, convert.sellAmount) &&
+        record.executedAt - convert.executedAt >= -CONVERT_WINDOW_MS &&
+        record.executedAt - convert.executedAt <= CONVERT_SETTLE_MS
     );
+    if (!known) return true;
+    if (known.providerTradeId.startsWith(IMPORTED_CONVERT_PREFIX) && known.executedAt !== convert.executedAt) {
+      retimedConverts.push({ providerTradeId: known.providerTradeId, executedAt: convert.executedAt });
+    }
+    return false;
   });
 
   // ── Dépôts et retraits on-chain : dédoublonnés par hash.
@@ -193,6 +208,7 @@ export function planKucoinImport(existing: ExistingKucoinData, input: KucoinImpo
   return {
     spotTrades,
     converts,
+    retimedConverts,
     deposits,
     withdrawals,
     cardTrades,
@@ -204,7 +220,7 @@ export function planKucoinImport(existing: ExistingKucoinData, input: KucoinImpo
 }
 
 export function convertKey(convert: Pick<KucoinConvert, "executedAt" | "sellAmount" | "sellAsset">): string {
-  return `kucoin-xlsx-convert:${convert.executedAt}:${convert.sellAmount}:${convert.sellAsset}`;
+  return `${IMPORTED_CONVERT_PREFIX}${convert.executedAt}:${convert.sellAmount}:${convert.sellAsset}`;
 }
 
 type Movement = { id?: string; key?: string; coin: string; amount: number; fee?: number; time: number; txId?: string };

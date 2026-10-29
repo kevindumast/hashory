@@ -11,7 +11,9 @@
  * - « Spot Orders_Filled Orders » : un ordre par ligne. La variante
  *   « Show Order-Splitting » détaille les mêmes ordres exécution par
  *   exécution : elle est reconnue et ignorée.
- * - « Convert Orders » : les conversions instantanées.
+ * - « Convert Orders » : les conversions instantanées. Elles n'y sont
+ *   datées que de leur « mise à jour », une à deux minutes après coup ;
+ *   l'heure réelle est celle du relevé de compte (voir plus bas).
  * - « Deposit History » / « Withdrawal History » : les mouvements on-chain,
  *   avec leur hash — c'est lui qui les rapproche de la synchronisation API.
  * - « Fiat Orders_Fast Trade Orders » : les achats par carte, avec le
@@ -22,7 +24,10 @@
  *   Transactions ») y figurent aussi, mais sans le prix payé. Ses autres lignes
  *   (dépôts, retraits, trades, conversions, transferts entre sous-comptes)
  *   répètent les fichiers précédents ; les reprendre doublerait les
- *   mouvements, et un retrait y apparaît frais inclus.
+ *   mouvements, et un retrait y apparaît frais inclus. Ses lignes
+ *   « Convert Market » servent seulement à redater les conversions : datées
+ *   de leur mise à jour, elles passaient après les achats payés avec leur
+ *   produit, si bien que ces achats puisaient dans un solde encore vide.
  */
 
 export type KucoinSpotTrade = {
@@ -71,6 +76,9 @@ export type KucoinCardPurchase = {
   fiat?: { currency: string; amount: number; fee: number };
 };
 
+/** Crédit d'une conversion vu par le relevé de compte, à son heure réelle. */
+export type KucoinConvertFill = { asset: string; amount: number; executedAt: number };
+
 export type KucoinExportKind =
   | "spot"
   | "spot_split"
@@ -90,6 +98,7 @@ export type KucoinExport = {
   deposits: KucoinTransfer[];
   withdrawals: KucoinTransfer[];
   cardPurchases: KucoinCardPurchase[];
+  convertFills: KucoinConvertFill[];
   /** Lignes lues mais écartées (statut non abouti, doublon d'un autre fichier…). */
   skipped: number;
 };
@@ -169,7 +178,7 @@ export function detectKind(headers: string[]): KucoinExportKind {
 }
 
 function empty(kind: KucoinExportKind): KucoinExport {
-  return { kind, spotTrades: [], converts: [], deposits: [], withdrawals: [], cardPurchases: [], skipped: 0 };
+  return { kind, spotTrades: [], converts: [], deposits: [], withdrawals: [], cardPurchases: [], convertFills: [], skipped: 0 };
 }
 
 /** Analyse les lignes d'un export, en-tête compris. */
@@ -291,6 +300,9 @@ export function parseKucoinExport(rows: string[][]): KucoinExport {
     const executedAt = time(at(row, "time"));
     const asset = coin(at(row, "currency"));
     const amount = number(at(row, "amount"));
+    if (/^convert/i.test(at(row, "type")) && at(row, "side").toLowerCase() === "deposit" && executedAt && asset && amount > 0) {
+      result.convertFills.push({ asset, amount, executedAt });
+    }
     if (
       at(row, "type") === "Credit Card Transactions" &&
       at(row, "side").toLowerCase() === "deposit" &&
@@ -307,19 +319,47 @@ export function parseKucoinExport(rows: string[][]): KucoinExport {
 }
 
 /** Fusionne plusieurs exports, en écartant les lignes présentes deux fois. */
-export function mergeKucoinExports(exports: KucoinExport[]): Omit<KucoinExport, "kind"> {
+export function mergeKucoinExports(exports: KucoinExport[]): Omit<KucoinExport, "kind" | "convertFills"> {
   const unique = <T>(items: T[], key: (item: T) => string) => [...new Map(items.map((item) => [key(item), item])).values()];
   const all = exports;
   return {
     // Les relevés 2024 et 2025 se recouvrent parfois d'un jour : la clé de
     // chaque ligne évite de la compter deux fois.
     spotTrades: unique(all.flatMap((e) => e.spotTrades), (t) => t.orderId),
-    converts: unique(all.flatMap((e) => e.converts), (c) => `${c.executedAt}|${c.sellAsset}|${c.sellAmount}`),
+    converts: retimeConverts(
+      unique(all.flatMap((e) => e.converts), (c) => `${c.executedAt}|${c.sellAsset}|${c.sellAmount}`),
+      all.flatMap((e) => e.convertFills)
+    ),
     deposits: unique(all.flatMap((e) => e.deposits), (d) => d.hash.toLowerCase()),
     withdrawals: unique(all.flatMap((e) => e.withdrawals), (w) => w.hash.toLowerCase()),
     cardPurchases: mergeCardPurchases(unique(all.flatMap((e) => e.cardPurchases), (p) => `${cardPurchaseId(p)}|${p.fiat ? "fiat" : ""}`)),
     skipped: all.reduce((sum, e) => sum + e.skipped, 0),
   };
+}
+
+/** Délai maximal entre une conversion et sa « mise à jour ». */
+export const CONVERT_SETTLE_MS = 5 * 60_000;
+
+/**
+ * Donne à chaque conversion l'heure du crédit inscrit au relevé de compte :
+ * même jeton reçu, même quantité, dans les minutes qui précèdent sa mise à
+ * jour. Sans relevé, l'heure de mise à jour reste.
+ */
+function retimeConverts(converts: KucoinConvert[], fills: KucoinConvertFill[]): KucoinConvert[] {
+  const used = new Set<KucoinConvertFill>();
+  return converts.map((convert) => {
+    const fill = fills.find(
+      (candidate) =>
+        !used.has(candidate) &&
+        candidate.asset === convert.buyAsset &&
+        Math.abs(candidate.amount - convert.buyAmount) <= Math.max(1e-9, convert.buyAmount * 1e-9) &&
+        convert.executedAt - candidate.executedAt >= 0 &&
+        convert.executedAt - candidate.executedAt <= CONVERT_SETTLE_MS
+    );
+    if (!fill) return convert;
+    used.add(fill);
+    return { ...convert, executedAt: fill.executedAt };
+  });
 }
 
 /** Écart toléré entre l'heure du relevé de compte et celle de l'ordre « Fast Trade ». */

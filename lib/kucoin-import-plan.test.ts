@@ -121,6 +121,17 @@ describe("plan d'import KuCoin", () => {
     assert.equal(planKucoinImport({ ...none, converts: [{ ...known, executedAt: T0 - 60 * MIN }] }, { ...nothing, converts: [convert] }).converts.length, 1);
   });
 
+  it("redate une conversion importée à l'heure de sa mise à jour", () => {
+    const convert = { sellAsset: "USDC", sellAmount: 80.7596, buyAsset: "USDT", buyAmount: 80.6, symbol: "USDTUSDC", side: "BUY" as const, executedAt: T0 };
+    const imported = { providerTradeId: `kucoin-xlsx-convert:${T0 + 94_000}:80.7596:USDC`, fromAsset: "USDC", fromAmount: 80.7596, executedAt: T0 + 94_000 };
+    const plan = planKucoinImport({ ...none, converts: [imported] }, { ...nothing, converts: [convert] });
+    assert.equal(plan.converts.length, 0);
+    assert.deepEqual(plan.retimedConverts, [{ providerTradeId: imported.providerTradeId, executedAt: T0 }]);
+    // Une conversion venue de l'API garde son heure.
+    const fromApi = { ...imported, providerTradeId: "kucoin-convert:xyz" };
+    assert.deepEqual(planKucoinImport({ ...none, converts: [fromApi] }, { ...nothing, converts: [convert] }).retimedConverts, []);
+  });
+
   it("sans prix payé : un stablecoin vaut un dollar par jeton, un autre jeton entre à coût inconnu", () => {
     const usdt = { coin: "USDT", amount: 30.4, channel: "Visa/MasterCard", executedAt: T0 };
     const kas = { coin: "KAS", amount: 181.97, channel: "Visa/MasterCard", executedAt: T0 };

@@ -55,12 +55,37 @@ const KIND_LABELS: Record<KucoinExportKind, string> = {
   unknown: "fichier non reconnu",
 };
 
-type LoadedFile = { name: string; result: KucoinExport | null; error: string | null };
+/**
+ * Fichier déposé. Les exports de chaque année portent le même nom : un
+ * fichier se reconnaît donc à son nom, sa taille et sa date, pas au nom seul
+ * — sinon l'export 2025 remplaçait celui de 2024.
+ */
+type LoadedFile = { key: string; name: string; result: KucoinExport | null; error: string | null };
+
+function fileKey(file: File): string {
+  return `${file.name}|${file.size}|${file.lastModified}`;
+}
+
+/** Années couvertes par un export, pour distinguer deux fichiers de même nom. */
+function years(result: KucoinExport): string {
+  const dates = [
+    ...result.spotTrades,
+    ...result.converts,
+    ...result.deposits,
+    ...result.withdrawals,
+    ...result.cardPurchases,
+  ].map((row) => new Date(row.executedAt).getUTCFullYear());
+  if (dates.length === 0) return "";
+  const first = Math.min(...dates);
+  const last = Math.max(...dates);
+  return first === last ? String(first) : `${first}–${last}`;
+}
 
 type ImportResult = {
   createdAccount: boolean;
   spotInserted: number;
   convertsInserted: number;
+  convertsRetimed: number;
   depositsInserted: number;
   withdrawalsInserted: number;
   cardPurchasesInserted: number;
@@ -68,8 +93,8 @@ type ImportResult = {
   duplicatesRemoved: number;
 };
 
-function plural(count: number, word: string): string {
-  return `${count} ${word}${count > 1 ? "s" : ""}`;
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count > 1 ? pluralForm : singular}`;
 }
 
 function describe(result: KucoinExport): string {
@@ -78,7 +103,7 @@ function describe(result: KucoinExport): string {
   if (result.converts.length) parts.push(plural(result.converts.length, "conversion"));
   if (result.deposits.length) parts.push(plural(result.deposits.length, "dépôt"));
   if (result.withdrawals.length) parts.push(plural(result.withdrawals.length, "retrait"));
-  if (result.cardPurchases.length) parts.push(plural(result.cardPurchases.length, "achat par carte"));
+  if (result.cardPurchases.length) parts.push(plural(result.cardPurchases.length, "achat par carte", "achats par carte"));
   if (parts.length > 0) return parts.join(" · ");
   if (result.kind === "spot_split" || result.kind === "unknown") return KIND_LABELS[result.kind];
   if (result.kind === "fiat_other") {
@@ -99,7 +124,7 @@ async function readExport(file: File): Promise<string[][]> {
 export function KucoinImportDialog({ open, onOpenChange, integrationId, onSuccess }: KucoinImportDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg gap-4">
+      <DialogContent className="max-h-[90dvh] max-w-lg gap-4 overflow-y-auto">
         <DialogHeader className="space-y-1">
           <DialogTitle className="title text-2xl leading-tight">Importer des exports KuCoin</DialogTitle>
           <DialogDescription className="text-xs">{IMPORT_HINT}</DialogDescription>
@@ -136,27 +161,28 @@ export function KucoinImportPanel({ integrationId, displayName, onClose, onSucce
     const loaded: LoadedFile[] = [];
     for (const file of Array.from(list)) {
       if (!/\.(xlsx|csv)$/i.test(file.name)) {
-        loaded.push({ name: file.name, result: null, error: "Format attendu : .xlsx ou .csv" });
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: "Format attendu : .xlsx ou .csv" });
         continue;
       }
       if (file.size > MAX_FILE_BYTES) {
-        loaded.push({ name: file.name, result: null, error: "Fichier trop volumineux." });
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: "Fichier trop volumineux." });
         continue;
       }
       try {
-        loaded.push({ name: file.name, result: parseKucoinExport(await readExport(file)), error: null });
+        loaded.push({ key: fileKey(file), name: file.name, result: parseKucoinExport(await readExport(file)), error: null });
       } catch (err) {
-        loaded.push({ name: file.name, result: null, error: errorMessage(err, "Impossible de lire le fichier.") });
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: errorMessage(err, "Impossible de lire le fichier.") });
       }
     }
-    // Un fichier redéposé remplace le précédent du même nom.
-    setFiles((current) => [...current.filter((f) => !loaded.some((l) => l.name === f.name)), ...loaded]);
+    // Le même fichier déposé deux fois n'apparaît qu'une fois ; les lignes
+    // communes à deux exports sont de toute façon fusionnées à l'import.
+    setFiles((current) => [...current.filter((f) => !loaded.some((l) => l.key === f.key)), ...loaded]);
     setReading(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function removeFile(name: string) {
-    setFiles((current) => current.filter((f) => f.name !== name));
+  function removeFile(key: string) {
+    setFiles((current) => current.filter((f) => f.key !== key));
     setImportResult(null);
   }
 
@@ -234,14 +260,17 @@ export function KucoinImportPanel({ integrationId, displayName, onClose, onSucce
       </label>
 
       {files.length > 0 && (
-        <ul className="max-h-64 space-y-1 overflow-y-auto">
+        <ul className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border border-border/60 p-1">
           {files.map((file) => {
             const useful = file.result && file.result.kind !== "unknown";
             return (
-              <li key={file.name} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted/30">
+              <li key={file.key} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted/30">
                 <FileText className={`size-3.5 shrink-0 ${file.error ? "text-destructive" : useful ? "text-positive" : "text-muted-foreground"}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-foreground">{file.name}</p>
+                  <p className="truncate text-foreground">
+                    {file.name}
+                    {file.result && years(file.result) && <span className="text-muted-foreground"> · {years(file.result)}</span>}
+                  </p>
                   <p className={`truncate ${file.error ? "text-destructive" : "text-muted-foreground"}`}>
                     {file.error ?? (file.result ? describe(file.result) : "")}
                   </p>
@@ -249,7 +278,7 @@ export function KucoinImportPanel({ integrationId, displayName, onClose, onSucce
                 <button
                   type="button"
                   aria-label={`Retirer ${file.name}`}
-                  onClick={() => removeFile(file.name)}
+                  onClick={() => removeFile(file.key)}
                   className="shrink-0 text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3.5" />
@@ -263,11 +292,11 @@ export function KucoinImportPanel({ integrationId, displayName, onClose, onSucce
       {totalRows > 0 && !importResult && (
         <p className="text-xs text-muted-foreground">
           À importer : {[
-            merged.spotTrades.length && plural(merged.spotTrades.length, "ordre spot"),
+            merged.spotTrades.length && plural(merged.spotTrades.length, "ordre spot", "ordres spot"),
             merged.converts.length && plural(merged.converts.length, "conversion"),
             merged.deposits.length && plural(merged.deposits.length, "dépôt"),
             merged.withdrawals.length && plural(merged.withdrawals.length, "retrait"),
-            merged.cardPurchases.length && plural(merged.cardPurchases.length, "achat par carte"),
+            merged.cardPurchases.length && plural(merged.cardPurchases.length, "achat par carte", "achats par carte"),
           ].filter(Boolean).join(" · ")}
         </p>
       )}
@@ -276,18 +305,21 @@ export function KucoinImportPanel({ integrationId, displayName, onClose, onSucce
         <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
           <p className="flex items-center gap-2 font-medium text-positive"><Check className="size-4" /> Import réussi</p>
           {importResult.createdAccount && <p className="text-xs text-positive">Compte KuCoin créé, alimenté par ses exports</p>}
-          {importResult.spotInserted > 0 && <p className="text-xs text-positive">{plural(importResult.spotInserted, "ordre spot")}</p>}
+          {importResult.spotInserted > 0 && <p className="text-xs text-positive">{plural(importResult.spotInserted, "ordre spot", "ordres spot")}</p>}
           {importResult.convertsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.convertsInserted, "conversion")}</p>}
+          {importResult.convertsRetimed > 0 && (
+            <p className="text-xs text-positive">{plural(importResult.convertsRetimed, "conversion redatée", "conversions redatées")} à l&apos;heure du relevé de compte</p>
+          )}
           {importResult.depositsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.depositsInserted, "dépôt")}</p>}
           {importResult.withdrawalsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.withdrawalsInserted, "retrait")}</p>}
-          {importResult.cardPurchasesInserted > 0 && <p className="text-xs text-positive">{plural(importResult.cardPurchasesInserted, "achat par carte")}</p>}
+          {importResult.cardPurchasesInserted > 0 && <p className="text-xs text-positive">{plural(importResult.cardPurchasesInserted, "achat par carte", "achats par carte")}</p>}
           {importResult.cardPurchasesRepriced > 0 && (
-            <p className="text-xs text-positive">{plural(importResult.cardPurchasesRepriced, "achat par carte")} au prix réellement payé</p>
+            <p className="text-xs text-positive">{plural(importResult.cardPurchasesRepriced, "achat par carte", "achats par carte")} au prix réellement payé</p>
           )}
           {importResult.duplicatesRemoved > 0 && (
             <p className="text-xs text-muted-foreground">{plural(importResult.duplicatesRemoved, "doublon")} d&apos;anciens imports retiré{importResult.duplicatesRemoved > 1 ? "s" : ""}</p>
           )}
-          {importResult.spotInserted + importResult.convertsInserted + importResult.depositsInserted + importResult.withdrawalsInserted + importResult.cardPurchasesInserted + importResult.cardPurchasesRepriced + importResult.duplicatesRemoved === 0 && (
+          {importResult.spotInserted + importResult.convertsInserted + importResult.convertsRetimed + importResult.depositsInserted + importResult.withdrawalsInserted + importResult.cardPurchasesInserted + importResult.cardPurchasesRepriced + importResult.duplicatesRemoved === 0 && (
             <p className="text-xs text-muted-foreground">Tout était déjà enregistré.</p>
           )}
         </div>
