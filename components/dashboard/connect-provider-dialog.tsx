@@ -27,6 +27,7 @@ import type { ProviderId } from "@/lib/providers";
 import { providerIcon } from "@/lib/provider-icons";
 import { errorMessage, toast } from "@/lib/toast";
 import { decodeCsvText } from "@/lib/csv-text";
+import { walletAddressError } from "@/lib/wallet-address";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
 
@@ -575,7 +576,12 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
       const usesAddress = provider.fields.some((f) => f.name === "address");
       const hasPassphrase = provider.fields.some((f) => f.name === "passphrase");
-      const finalApiKey = usesAddress ? address : apiKey;
+      const addressError = usesAddress ? walletAddressError(provider.value, address) : null;
+      if (addressError) {
+        setError(addressError);
+        return;
+      }
+      const finalApiKey = usesAddress ? address.trim() : apiKey;
       const finalApiSecret = usesAddress ? undefined : apiSecret;
 
       await upsertIntegration({
@@ -639,6 +645,8 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                     if (first) {
                       setProvider(first);
                       setShowSecret(false);
+                      setAddress("");
+                      setError(null);
                     }
                   }}
                   className={cn(
@@ -665,6 +673,9 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                 if (next) {
                   setProvider(next);
                   setShowSecret(false);
+                  // Une adresse saisie pour une chaîne ne vaut pas pour une autre.
+                  setAddress("");
+                  setError(null);
                 }
               }}
             >

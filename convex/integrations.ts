@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "./utils/encryption";
 import type { GenericId } from "convex/values";
 import { optionalUserId, requireUserId } from "./auth";
 import { SUPPORTED_PROVIDERS, WALLET_PROVIDERS } from "../lib/providers";
+import { walletAddressError } from "../lib/wallet-address";
 import type { SyncJob } from "../lib/sync-health";
 
 export const list = query({
@@ -164,6 +165,10 @@ export const upsert = mutation({
 
     if (!SUPPORTED_PROVIDERS.includes(args.provider)) {
       throw new Error(`Unsupported provider: ${args.provider}`);
+    }
+    if (WALLET_PROVIDERS.has(args.provider)) {
+      const addressError = walletAddressError(args.provider, args.apiKey);
+      if (addressError) throw new Error(addressError);
     }
 
     const now = Date.now();
