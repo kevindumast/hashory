@@ -42,10 +42,15 @@ export function useRecomputeTrigger(ready: boolean, deps: unknown): boolean {
   const pendingRef = useRef(false);
   const lastSignatureRef = useRef<string | null>(null);
 
-  // Chaque écriture sur un compte déplace son `updatedAt`.
-  const dataSignature = integrationsLoading
-    ? null
-    : integrations.map((integration) => `${integration._id}:${integration.updatedAt}`).join("|");
+  // Chaque écriture sur un compte déplace son `updatedAt`. Pendant une
+  // synchronisation, il bouge à chaque paire lue : on attend qu'elle se
+  // termine pour ne recalculer qu'une fois, le calcul relisant tout le
+  // grand livre.
+  const syncing = integrations.some((integration) => integration.syncStatus === "syncing");
+  const dataSignature =
+    integrationsLoading || syncing
+      ? null
+      : integrations.map((integration) => `${integration._id}:${integration.updatedAt}`).join("|");
 
   const run = useCallback(() => {
     if (runningRef.current) {
