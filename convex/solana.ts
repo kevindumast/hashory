@@ -93,7 +93,10 @@ export const syncSolanaWallet = action({
           throw rejectedDataProviderKey("helius");
         }
         if (!response.ok) {
-          throw new Error(`Helius API error: ${response.statusText}`);
+          // Le corps dit pourquoi (adresse refusée, curseur inconnu…) ; le
+          // statut seul ne permettait pas de diagnostiquer.
+          const detail = (await response.text().catch(() => "")).slice(0, 300);
+          throw new Error(`Helius API error: ${response.status} ${response.statusText}${detail ? ` — ${detail}` : ""}`);
         }
 
         const txs = (await response.json()) as HeliusTx[];

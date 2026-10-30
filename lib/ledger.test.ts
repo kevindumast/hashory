@@ -295,4 +295,14 @@ describe("cohérence des soldes", () => {
     assert.equal(gaps.length, 1);
     assert.equal(gaps[0].asset, "EUR");
   });
+
+  it("compte pour zéro un actif calculé que la plateforme ne liste pas", () => {
+    const computed = new Map([["binance", new Map([["BNB", 0.000372], ["USDC", 112.17]])]]);
+    const reported = [{ account: "binance", asset: "BNB", quantity: 0.000372 }];
+    assert.deepEqual(reconcileBalances(computed, reported), []);
+    const gaps = reconcileBalances(computed, reported, 0.01, { includeUnreported: true });
+    assert.deepEqual(gaps.map((gap) => [gap.asset, gap.computed, gap.reported]), [["USDC", 112.17, 0]]);
+    // Un compte qui ne publie rien n'est pas contrôlé.
+    assert.deepEqual(reconcileBalances(computed, [], 0.01, { includeUnreported: true }), []);
+  });
 });

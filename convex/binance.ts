@@ -8,6 +8,9 @@ import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 
 const DATASET_SPOT_TRADES = "spot_trades";
+const DATASET_ORDERS = "orders";
+/** Statuts définitifs d'un ordre Binance : il ne changera plus. */
+const FINAL_ORDER_STATUSES = new Set(["FILLED", "CANCELED", "REJECTED", "EXPIRED", "EXPIRED_IN_MATCH"]);
 const DATASET_CONVERT_TRADES = "convert_trades";
 const DATASET_FIAT_ORDERS = "fiat_orders";
 const DATASET_DEPOSITS = "capital_deposits";
@@ -315,7 +318,10 @@ type WithdrawalRecord = {
   network?: string | null;
   address?: string | null;
   addressTag?: string | null;
-  fee: string;
+  /** Frais du retrait : c'est le champ que l'API renvoie. */
+  transactionFee?: string;
+  /** Absent de l'API ; gardé pour les anciennes réponses. */
+  fee?: string;
   status: number | string;
   applyTime: number | string;
   updateTime?: number | string | null;
@@ -473,10 +479,12 @@ export const getUserAssets = action({
         };
       });
 
-    // Persist to balances table
+    // `/api/v3/account` liste tous les actifs de Binance, à zéro compris :
+    // seuls ceux détenus sont gardés. Les lignes à zéro déjà enregistrées
+    // disparaissent, `upsertBatch` retirant les actifs absents.
     await ctx.runMutation(internal.balances.upsertBatch, {
       integrationId: args.integrationId,
-      assets: mapped,
+      assets: mapped.filter((asset) => resolveNumber(asset.totalPosition) > 0),
     });
 
     return mapped;
@@ -711,20 +719,48 @@ export const syncSpotTradesScheduled = internalAction({
   },
 });
 
-/** Version appelable depuis l'interface : mêmes étapes, appelant vérifié. */
+/**
+ * Version appelable depuis l'interface : mêmes étapes, appelant vérifié.
+ * Sans liste de paires, celles d'une synchronisation complète — soldes,
+ * paires déjà lues, paires courantes — : de quoi rattraper un trade manqué
+ * sans relancer dépôts, retraits, conversions et ordres.
+ */
 export const syncSpotTradesOnly = action({
   args: {
     integrationId: v.id("integrations"),
-    symbols: v.array(v.string()),
+    symbols: v.optional(v.array(v.string())),
     startTime: v.optional(v.number()),
   },
-  handler: async (ctx, args): Promise<{ fetched: number; inserted: number }> => {
-    await authorizeIntegration(ctx, args.integrationId);
-    const result = (await ctx.runAction(internal.binance.syncSpotTradesScheduled, args)) as {
-      fetched: number;
-      inserted: number;
+  handler: async (ctx, args): Promise<{ symbols: number; fetched: number; inserted: number }> => {
+    const integration = (await authorizeIntegration(ctx, args.integrationId)) as IntegrationRecord & {
+      encryptedCredentials: { apiKey: string; apiSecret: string };
     };
-    return { fetched: result.fetched, inserted: result.inserted };
+    if (integration.provider !== "binance") {
+      throw new Error("Cette intégration n'est pas de type Binance.");
+    }
+
+    let symbols = args.symbols;
+    if (!symbols) {
+      const detection = await detectSymbols(ctx, {
+        integrationId: args.integrationId,
+        clerkUserId: integration.clerkUserId,
+        apiKey: decryptSecret(integration.encryptedCredentials.apiKey),
+        apiSecret: decryptSecret(integration.encryptedCredentials.apiSecret),
+        explicitSymbols: [],
+      });
+      symbols = detection.symbols;
+    }
+
+    await ctx.runMutation(internal.integrations.updateSyncStatus, {
+      integrationId: args.integrationId,
+      syncStatus: "syncing",
+    });
+    const result = (await ctx.runAction(internal.binance.syncSpotTradesScheduled, {
+      integrationId: args.integrationId,
+      symbols,
+      startTime: args.startTime,
+    })) as { fetched: number; inserted: number };
+    return { symbols: symbols.length, fetched: result.fetched, inserted: result.inserted };
   },
 });
 
@@ -928,8 +964,19 @@ export const syncOrdersScheduled = internalAction({
         const scope = symbol.toUpperCase();
         const symbolMeta = symbolCatalog.get(scope);
 
-        // Always start from the beginning for a manual sync — ingestBatch deduplicates
+        // Reprise là où la lecture précédente s'est arrêtée : au plus ancien
+        // ordre encore ouvert, sinon après le dernier lu. Relire toutes les
+        // paires depuis leur premier ordre à chaque synchronisation coûtait
+        // des centaines d'appels pour rien.
+        const syncState = await ctx.runQuery(internal.integrations.getSyncStateInternal, {
+          integrationId: args.integrationId,
+          dataset: DATASET_ORDERS,
+          scope,
+        });
+        const savedNext = Number((syncState?.cursor as { nextOrderId?: unknown } | null)?.nextOrderId);
+        const startOrderId = Number.isFinite(savedNext) && savedNext > 0 ? savedNext : 0;
         let lastOrderId: number | null = null;
+        let oldestOpenOrderId: number | null = null;
 
         let iterations = 0;
 
@@ -943,9 +990,8 @@ export const syncOrdersScheduled = internalAction({
             // Continue from last seen orderId
             paramsMap.orderId = (lastOrderId + 1).toString();
           } else {
-            // First page: start from orderId=0 to get ALL historical orders.
-            // startTime="0" only covers a 24h window — orderId pagination has no time limit.
-            paramsMap.orderId = "0";
+            // Pagination par orderId : startTime seul ne couvre que 24 h.
+            paramsMap.orderId = startOrderId.toString();
           }
 
           const orders = (await signedGet(decryptedKey, decryptedSecret, "/api/v3/allOrders", paramsMap)) as Array<{
@@ -1019,12 +1065,26 @@ export const syncOrdersScheduled = internalAction({
             totalInserted += result.inserted;
           }
 
+          for (const order of orders) {
+            if (!FINAL_ORDER_STATUSES.has(order.status) && (oldestOpenOrderId === null || order.orderId < oldestOpenOrderId)) {
+              oldestOpenOrderId = order.orderId;
+            }
+          }
           const lastOrder = orders[orders.length - 1];
           lastOrderId = lastOrder.orderId;
 
           iterations += 1;
           if (orders.length < MAX_LIMIT || iterations > 1_000) break;
           await sleep(DELAY_FORWARD_REQUEST);
+        }
+
+        if (lastOrderId !== null) {
+          await ctx.runMutation(internal.integrations.updateSyncState, {
+            integrationId: args.integrationId,
+            dataset: DATASET_ORDERS,
+            scope,
+            cursor: { nextOrderId: oldestOpenOrderId ?? lastOrderId + 1 },
+          });
         }
       }
 
@@ -2244,7 +2304,7 @@ async function backfillWithdrawals(
             network: withdrawal.network ?? undefined,
             address: withdrawal.address ?? undefined,
             addressTag: withdrawal.addressTag ?? undefined,
-            fee: Number(withdrawal.fee),
+            fee: withdrawalFeeOf(withdrawal),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
             updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
@@ -2351,7 +2411,7 @@ async function syncWithdrawalsForward(
             network: withdrawal.network ?? undefined,
             address: withdrawal.address ?? undefined,
             addressTag: withdrawal.addressTag ?? undefined,
-            fee: Number(withdrawal.fee),
+            fee: withdrawalFeeOf(withdrawal),
             status: String(withdrawal.status),
             applyTime: withdrawal.applyTime,
             updateTime: withdrawal.updateTime ? parseTimestamp(withdrawal.updateTime) : undefined,
@@ -2431,6 +2491,12 @@ async function fetchAccountBalances(apiKey: string, apiSecret: string): Promise<
     return [];
   }
   return account.balances;
+}
+
+/** Frais d'un retrait Binance, zéro s'ils manquent. */
+function withdrawalFeeOf(withdrawal: WithdrawalRecord): number {
+  const fee = Number(withdrawal.transactionFee ?? withdrawal.fee);
+  return Number.isFinite(fee) && fee >= 0 ? fee : 0;
 }
 
 function deriveSymbolsToSync(params: {
@@ -2617,13 +2683,12 @@ async function syncSymbolTrades(
       recvWindow: RECEIPT_WINDOW_MS.toString(),
     };
 
-    if (lastTradeId !== null) {
-      paramsMap.fromId = (lastTradeId + 1).toString();
-    } else if (lastTradeTime !== null) {
-      paramsMap.startTime = lastTradeTime.toString();
-    } else {
-      paramsMap.startTime = "0";
-    }
+    // Pagination par identifiant uniquement : `startTime` seul ne couvre que
+    // 24 h chez Binance. Une paire sans identifiant connu était lue sur la
+    // journée suivant son curseur, et tout trade postérieur échappait à la
+    // synchronisation. Sans identifiant, on repart du premier trade —
+    // `ingestBatch` écarte les doublons.
+    paramsMap.fromId = lastTradeId !== null ? (lastTradeId + 1).toString() : "0";
 
     const trades = (await signedGet(params.apiKey, params.apiSecret, "/api/v3/myTrades", paramsMap)) as BinanceTrade[];
 

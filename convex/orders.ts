@@ -36,7 +36,26 @@ export const ingestBatch = internalMutation({
         )
         .first();
 
-      if (existing) continue;
+      if (existing) {
+        // Un ordre lu ouvert a pu se remplir ou être annulé depuis.
+        if (
+          existing.status !== order.status ||
+          existing.quantity !== order.quantity ||
+          existing.quoteQuantity !== order.quoteQuantity
+        ) {
+          await ctx.db.patch(existing._id, {
+            status: order.status,
+            quantity: order.quantity,
+            price: order.price,
+            quoteQuantity: order.quoteQuantity,
+            executedAt: order.executedAt,
+            fromAmount: order.fromAmount,
+            toAmount: order.toAmount,
+            raw: order.raw,
+          });
+        }
+        continue;
+      }
 
       await ctx.db.insert("orders", {
         integrationId: args.integrationId,

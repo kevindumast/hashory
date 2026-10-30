@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState } from "react";
 import { useMutation } from "convex/react";
 import { Check, LoaderCircle, Upload, FileText, AlertCircle, X } from "lucide-react";
 import {
@@ -16,6 +16,14 @@ import { api } from "@/convex/_generated/api";
 import { errorMessage, toast } from "@/lib/toast";
 import type { Id } from "@/convex/_generated/dataModel";
 import { decodeCsvText } from "@/lib/csv-text";
+import { readFirstSheet } from "@/lib/xlsx-reader";
+import {
+  mergeKucoinExports,
+  parseCsvRows,
+  parseKucoinExport,
+  type KucoinExport,
+  type KucoinExportKind,
+} from "@/lib/kucoin-export";
 
 type KucoinImportDialogProps = {
   open: boolean;
@@ -24,492 +32,325 @@ type KucoinImportDialogProps = {
   onSuccess?: () => void;
 };
 
-const PREFERRED_QUOTES = new Set(["USDT", "USDC", "USD", "DAI", "FDUSD", "TUSD", "BUSD", "EUR", "GBP", "BTC", "ETH", "KCS"]);
-
-function resolveConvertSymbol(fromAsset: string, toAsset: string): { symbol: string; side: "BUY" | "SELL" } {
-  const from = fromAsset.toUpperCase();
-  const to = toAsset.toUpperCase();
-  if (PREFERRED_QUOTES.has(from) && !PREFERRED_QUOTES.has(to)) return { symbol: `${to}${from}`, side: "BUY" };
-  if (PREFERRED_QUOTES.has(to) && !PREFERRED_QUOTES.has(from)) return { symbol: `${from}${to}`, side: "SELL" };
-  return { symbol: `${to}${from}`, side: "BUY" };
-}
-
-function parseKucoinTime(raw: string): number | null {
-  if (!raw) return null;
-  const iso = String(raw).trim().replace(" ", "T") + "+08:00";
-  const ts = Date.parse(iso);
-  return isNaN(ts) ? null : ts;
-}
-
-function parseAmountCurrency(raw: string): { amount: number; currency: string } | null {
-  const parts = String(raw).trim().split(" ");
-  if (parts.length < 2) return null;
-  const amount = parseFloat(parts[0]);
-  const currency = parts[parts.length - 1].toUpperCase();
-  if (isNaN(amount) || !currency) return null;
-  return { amount, currency };
-}
-
-function parseCsvLine(line: string, sep: string): string[] {
-  const fields: string[] = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { field += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === sep && !inQuotes) {
-      fields.push(field.trim());
-      field = "";
-    } else {
-      field += ch;
-    }
-  }
-  fields.push(field.trim());
-  return fields;
-}
-
-function parseCsv(text: string): string[][] {
-  const bom = "﻿";
-  const content = text.startsWith(bom) ? text.slice(1) : text;
-  const lines = content.split(/\r?\n/).filter((l) => l.trim());
-  if (lines.length < 2) return [];
-  const sep = lines[0].includes(";") ? ";" : ",";
-  return lines.map((l) => parseCsvLine(l, sep));
-}
-
-function idxH(headers: string[], candidates: string[]): number {
-  for (const c of candidates) {
-    const i = headers.findIndex((h) => h.toLowerCase().includes(c.toLowerCase()));
-    if (i !== -1) return i;
-  }
-  return -1;
-}
-
-type FileType = "convert" | "spot" | "deposit" | "withdrawal" | "account_funding" | "account_trading";
-
-type SpotTrade = { orderId: string; symbol: string; side: "BUY" | "SELL"; avgFilledPrice: number; filledAmount: number; filledVolume: number; fee: number; feeAsset: string; executedAt: number };
-type Convert = { sellAsset: string; sellAmount: number; buyAsset: string; buyAmount: number; symbol: string; side: "BUY" | "SELL"; executedAt: number };
-type Deposit = { hash: string; coin: string; amount: number; fee: number; address: string; network: string; executedAt: number };
-type Withdrawal = { hash: string; coin: string; amount: number; fee: number; address: string; network: string; executedAt: number };
-type InternalTransfer = { transferId: string; account: string; coin: string; amount: number; fee: number; executedAt: number };
-
-type ParseResult = {
-  spotTrades: SpotTrade[];
-  converts: Convert[];
-  deposits: Deposit[];
-  withdrawals: Withdrawal[];
-  transfers: InternalTransfer[];
-  skipped: number;
+type KucoinImportPanelProps = {
+  /** Compte à alimenter. Absent : le compte KuCoin est créé, ou repris s'il existe. */
+  integrationId?: Id<"integrations">;
+  /** Nom du compte s'il est créé par cet import. */
+  displayName?: string;
+  onClose: () => void;
+  onSuccess?: () => void;
 };
 
-type SlotState = { fileName: string; count: number; skipped: number } | null;
-type AllParsed = { spotTrades: SpotTrade[]; converts: Convert[]; deposits: Deposit[]; withdrawals: Withdrawal[]; transfers: InternalTransfer[] };
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
-function parseFile(fileType: FileType, rows: string[][]): ParseResult {
-  const empty: ParseResult = { spotTrades: [], converts: [], deposits: [], withdrawals: [], transfers: [], skipped: 0 };
-  if (rows.length < 2) return empty;
+const KIND_LABELS: Record<KucoinExportKind, string> = {
+  spot: "ordres spot",
+  spot_split: "détail des exécutions, ignoré (déjà dans les ordres spot)",
+  convert: "conversions",
+  deposit: "dépôts on-chain",
+  withdrawal: "retraits on-chain",
+  account: "relevé de compte",
+  fiat_fast_trade: "achats par carte",
+  fiat_other: "export Fiat non pris en charge",
+  unknown: "fichier non reconnu",
+};
 
-  const headers = rows[0].map((h) => String(h ?? "").toLowerCase().trim());
-  const dataRows = rows.slice(1);
-  let skipped = 0;
+/**
+ * Fichier déposé. Les exports de chaque année portent le même nom : un
+ * fichier se reconnaît donc à son nom, sa taille et sa date, pas au nom seul
+ * — sinon l'export 2025 remplaçait celui de 2024.
+ */
+type LoadedFile = { key: string; name: string; result: KucoinExport | null; error: string | null };
 
-  if (fileType === "convert") {
-    const iSell = idxH(headers, ["sell"]);
-    const iBuy = idxH(headers, ["buy"]);
-    const iTime = idxH(headers, ["time of update", "time"]);
-    const iStatus = idxH(headers, ["status"]);
-    const converts: Convert[] = [];
-    for (const row of dataRows) {
-      if (String(row[iStatus] ?? "").toUpperCase() !== "SUCCESS") { skipped++; continue; }
-      const sell = parseAmountCurrency(String(row[iSell] ?? ""));
-      const buy = parseAmountCurrency(String(row[iBuy] ?? ""));
-      const executedAt = parseKucoinTime(String(row[iTime] ?? ""));
-      if (!sell || !buy || !executedAt) { skipped++; continue; }
-      const { symbol, side } = resolveConvertSymbol(sell.currency, buy.currency);
-      converts.push({ sellAsset: sell.currency, sellAmount: sell.amount, buyAsset: buy.currency, buyAmount: buy.amount, symbol, side, executedAt });
-    }
-    return { ...empty, converts, skipped };
-  }
-
-  if (fileType === "spot") {
-    const iOrderId = idxH(headers, ["order id"]);
-    const iSymbol = idxH(headers, ["symbol"]);
-    const iSide = idxH(headers, ["side"]);
-    const iAvgPrice = idxH(headers, ["avg. filled price", "avg filled price"]);
-    const iFilledAmount = idxH(headers, ["filled amount"]);
-    const iFilledVolume = idxH(headers, ["filled volume (usdt)", "filled volume"]);
-    const iFee = idxH(headers, ["fee"]);
-    const iFeeAsset = idxH(headers, ["fee currency"]);
-    const iFilledTime = idxH(headers, ["filled time"]);
-    const iStatus = idxH(headers, ["status"]);
-    const spotTrades: SpotTrade[] = [];
-    for (const row of dataRows) {
-      const status = String(row[iStatus] ?? "").toLowerCase();
-      if (status !== "deal" && status !== "part_deal") { skipped++; continue; }
-      const orderId = String(row[iOrderId] ?? "").trim();
-      const symbol = String(row[iSymbol] ?? "").trim();
-      const side = String(row[iSide] ?? "").toUpperCase() as "BUY" | "SELL";
-      const avgFilledPrice = parseFloat(String(row[iAvgPrice] ?? "")) || 0;
-      const filledAmount = parseFloat(String(row[iFilledAmount] ?? "")) || 0;
-      const filledVolume = parseFloat(String(row[iFilledVolume] ?? "")) || 0;
-      const fee = parseFloat(String(row[iFee] ?? "")) || 0;
-      const feeAsset = String(row[iFeeAsset] ?? "").trim();
-      const executedAt = parseKucoinTime(String(row[iFilledTime] ?? ""));
-      if (!orderId || !symbol || !executedAt || filledAmount === 0) { skipped++; continue; }
-      spotTrades.push({ orderId, symbol: symbol.replace("-", ""), side, avgFilledPrice, filledAmount, filledVolume, fee, feeAsset, executedAt });
-    }
-    return { ...empty, spotTrades, skipped };
-  }
-
-  if (fileType === "deposit") {
-    const iTime = idxH(headers, ["time"]);
-    const iCoin = idxH(headers, ["coin"]);
-    const iAmount = idxH(headers, ["amount"]);
-    const iFee = idxH(headers, ["fee"]);
-    const iHash = idxH(headers, ["hash"]);
-    const iAddress = idxH(headers, ["deposit address"]);
-    const iNetwork = idxH(headers, ["transfer network"]);
-    const iStatus = idxH(headers, ["status"]);
-    const deposits: Deposit[] = [];
-    for (const row of dataRows) {
-      if (String(row[iStatus] ?? "").toUpperCase() !== "SUCCESS") { skipped++; continue; }
-      const executedAt = parseKucoinTime(String(row[iTime] ?? ""));
-      const coin = String(row[iCoin] ?? "").trim().toUpperCase();
-      const amount = parseFloat(String(row[iAmount] ?? "")) || 0;
-      const hash = String(row[iHash] ?? "").trim();
-      if (!executedAt || !coin || !hash || amount === 0) { skipped++; continue; }
-      deposits.push({ hash, coin, amount, fee: parseFloat(String(row[iFee] ?? "")) || 0, address: String(row[iAddress] ?? "").trim(), network: String(row[iNetwork] ?? "").trim(), executedAt });
-    }
-    return { ...empty, deposits, skipped };
-  }
-
-  if (fileType === "withdrawal") {
-    const iTime = idxH(headers, ["time"]);
-    const iCoin = idxH(headers, ["coin"]);
-    const iAmount = idxH(headers, ["amount"]);
-    const iFee = idxH(headers, ["fee"]);
-    const iHash = idxH(headers, ["hash"]);
-    const iAddress = idxH(headers, ["withdrawal address", "address"]);
-    const iNetwork = idxH(headers, ["transfer network"]);
-    const iStatus = idxH(headers, ["status"]);
-    const withdrawals: Withdrawal[] = [];
-    for (const row of dataRows) {
-      if (String(row[iStatus] ?? "").toUpperCase() !== "SUCCESS") { skipped++; continue; }
-      const executedAt = parseKucoinTime(String(row[iTime] ?? ""));
-      const coin = String(row[iCoin] ?? "").trim().toUpperCase();
-      const amount = parseFloat(String(row[iAmount] ?? "")) || 0;
-      const hash = String(row[iHash] ?? "").trim();
-      if (!executedAt || !coin || !hash || amount === 0) { skipped++; continue; }
-      withdrawals.push({ hash, coin, amount, fee: parseFloat(String(row[iFee] ?? "")) || 0, address: String(row[iAddress] ?? "").trim(), network: String(row[iNetwork] ?? "").trim(), executedAt });
-    }
-    return { ...empty, withdrawals, skipped };
-  }
-
-  if (fileType === "account_funding" || fileType === "account_trading") {
-    // Columns: UID, Account Type, Currency, Side, Amount, Fee, Time(UTC+08:00), Remark, Type
-    const iTime = idxH(headers, ["time"]);
-    const iCurrency = idxH(headers, ["currency"]);
-    const iSide = idxH(headers, ["side"]);
-    const iAmount = idxH(headers, ["amount"]);
-    const iFee = idxH(headers, ["fee"]);
-    // Exact match to avoid "Account Type" column being matched instead of "Type"
-    const iType = headers.findIndex((h) => h === "type");
-    const account = fileType === "account_funding" ? "funding" : "trading";
-    const deposits: Deposit[] = [];
-    const withdrawals: Withdrawal[] = [];
-    const transfers: InternalTransfer[] = [];
-    for (const row of dataRows) {
-      const type = String(row[iType] ?? "").trim();
-      const side = String(row[iSide] ?? "").trim().toLowerCase();
-      const executedAt = parseKucoinTime(String(row[iTime] ?? ""));
-      const coin = String(row[iCurrency] ?? "").trim().toUpperCase();
-      const rawAmount = parseFloat(String(row[iAmount] ?? "")) || 0;
-      const amount = Math.abs(rawAmount);
-      const fee = parseFloat(String(row[iFee] ?? "")) || 0;
-      if (!executedAt || !coin || amount === 0) { skipped++; continue; }
-      const key = `${executedAt}:${coin}:${amount}`;
-      if (type === "Deposit" && side === "deposit" && account === "funding") {
-        deposits.push({ hash: `acct-deposit:${key}`, coin, amount, fee, address: "", network: "", executedAt });
-      } else if (type === "Withdraw" && side === "withdrawal" && account === "funding") {
-        withdrawals.push({ hash: `acct-withdraw:${key}`, coin, amount, fee, address: "", network: "", executedAt });
-      } else if (type === "Transfer") {
-        transfers.push({ transferId: `acct-transfer-${account}:${key}`, account, coin, amount, fee, executedAt });
-      } else {
-        skipped++;
-      }
-    }
-    return { ...empty, deposits, withdrawals, transfers, skipped };
-  }
-
-  return empty;
+function fileKey(file: File): string {
+  return `${file.name}|${file.size}|${file.lastModified}`;
 }
 
-const SLOTS: { type: FileType; label: string; hint: string }[] = [
-  { type: "convert", label: "Convert Orders_Filled Orders", hint: "conversions instantanées" },
-  { type: "spot", label: "Spot Orders_Filled Orders", hint: "trades spot" },
-  { type: "deposit", label: "Deposit_Withdrawal History_Deposit History", hint: "dépôts on-chain (avec hash)" },
-  { type: "withdrawal", label: "Deposit_Withdrawal History_Withdrawal History", hint: "retraits on-chain (avec hash)" },
-  { type: "account_funding", label: "Account History_Funding Account", hint: "dépôts, retraits et transferts" },
-  { type: "account_trading", label: "Account History_Trading Account", hint: "transferts entre comptes" },
-];
-
-function slotCount(type: FileType, result: ParseResult): number {
-  if (type === "convert") return result.converts.length;
-  if (type === "spot") return result.spotTrades.length;
-  if (type === "deposit") return result.deposits.length;
-  if (type === "withdrawal") return result.withdrawals.length;
-  if (type === "account_funding") return result.deposits.length + result.withdrawals.length + result.transfers.length;
-  if (type === "account_trading") return result.transfers.length;
-  return 0;
+/** Années couvertes par un export, pour distinguer deux fichiers de même nom. */
+function years(result: KucoinExport): string {
+  const dates = [
+    ...result.spotTrades,
+    ...result.converts,
+    ...result.deposits,
+    ...result.withdrawals,
+    ...result.cardPurchases,
+  ].map((row) => new Date(row.executedAt).getUTCFullYear());
+  if (dates.length === 0) return "";
+  const first = Math.min(...dates);
+  const last = Math.max(...dates);
+  return first === last ? String(first) : `${first}–${last}`;
 }
 
-function slotHint(type: FileType, result: ParseResult): string {
-  if (type === "account_funding") {
-    const deps = result.deposits.filter(d => d.hash.startsWith("acct-deposit:"));
-    const wths = result.withdrawals.filter(w => w.hash.startsWith("acct-withdraw:"));
-    const trfs = result.transfers.filter(t => t.transferId.startsWith("acct-transfer-funding:"));
-    const parts = [];
-    if (deps.length > 0) parts.push(`${deps.length} dépôt${deps.length > 1 ? "s" : ""}`);
-    if (wths.length > 0) parts.push(`${wths.length} retrait${wths.length > 1 ? "s" : ""}`);
-    if (trfs.length > 0) parts.push(`${trfs.length} transfert${trfs.length > 1 ? "s" : ""}`);
-    return parts.length > 0 ? parts.join(" · ") : "0 lignes";
-  }
-  if (type === "account_trading") {
-    const trfs = result.transfers.filter(t => t.transferId.startsWith("acct-transfer-trading:"));
-    return `${trfs.length} transfert${trfs.length > 1 ? "s" : ""}`;
-  }
-  return `${slotCount(type, result)} ligne${slotCount(type, result) > 1 ? "s" : ""}`;
+type ImportResult = {
+  createdAccount: boolean;
+  spotInserted: number;
+  convertsInserted: number;
+  convertsRetimed: number;
+  depositsInserted: number;
+  withdrawalsInserted: number;
+  cardPurchasesInserted: number;
+  cardPurchasesRepriced: number;
+  duplicatesRemoved: number;
+};
+
+function plural(count: number, singular: string, pluralForm = `${singular}s`): string {
+  return `${count} ${count > 1 ? pluralForm : singular}`;
 }
 
-const emptyParsed: AllParsed = { spotTrades: [], converts: [], deposits: [], withdrawals: [], transfers: [] };
+function describe(result: KucoinExport): string {
+  const parts: string[] = [];
+  if (result.spotTrades.length) parts.push(plural(result.spotTrades.length, "ordre"));
+  if (result.converts.length) parts.push(plural(result.converts.length, "conversion"));
+  if (result.deposits.length) parts.push(plural(result.deposits.length, "dépôt"));
+  if (result.withdrawals.length) parts.push(plural(result.withdrawals.length, "retrait"));
+  if (result.cardPurchases.length) parts.push(plural(result.cardPurchases.length, "achat par carte", "achats par carte"));
+  if (parts.length > 0) return parts.join(" · ");
+  if (result.kind === "spot_split" || result.kind === "unknown") return KIND_LABELS[result.kind];
+  if (result.kind === "fiat_other") {
+    return result.skipped > 0
+      ? `${plural(result.skipped, "ligne")} non prise${result.skipped > 1 ? "s" : ""} en charge (virement, P2P ou paiement tiers)`
+      : "aucune ligne sur cette période";
+  }
+  if (result.kind === "account") return "aucun achat par carte (le reste figure dans les autres fichiers)";
+  return "aucune ligne sur cette période";
+}
+
+async function readExport(file: File): Promise<string[][]> {
+  const buffer = await file.arrayBuffer();
+  if (/\.xlsx$/i.test(file.name)) return readFirstSheet(buffer);
+  return parseCsvRows(decodeCsvText(buffer));
+}
 
 export function KucoinImportDialog({ open, onOpenChange, integrationId, onSuccess }: KucoinImportDialogProps) {
-  const [slots, setSlots] = useState<Record<FileType, SlotState>>({ convert: null, spot: null, deposit: null, withdrawal: null, account_funding: null, account_trading: null });
-  const [parsed, setParsed] = useState<AllParsed>(emptyParsed);
-  const [dragOver, setDragOver] = useState<FileType | null>(null);
-  const [errors, setErrors] = useState<Record<FileType, string | null>>({ convert: null, spot: null, deposit: null, withdrawal: null, account_funding: null, account_trading: null });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90dvh] max-w-lg gap-4 overflow-y-auto">
+        <DialogHeader className="space-y-1">
+          <DialogTitle className="title text-2xl leading-tight">Importer des exports KuCoin</DialogTitle>
+          <DialogDescription className="text-xs">{IMPORT_HINT}</DialogDescription>
+        </DialogHeader>
+        {/* Monté seulement à l'ouverture : chaque ouverture repart de zéro. */}
+        {open && (
+          <KucoinImportPanel integrationId={integrationId} onClose={() => onOpenChange(false)} onSuccess={onSuccess} />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export const IMPORT_HINT =
+  "Déposez tous les fichiers exportés depuis KuCoin (Orders et Assets → History), toutes années confondues. Chaque fichier est reconnu automatiquement ; les mouvements déjà connus ne sont pas ajoutés deux fois.";
+
+/** Choix des fichiers, aperçu et import : partagé par l'ajout de compte et le menu du compte. */
+export function KucoinImportPanel({ integrationId, displayName, onClose, onSuccess }: KucoinImportPanelProps) {
+  const [files, setFiles] = useState<LoadedFile[]>([]);
+  const [reading, setReading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [importResult, setImportResult] = useState<{ spotInserted: number; convertsInserted: number; depositsInserted: number; withdrawalsInserted: number; transfersInserted: number } | null>(null);
-  const fileRefs = useRef<Record<FileType, HTMLInputElement | null>>({ convert: null, spot: null, deposit: null, withdrawal: null, account_funding: null, account_trading: null });
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   const ingestXlsx = useMutation(api.kucoin_import.ingestXlsx);
 
-  function reset() {
-    setSlots({ convert: null, spot: null, deposit: null, withdrawal: null, account_funding: null, account_trading: null });
-    setParsed(emptyParsed);
-    setErrors({ convert: null, spot: null, deposit: null, withdrawal: null, account_funding: null, account_trading: null });
-    setSubmitting(false);
-    setCompleted(false);
+  async function addFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setReading(true);
+    setError(null);
     setImportResult(null);
-    Object.values(fileRefs.current).forEach((r) => { if (r) r.value = ""; });
-  }
-
-  const loadFile = useCallback((file: File, expectedType: FileType) => {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const rows = parseCsv(decodeCsvText(ev.target?.result as ArrayBuffer));
-
-        if (rows.some((r) => r.join("").toLowerCase().includes("no matching records"))) {
-          setErrors((e) => ({ ...e, [expectedType]: "Aucune donnée sur cette période." }));
-          return;
-        }
-
-        const result = parseFile(expectedType, rows);
-        const count = slotCount(expectedType, result);
-
-        if (count === 0) {
-          // For account history files, show unique Type values to help debug
-          if (expectedType === "account_funding" || expectedType === "account_trading") {
-            const headers = rows[0].map((h) => String(h ?? "").toLowerCase().trim());
-            const iType = headers.findIndex((h) => h === "type");
-            const uniqueTypes = iType !== -1
-              ? [...new Set(rows.slice(1).map((r) => String(r[iType] ?? "").trim()).filter(Boolean))].slice(0, 5).join(", ")
-              : "?";
-            setErrors((e) => ({ ...e, [expectedType]: `0 lignes valides (${result.skipped} ignorées). Types trouvés : ${uniqueTypes}` }));
-          } else {
-            const firstRow = rows[1]?.join(" | ") ?? "vide";
-            setErrors((e) => ({ ...e, [expectedType]: `0 lignes valides, ${result.skipped} skippées. Ex: ${firstRow.slice(0, 100)}` }));
-          }
-          return;
-        }
-
-        setErrors((e) => ({ ...e, [expectedType]: null }));
-        setSlots((s) => ({ ...s, [expectedType]: { fileName: file.name, count, skipped: result.skipped } }));
-        const acctPrefix = expectedType === "account_funding" ? "funding" : expectedType === "account_trading" ? "trading" : null;
-        setParsed((p) => ({
-          spotTrades: expectedType === "spot" ? result.spotTrades : p.spotTrades,
-          converts: expectedType === "convert" ? result.converts : p.converts,
-          deposits: (expectedType === "deposit" || expectedType === "account_funding") ? [...(expectedType === "account_funding" ? p.deposits.filter(d => !d.hash.startsWith("acct-deposit:")) : []), ...result.deposits] : p.deposits,
-          withdrawals: (expectedType === "withdrawal" || expectedType === "account_funding") ? [...(expectedType === "account_funding" ? p.withdrawals.filter(w => !w.hash.startsWith("acct-withdraw:")) : []), ...result.withdrawals] : p.withdrawals,
-          transfers: acctPrefix ? [...p.transfers.filter(t => !t.transferId.startsWith(`acct-transfer-${acctPrefix}:`)), ...result.transfers] : p.transfers,
-        }));
-      } catch {
-        setErrors((e) => ({ ...e, [expectedType]: "Impossible de lire le fichier." }));
+    const loaded: LoadedFile[] = [];
+    for (const file of Array.from(list)) {
+      if (!/\.(xlsx|csv)$/i.test(file.name)) {
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: "Format attendu : .xlsx ou .csv" });
+        continue;
       }
-    };
-    reader.readAsArrayBuffer(file);
-  }, []);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>, type: FileType) {
-    const file = e.target.files?.[0];
-    if (file) loadFile(file, type);
+      if (file.size > MAX_FILE_BYTES) {
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: "Fichier trop volumineux." });
+        continue;
+      }
+      try {
+        loaded.push({ key: fileKey(file), name: file.name, result: parseKucoinExport(await readExport(file)), error: null });
+      } catch (err) {
+        loaded.push({ key: fileKey(file), name: file.name, result: null, error: errorMessage(err, "Impossible de lire le fichier.") });
+      }
+    }
+    // Le même fichier déposé deux fois n'apparaît qu'une fois ; les lignes
+    // communes à deux exports sont de toute façon fusionnées à l'import.
+    setFiles((current) => [...current.filter((f) => !loaded.some((l) => l.key === f.key)), ...loaded]);
+    setReading(false);
+    if (inputRef.current) inputRef.current.value = "";
   }
 
-  function handleDrop(e: React.DragEvent, type: FileType) {
-    e.preventDefault();
-    setDragOver(null);
-    const file = e.dataTransfer.files?.[0];
-    if (file) loadFile(file, type);
+  function removeFile(key: string) {
+    setFiles((current) => current.filter((f) => f.key !== key));
+    setImportResult(null);
   }
 
-  function clearSlot(type: FileType) {
-    setSlots((s) => ({ ...s, [type]: null }));
-    setErrors((e) => ({ ...e, [type]: null }));
-    setParsed((p) => ({
-      spotTrades: type === "spot" ? [] : p.spotTrades,
-      converts: type === "convert" ? [] : p.converts,
-      deposits: type === "deposit" ? [] : type === "account_funding" ? p.deposits.filter(d => !d.hash.startsWith("acct-deposit:")) : p.deposits,
-      withdrawals: type === "withdrawal" ? [] : type === "account_funding" ? p.withdrawals.filter(w => !w.hash.startsWith("acct-withdraw:")) : p.withdrawals,
-      transfers: type === "account_funding" ? p.transfers.filter(t => !t.transferId.startsWith("acct-transfer-funding:"))
-        : type === "account_trading" ? p.transfers.filter(t => !t.transferId.startsWith("acct-transfer-trading:"))
-        : p.transfers,
-    }));
-    const ref = fileRefs.current[type];
-    if (ref) ref.value = "";
-  }
+  const merged = mergeKucoinExports(files.flatMap((f) => (f.result ? [f.result] : [])));
+  const totalRows =
+    merged.spotTrades.length +
+    merged.converts.length +
+    merged.deposits.length +
+    merged.withdrawals.length +
+    merged.cardPurchases.length;
 
   async function handleImport() {
     setSubmitting(true);
+    setError(null);
     try {
       const result = await ingestXlsx({
         integrationId,
-        spotTrades: parsed.spotTrades,
-        converts: parsed.converts,
-        deposits: parsed.deposits,
-        withdrawals: parsed.withdrawals,
-        transfers: parsed.transfers,
+        displayName,
+        spotTrades: merged.spotTrades,
+        converts: merged.converts,
+        deposits: merged.deposits,
+        withdrawals: merged.withdrawals,
+        cardPurchases: merged.cardPurchases,
       });
       setImportResult(result);
-      setCompleted(true);
-      const totalInserted =
+      const inserted =
         result.spotInserted +
         result.convertsInserted +
         result.depositsInserted +
         result.withdrawalsInserted +
-        result.transfersInserted;
+        result.cardPurchasesInserted +
+        result.cardPurchasesRepriced;
       toast.success(
-        totalInserted > 0
-          ? `Import KuCoin terminé : ${totalInserted} ligne${totalInserted > 1 ? "s" : ""} ajoutée${totalInserted > 1 ? "s" : ""}`
-          : "Import KuCoin terminé, aucune nouvelle ligne"
+        inserted > 0 || result.duplicatesRemoved > 0
+          ? `Import KuCoin terminé : ${plural(inserted, "ligne")} ajoutée${inserted > 1 ? "s" : ""}`
+          : "Import KuCoin terminé, rien de nouveau"
       );
       onSuccess?.();
-      setTimeout(() => { onOpenChange(false); reset(); }, 2500);
     } catch (err) {
       console.error("KuCoin import failed:", err);
-      setErrors((e) => ({ ...e, convert: err instanceof Error ? err.message : "Erreur lors de l'import." }));
+      setError(errorMessage(err, "Échec de l'import KuCoin."));
       toast.error(errorMessage(err, "Échec de l'import KuCoin."));
     } finally {
       setSubmitting(false);
     }
   }
 
-  function handleOpenChange(val: boolean) {
-    if (!val) reset();
-    onOpenChange(val);
-  }
-
-  const totalRows = parsed.spotTrades.length + parsed.converts.length + parsed.deposits.length + parsed.withdrawals.length + parsed.transfers.length;
-  const hasAny = totalRows > 0;
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-lg gap-4">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="title text-2xl leading-tight">Importer des exports KuCoin</DialogTitle>
-          <DialogDescription className="text-xs">
-            KuCoin → Orders → Order Records → Export → <span className="font-medium text-foreground">choisir CSV</span>
-          </DialogDescription>
-        </DialogHeader>
+    <div className="space-y-4">
+      <label
+        htmlFor="kucoin-export-files"
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => { e.preventDefault(); setDragOver(false); void addFiles(e.dataTransfer.files); }}
+        className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-3 py-4 transition-colors ${
+          dragOver ? "border-primary bg-primary/5" : "border-border/60 bg-muted/20 hover:border-border hover:bg-muted/30"
+        }`}
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
+          {reading ? <LoaderCircle className="size-4 animate-spin text-muted-foreground" /> : <Upload className="size-4 text-muted-foreground" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-medium text-foreground">Choisir ou glisser les fichiers</p>
+          <p className="text-xs text-muted-foreground">.xlsx ou .csv, plusieurs à la fois</p>
+        </div>
+        <input
+          id="kucoin-export-files"
+          ref={inputRef}
+          type="file"
+          multiple
+          accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          className="sr-only"
+          onChange={(e) => void addFiles(e.target.files)}
+        />
+      </label>
 
-        <div className="space-y-2">
-          {SLOTS.map(({ type, label, hint }) => {
-            const slot = slots[type];
-            const error = errors[type];
-            const isOver = dragOver === type;
-
+      {files.length > 0 && (
+        <ul className="max-h-48 space-y-0.5 overflow-y-auto rounded-md border border-border/60 p-1">
+          {files.map((file) => {
+            const useful = file.result && file.result.kind !== "unknown";
             return (
-              <div key={type}>
-                <label
-                  htmlFor={`kucoin-csv-${type}`}
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(type); }}
-                  onDragLeave={() => setDragOver(null)}
-                  onDrop={(e) => handleDrop(e, type)}
-                  className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 cursor-pointer transition-colors ${
-                    slot ? "border-positive/50 bg-positive/5"
-                      : isOver ? "border-primary bg-primary/5"
-                      : error ? "border-destructive/40 bg-destructive/5"
-                      : "border-border/60 bg-muted/20 hover:border-border hover:bg-muted/30"
-                  }`}
+              <li key={file.key} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted/30">
+                <FileText className={`size-3.5 shrink-0 ${file.error ? "text-destructive" : useful ? "text-positive" : "text-muted-foreground"}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-foreground">
+                    {file.name}
+                    {file.result && years(file.result) && <span className="text-muted-foreground"> · {years(file.result)}</span>}
+                  </p>
+                  <p className={`truncate ${file.error ? "text-destructive" : "text-muted-foreground"}`}>
+                    {file.error ?? (file.result ? describe(file.result) : "")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label={`Retirer ${file.name}`}
+                  onClick={() => removeFile(file.key)}
+                  className="shrink-0 text-muted-foreground hover:text-foreground"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted">
-                    {slot ? <FileText className="size-4 text-positive" /> : <Upload className="size-4 text-muted-foreground" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-foreground truncate">{label}<span className="text-muted-foreground font-normal">.csv</span></p>
-                    {slot ? (
-                      <p className="text-xs text-positive">
-                        {slotHint(type, { spotTrades: parsed.spotTrades, converts: parsed.converts, deposits: parsed.deposits, withdrawals: parsed.withdrawals, transfers: parsed.transfers, skipped: slot.skipped })}
-                        {slot.skipped > 0 ? ` · ${slot.skipped} ignorée${slot.skipped > 1 ? "s" : ""}` : ""}
-                      </p>
-                    ) : error ? (
-                      <p className="text-xs text-destructive truncate">{error}</p>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">{hint}</p>
-                    )}
-                  </div>
-                  {slot && (
-                    <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); clearSlot(type); }} className="shrink-0 text-muted-foreground hover:text-foreground">
-                      <X className="size-3.5" />
-                    </button>
-                  )}
-                  <input id={`kucoin-csv-${type}`} ref={(el) => { fileRefs.current[type] = el; }} type="file" accept=".csv,text/csv" className="sr-only" onChange={(e) => handleFileChange(e, type)} />
-                </label>
-              </div>
+                  <X className="size-3.5" />
+                </button>
+              </li>
             );
           })}
+        </ul>
+      )}
+
+      {totalRows > 0 && !importResult && (
+        <p className="text-xs text-muted-foreground">
+          À importer : {[
+            merged.spotTrades.length && plural(merged.spotTrades.length, "ordre spot", "ordres spot"),
+            merged.converts.length && plural(merged.converts.length, "conversion"),
+            merged.deposits.length && plural(merged.deposits.length, "dépôt"),
+            merged.withdrawals.length && plural(merged.withdrawals.length, "retrait"),
+            merged.cardPurchases.length && plural(merged.cardPurchases.length, "achat par carte", "achats par carte"),
+          ].filter(Boolean).join(" · ")}
+        </p>
+      )}
+
+      {importResult && (
+        <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
+          <p className="flex items-center gap-2 font-medium text-positive"><Check className="size-4" /> Import réussi</p>
+          {importResult.createdAccount && <p className="text-xs text-positive">Compte KuCoin créé, alimenté par ses exports</p>}
+          {importResult.spotInserted > 0 && <p className="text-xs text-positive">{plural(importResult.spotInserted, "ordre spot", "ordres spot")}</p>}
+          {importResult.convertsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.convertsInserted, "conversion")}</p>}
+          {importResult.convertsRetimed > 0 && (
+            <p className="text-xs text-positive">{plural(importResult.convertsRetimed, "conversion redatée", "conversions redatées")} à l&apos;heure du relevé de compte</p>
+          )}
+          {importResult.depositsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.depositsInserted, "dépôt")}</p>}
+          {importResult.withdrawalsInserted > 0 && <p className="text-xs text-positive">{plural(importResult.withdrawalsInserted, "retrait")}</p>}
+          {importResult.cardPurchasesInserted > 0 && <p className="text-xs text-positive">{plural(importResult.cardPurchasesInserted, "achat par carte", "achats par carte")}</p>}
+          {importResult.cardPurchasesRepriced > 0 && (
+            <p className="text-xs text-positive">{plural(importResult.cardPurchasesRepriced, "achat par carte", "achats par carte")} au prix réellement payé</p>
+          )}
+          {importResult.duplicatesRemoved > 0 && (
+            <p className="text-xs text-muted-foreground">{plural(importResult.duplicatesRemoved, "doublon")} d&apos;anciens imports retiré{importResult.duplicatesRemoved > 1 ? "s" : ""}</p>
+          )}
+          {importResult.spotInserted + importResult.convertsInserted + importResult.convertsRetimed + importResult.depositsInserted + importResult.withdrawalsInserted + importResult.cardPurchasesInserted + importResult.cardPurchasesRepriced + importResult.duplicatesRemoved === 0 && (
+            <p className="text-xs text-muted-foreground">Tout était déjà enregistré.</p>
+          )}
         </div>
+      )}
 
-        {completed && importResult && (
-          <div className="space-y-1 border-l-2 border-positive py-3 pl-4 text-sm">
-            <p className="font-medium text-positive flex items-center gap-2"><Check className="size-4" /> Import réussi</p>
-            {importResult.spotInserted > 0 && <p className="text-positive text-xs">{importResult.spotInserted} spot trade{importResult.spotInserted > 1 ? "s" : ""}</p>}
-            {importResult.convertsInserted > 0 && <p className="text-positive text-xs">{importResult.convertsInserted} convert{importResult.convertsInserted > 1 ? "s" : ""}</p>}
-            {importResult.depositsInserted > 0 && <p className="text-positive text-xs">{importResult.depositsInserted} dépôt{importResult.depositsInserted > 1 ? "s" : ""}</p>}
-            {importResult.withdrawalsInserted > 0 && <p className="text-positive text-xs">{importResult.withdrawalsInserted} retrait{importResult.withdrawalsInserted > 1 ? "s" : ""}</p>}
-            {importResult.transfersInserted > 0 && <p className="text-positive text-xs">{importResult.transfersInserted} transfert{importResult.transfersInserted > 1 ? "s" : ""} entre comptes</p>}
-          </div>
-        )}
+      {error && (
+        <div className="flex items-start gap-2 border-l-2 border-destructive py-2 pl-3 text-xs text-destructive">
+          <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
+          {error}
+        </div>
+      )}
 
-        {Object.values(errors).some((e) => e) && !completed && (
-          <div className="border-l-2 border-destructive py-2 pl-3 text-xs text-destructive flex items-start gap-2">
-            <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
-            {Object.values(errors).find((e) => e)}
-          </div>
-        )}
-
-        <DialogFooter className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
-          <Button type="button" variant="ghost" onClick={() => handleOpenChange(false)} disabled={submitting} className="h-9 text-sm cursor-pointer">Annuler</Button>
-          <Button type="button" disabled={!hasAny || submitting || completed} onClick={handleImport} className="h-9 min-w-[140px] text-sm cursor-pointer">
-            {submitting ? <span className="flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin" />Import…</span>
-              : completed ? <span className="flex items-center gap-1.5"><Check className="size-3.5" />Importé</span>
-              : `Importer${hasAny ? ` (${totalRows})` : ""}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      <DialogFooter className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center sm:justify-end">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={submitting} className="h-9 cursor-pointer text-sm">
+          {importResult ? "Fermer" : "Annuler"}
+        </Button>
+        <Button
+          type="button"
+          disabled={totalRows === 0 || submitting || reading || importResult !== null}
+          onClick={handleImport}
+          className="h-9 min-w-[140px] cursor-pointer text-sm"
+        >
+          {submitting ? (
+            <span className="flex items-center gap-1.5"><LoaderCircle className="size-3.5 animate-spin" />Import…</span>
+          ) : importResult ? (
+            <span className="flex items-center gap-1.5"><Check className="size-3.5" />Importé</span>
+          ) : (
+            `Importer${totalRows > 0 ? ` (${totalRows})` : ""}`
+          )}
+        </Button>
+      </DialogFooter>
+    </div>
   );
 }

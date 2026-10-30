@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret } from "./utils/encryption";
 import type { GenericId } from "convex/values";
 import { optionalUserId, requireUserId } from "./auth";
 import { SUPPORTED_PROVIDERS, WALLET_PROVIDERS } from "../lib/providers";
+import { walletAddressError } from "../lib/wallet-address";
 import type { SyncJob } from "../lib/sync-health";
 
 export const list = query({
@@ -69,6 +70,7 @@ export const list = query({
         accountCreatedAt: integration.accountCreatedAt ?? null,
         // Absent = actif : le champ n'existe pas sur les comptes antérieurs.
         syncEnabled: integration.syncEnabled ?? true,
+        source: integration.source ?? null,
         publicAddress,
       };
     }));
@@ -164,6 +166,10 @@ export const upsert = mutation({
     if (!SUPPORTED_PROVIDERS.includes(args.provider)) {
       throw new Error(`Unsupported provider: ${args.provider}`);
     }
+    if (WALLET_PROVIDERS.has(args.provider)) {
+      const addressError = walletAddressError(args.provider, args.apiKey);
+      if (addressError) throw new Error(addressError);
+    }
 
     const now = Date.now();
 
@@ -191,6 +197,24 @@ export const upsert = mutation({
         encryptedCredentials,
         readOnly: args.readOnly,
         displayName: args.displayName,
+        updatedAt: now,
+      });
+      return { status: "updated", provider: args.provider };
+    }
+
+    // Un compte jusqu'ici alimenté par ses exports passe en API : on le
+    // complète plutôt que d'en créer un second, qui compterait chaque
+    // mouvement deux fois. Ses imports et la synchronisation se recoupent
+    // ensuite par hash de transaction.
+    const fileAccount = existingForProvider.find((integration) => integration.source === "file");
+    if (fileAccount) {
+      await ctx.db.patch(fileAccount._id, {
+        encryptedCredentials,
+        readOnly: args.readOnly,
+        displayName: args.displayName ?? fileAccount.displayName,
+        source: "api",
+        syncEnabled: true,
+        scopes: args.readOnly ? ["read"] : [],
         updatedAt: now,
       });
       return { status: "updated", provider: args.provider };
@@ -379,6 +403,8 @@ export const purgeAllData = mutation({
     const syncStates = await purgeTable(() =>
       ctx.db.query("integrationSyncStates").withIndex("by_integration_dataset_scope", (q) => q.eq("integrationId", id)).collect()
     );
+    // Signale aux pages que les positions sont à recalculer.
+    await ctx.db.patch(id, { updatedAt: Date.now() });
 
     return { trades, orders, convertTrades, deposits, withdrawals, fiatTransactions, balances, syncStates };
   },
@@ -615,5 +641,30 @@ export const setSyncEnabled = mutation({
 
     await ctx.db.patch(integrationId, { syncEnabled: enabled, updatedAt: Date.now() });
     return { syncEnabled: enabled };
+  },
+});
+
+/**
+ * Renomme un compte. Un nom vide rend celui de la plateforme.
+ *
+ * `updatedAt` n'est pas touché : il signale aux pages un changement de
+ * données, et un nom n'en est pas un — inutile de recalculer le portefeuille.
+ */
+export const rename = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    displayName: v.string(),
+  },
+  handler: async (ctx, { integrationId, displayName }) => {
+    const clerkUserId = await requireUserId(ctx);
+
+    const integration = await ctx.db.get(integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Intégration introuvable.");
+    }
+
+    const name = displayName.trim().slice(0, 80);
+    await ctx.db.patch(integrationId, { displayName: name || undefined });
+    return { displayName: name || null };
   },
 });

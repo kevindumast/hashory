@@ -472,7 +472,27 @@ export function useDashboardMetrics(refreshToken: number) {
     return fiatTransactions;
   }, [fiatTransactions]);
 
-  const balanceList: BalanceRecord[] = Array.isArray(balances) ? balances : [];
+  // Une plateforme peut lister des centaines d'actifs à zéro : ils ne
+  // disent rien et gonflaient la liste des jetons.
+  // Mémorisé : un nouveau tableau à chaque rendu recalculait les jetons,
+  // donc les paires de prix, donc une requête de prix… en boucle.
+  const balanceList: BalanceRecord[] = useMemo(
+    () =>
+      (Array.isArray(balances) ? balances : []).filter(
+        (balance) => parseAmount(balance.totalPosition ?? balance.free ?? "0") > 0
+      ),
+    [balances]
+  );
+  const reportedBalances = useMemo(
+    () =>
+      balanceList.map((balance) => ({
+        account: String(balance.integrationId),
+        asset: balance.asset.toUpperCase(),
+        quantity: parseAmount(balance.totalPosition ?? balance.free ?? "0"),
+        updatedAt: balance.updatedAt,
+      })),
+    [balanceList]
+  );
 
   const syncScopeList = useMemo<SyncScopeRecord[]>(() => {
     if (!Array.isArray(syncScopes)) {
@@ -1234,5 +1254,7 @@ export function useDashboardMetrics(refreshToken: number) {
     performanceSeries,
     /** Positions du grand livre compte par compte, en dollars et en euros. */
     ledgerAccounts: ledgerPositions?.balances ?? [],
+    /** Soldes publiés par les plateformes (« Sync Balances »), à la date de leur relevé. */
+    reportedBalances,
   };
 }

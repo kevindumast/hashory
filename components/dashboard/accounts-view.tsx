@@ -31,6 +31,14 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -44,11 +52,12 @@ import { ConnectProviderDialog } from "@/components/dashboard/connect-provider-d
 import { BitstackImportDialog } from "@/components/dashboard/bitstack-import-dialog"
 import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
+import { TransactionsPerYear } from "@/components/dashboard/transactions-per-year"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
-import { FILE_IMPORT_PROVIDERS } from "@/lib/providers"
+import { isFileImportAccount } from "@/lib/providers"
 import { PROVIDER_ICONS } from "@/lib/provider-icons"
 import { toast, withToast } from "@/lib/toast"
 import { assessSyncHealth, formatElapsed, type SyncHealth } from "@/lib/sync-health"
@@ -99,6 +108,8 @@ export function AccountsView() {
   const [isBitstackImportOpen, setIsBitstackImportOpen] = React.useState(false)
   const [isFinaryImportOpen, setIsFinaryImportOpen] = React.useState(false)
   const [isKucoinImportOpen, setIsKucoinImportOpen] = React.useState(false)
+  const [renameTarget, setRenameTarget] = React.useState<{ id: Id<"integrations">; name: string } | null>(null)
+  const [renameValue, setRenameValue] = React.useState("")
   const [kucoinImportIntegrationId, setKucoinImportIntegrationId] = React.useState<string | null>(null)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [typeFilter, setTypeFilter] = React.useState<AccountType>("All")
@@ -121,6 +132,7 @@ export function AccountsView() {
   const syncDustOnly = useAction(api.binance.syncDustOnly)
   const syncBalances = useAction(api.binance.getUserAssets)
   const syncOrders = useAction(api.binance.syncOrdersOnly)
+  const syncSpotTrades = useAction(api.binance.syncSpotTradesOnly)
   const syncKaspaWallet = useAction(api.kaspa.syncKaspaWallet)
   const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
@@ -130,6 +142,7 @@ export function AccountsView() {
   const deleteIntegration = useMutation(api.integrations.deleteIntegration)
   const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
   const cancelSync = useMutation(api.integrations.cancelSync)
+  const renameIntegration = useMutation(api.integrations.rename)
   const dataProviderKeys = useQuery(api.dataProviderKeys.list)
   const now = useNow()
 
@@ -185,8 +198,14 @@ export function AccountsView() {
 
       return {
         id: integration._id,
-        name: PROVIDER_NAMES[integration.provider] || integration.displayName || integration.provider || "Compte",
-        type: (FILE_IMPORT_PROVIDERS.has(integration.provider) ? "File" : "API") as "API" | "File",
+        // Le nom choisi par l'utilisateur d'abord : celui de la plateforme masquait tout renommage.
+        // Des comptes ont reçu l'identifiant de la plateforme pour nom (« kraken ») : ce n'en est pas un.
+        name:
+          (integration.displayName !== integration.provider && integration.displayName) ||
+          PROVIDER_NAMES[integration.provider] ||
+          integration.provider ||
+          "Compte",
+        type: (isFileImportAccount(integration) ? "File" : "API") as "API" | "File",
         platformId: integration.provider,
         iconUrl: PROVIDER_ICONS[integration.provider] || "",
         subAccountsCount: 1,
@@ -415,6 +434,31 @@ export function AccountsView() {
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
   }, [handleRefresh, syncOrders])
+
+  const handleSyncSpotTrades = React.useCallback(async (accountId: Id<"integrations">) => {
+    if (!isConvexConfigured) {
+      console.error("Convex is not configured")
+      toast.error("Convex n'est pas configuré, l'action est indisponible.")
+      return
+    }
+
+    const result = await withToast(
+      () => syncSpotTrades({ integrationId: accountId }),
+      {
+        loading: "Synchronisation des trades spot…",
+        success: (r) =>
+          r.inserted > 0
+            ? `${r.inserted} trade${r.inserted > 1 ? "s" : ""} ajouté${r.inserted > 1 ? "s" : ""} (${r.symbols} paires lues)`
+            : `Trades à jour (${r.symbols} paires lues)`,
+        error: "Échec de la synchronisation des trades spot",
+      }
+    )
+
+    if (!result) return
+
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    handleRefresh()
+  }, [handleRefresh, syncSpotTrades])
 
   const handlePurgeData = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {
@@ -757,15 +801,30 @@ export function AccountsView() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem className="cursor-pointer">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setRenameTarget({ id: account.id as Id<"integrations">, name: account.name })
+                              setRenameValue(account.name)
+                            }}
+                            className="cursor-pointer"
+                          >
                             <span className="text-sm">Renommer</span>
                           </DropdownMenuItem>
-                          {FILE_IMPORT_PROVIDERS.has(account.platformId) ? (
+                          {account.type === "File" ? (
                             <DropdownMenuItem
-                              onClick={() => account.platformId === "finary" ? setIsFinaryImportOpen(true) : setIsBitstackImportOpen(true)}
+                              onClick={() => {
+                                if (account.platformId === "kucoin") {
+                                  setKucoinImportIntegrationId(account.id)
+                                  setIsKucoinImportOpen(true)
+                                } else if (account.platformId === "finary") {
+                                  setIsFinaryImportOpen(true)
+                                } else {
+                                  setIsBitstackImportOpen(true)
+                                }
+                              }}
                               className="cursor-pointer flex items-center justify-between"
                             >
-                              <span className="text-sm">Importer un fichier CSV</span>
+                              <span className="text-sm">{account.platformId === "kucoin" ? "Importer les exports (.xlsx, .csv)" : "Importer un fichier CSV"}</span>
                               <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
                             </DropdownMenuItem>
                           ) : (
@@ -778,7 +837,7 @@ export function AccountsView() {
                               <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
                             </DropdownMenuItem>
                           )}
-                          {!FILE_IMPORT_PROVIDERS.has(account.platformId) && (<>
+                          {account.type !== "File" && (<>
                           <DropdownMenuItem
                             onClick={() => handleSyncFiatOnly(account.id)}
                             disabled={account.status === "syncing"}
@@ -807,6 +866,13 @@ export function AccountsView() {
                           >
                             <span className="text-sm">Sync Order History</span>
                           </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => handleSyncSpotTrades(account.id)}
+                            disabled={account.status === "syncing"}
+                            className="cursor-pointer"
+                          >
+                            <span className="text-sm">Sync Trades spot</span>
+                          </DropdownMenuItem>
                           {account.platformId === "kucoin" && (
                           <DropdownMenuItem
                             onClick={() => handleSyncKucoinConverts(account.id)}
@@ -821,7 +887,7 @@ export function AccountsView() {
                             onClick={() => { setKucoinImportIntegrationId(account.id); setIsKucoinImportOpen(true); }}
                             className="cursor-pointer flex items-center justify-between"
                           >
-                            <span className="text-sm">Importer fichiers CSV</span>
+                            <span className="text-sm">Importer les exports (.xlsx, .csv)</span>
                             <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
                           </DropdownMenuItem>
                           )}
@@ -853,6 +919,8 @@ export function AccountsView() {
         )}
       </div>
 
+      {!isLoading && <TransactionsPerYear transactions={transactions} />}
+
       <ConnectProviderDialog open={isConnectOpen} onOpenChange={(open) => {
         setIsConnectOpen(open)
         if (!open) {
@@ -877,6 +945,41 @@ export function AccountsView() {
           onSuccess={handleRefresh}
         />
       )}
+
+      <Dialog open={renameTarget !== null} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent className="max-w-sm gap-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle>Renommer le compte</DialogTitle>
+            <DialogDescription className="text-xs">Laissez vide pour reprendre le nom de la plateforme.</DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={async (event) => {
+              event.preventDefault()
+              if (!renameTarget) return
+              const done = await withToast(
+                () => renameIntegration({ integrationId: renameTarget.id, displayName: renameValue }),
+                { loading: "Renommage…", success: "Compte renommé", error: "Échec du renommage" }
+              )
+              if (done) setRenameTarget(null)
+            }}
+          >
+            <Input
+              autoFocus
+              value={renameValue}
+              maxLength={80}
+              onChange={(event) => setRenameValue(event.target.value)}
+              aria-label="Nom du compte"
+            />
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setRenameTarget(null)}>
+                Annuler
+              </Button>
+              <Button type="submit">Enregistrer</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

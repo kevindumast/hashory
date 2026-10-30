@@ -6,7 +6,7 @@ import { useQuery } from "convex/react";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
-import { FILE_IMPORT_PROVIDERS } from "@/lib/providers";
+import { isFileImportAccount } from "@/lib/providers";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { usePortfolioAnalytics } from "@/hooks/dashboard/usePortfolioAnalytics";
 import { useCorrelationMatrix } from "@/hooks/dashboard/useCorrelationMatrix";
@@ -58,7 +58,7 @@ export function useSignals(): Signal[] {
         syncStatus: integration.syncStatus,
         lastSyncedAt: integration.lastSyncedAt ?? null,
         syncEnabled: integration.syncEnabled,
-        isFileImport: FILE_IMPORT_PROVIDERS.has(integration.provider),
+        isFileImport: isFileImportAccount(integration),
       })),
       topAsset: topAsset ? { key: topAsset.key, weight: topAsset.weight } : null,
       effectiveCount: analytics.assetConcentration.effectiveCount,

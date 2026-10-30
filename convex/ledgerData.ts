@@ -2,6 +2,7 @@ import { internalQuery, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { LedgerInput } from "../lib/ledger";
+import { storedWithdrawalFee } from "./withdrawals";
 
 /**
  * Réunit, pour un utilisateur, tout ce dont le grand livre a besoin : les
@@ -107,7 +108,7 @@ export async function loadLedgerInput(
         account,
         asset: withdrawal.coin,
         amount: withdrawal.amount,
-        fee: withdrawal.fee,
+        fee: storedWithdrawalFee(withdrawal),
         status: withdrawal.status,
         timestamp: withdrawal.applyTime,
         txId: withdrawal.txId,

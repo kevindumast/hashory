@@ -16,6 +16,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
+import { reconcileBalances } from "@/lib/ledger";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
@@ -137,7 +138,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, integrations } =
+  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, reportedBalances, integrations } =
     useDashboardData();
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
@@ -386,6 +387,15 @@ export function DashboardNewLayout({
    */
   const amount = (usd: number, eur: number | null | undefined): string =>
     displayCurrency === "EUR" && eur !== null && eur !== undefined ? eurFormatter.format(eur) : money(usd);
+  /** La valeur que `amount` affiche : c'est elle qui donne le signe et la couleur. */
+  const shown = (usd: number, eur: number | null | undefined): number =>
+    displayCurrency === "EUR" && eur !== null && eur !== undefined ? eur : usd;
+  /**
+   * Résultat signé. Le signe suit la devise affichée : un coût en euros
+   * historiques peut laisser un gain en euros et une perte en dollars.
+   */
+  const signed = (usd: number, eur: number | null | undefined): string =>
+    `${shown(usd, eur) >= 0 ? "+" : ""}${amount(usd, eur)}`;
 
   const chartDays = useMemo(
     () => filteredHoldings.map((point) => point.timestamp),
@@ -1001,7 +1011,7 @@ export function DashboardNewLayout({
                             {currentValue !== null ? money(currentValue) : "—"}
                           </div>
                           <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
-                            {totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}` : "—"}
+                            {totalPnl !== null ? signed(totalPnl, totalPnlEur) : "—"}
                           </div>
                         </div>
                       </li>
@@ -1169,19 +1179,19 @@ export function DashboardNewLayout({
                                 <span className="text-muted-foreground/70">—</span>
                               )}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${realized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${shown(realized, realizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {realized !== 0
-                                ? `${realized >= 0 ? "+" : ""}${amount(realized, realizedEur)}`
+                                ? signed(realized, realizedEur)
                                 : <span className="text-muted-foreground/70">—</span>}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${unrealized === null ? "text-muted-foreground/70" : shown(unrealized, unrealizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {unrealized !== null
-                                ? `${(unrealizedEur ?? unrealized) >= 0 ? "+" : ""}${amount(unrealized, unrealizedEur)}`
+                                ? signed(unrealized, unrealizedEur)
                                 : "—"}
                             </td>
-                            <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                            <td className={`num px-4 py-3 text-right font-bold ${totalPnl === null ? "text-muted-foreground/70" : shown(totalPnl, totalPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                               {totalPnl !== null
-                                ? `${(totalPnlEur ?? totalPnl) >= 0 ? "+" : ""}${amount(totalPnl, totalPnlEur)}`
+                                ? signed(totalPnl, totalPnlEur)
                                 : amount(realized, realizedEur)}
                             </td>
                           </tr>
@@ -1258,6 +1268,10 @@ export function DashboardNewLayout({
             lastActivityAt: number;
             hasAllPrices: boolean;
             tokens: PlatformTokenBreakdown[];
+            /** Écarts entre quantité calculée et solde publié, par jeton. */
+            balanceGaps: Map<string, { computed: number; reported: number }>;
+            /** Date du relevé des soldes publiés, null si la plateforme n'en publie pas. */
+            reportedAt: number | null;
           };
 
           const eurRateNow = fxRateAt(Date.now())?.eurPerUsd ?? null;
@@ -1277,6 +1291,32 @@ export function DashboardNewLayout({
               provider: integration.provider,
               displayName: integration.displayName ?? integration.provider,
             });
+          }
+
+          // Contrôle des soldes : ce que le grand livre calcule contre ce que la
+          // plateforme publie (« Sync Balances »). Un écart trahit un mouvement
+          // manquant — un trade non synchronisé laissait 112 USDC fantômes.
+          const computedByAccount = new Map<string, Map<string, number>>();
+          for (const position of ledgerAccounts) {
+            const byAsset = computedByAccount.get(position.account) ?? new Map<string, number>();
+            byAsset.set(position.asset, position.quantity);
+            computedByAccount.set(position.account, byAsset);
+          }
+          const gapsByProvider = new Map<string, Map<string, { computed: number; reported: number }>>();
+          for (const gap of reconcileBalances(computedByAccount, reportedBalances, 0.01, { includeUnreported: true })) {
+            // Moins de 50 centimes : des frais de quelques miettes, pas un mouvement manquant.
+            const price = priceUsdOf(gap.asset);
+            if (price !== undefined && Math.abs(gap.computed - gap.reported) * price < 0.5) continue;
+            const provider = metaByAccount.get(gap.account)?.provider ?? gap.account;
+            const byAsset = gapsByProvider.get(provider) ?? new Map<string, { computed: number; reported: number }>();
+            const line = byAsset.get(gap.asset) ?? { computed: 0, reported: 0 };
+            byAsset.set(gap.asset, { computed: line.computed + gap.computed, reported: line.reported + gap.reported });
+            gapsByProvider.set(provider, byAsset);
+          }
+          const reportedAtByProvider = new Map<string, number>();
+          for (const balance of reportedBalances) {
+            const provider = metaByAccount.get(balance.account)?.provider ?? balance.account;
+            reportedAtByProvider.set(provider, Math.max(reportedAtByProvider.get(provider) ?? 0, balance.updatedAt));
           }
 
           const lastActivityByProvider = new Map<string, number>();
@@ -1394,6 +1434,8 @@ export function DashboardNewLayout({
               lastActivityAt: lastActivityByProvider.get(p.provider) ?? 0,
               hasAllPrices,
               tokens,
+              balanceGaps: gapsByProvider.get(p.provider) ?? new Map(),
+              reportedAt: reportedAtByProvider.get(p.provider) ?? null,
             };
           }).sort((a, b) => b.currentValueUsd - a.currentValueUsd);
 
@@ -1433,7 +1475,7 @@ export function DashboardNewLayout({
                         {hasCurrentPrices && s.currentValueUsd > 0 ? money(s.currentValueUsd) : "—"}
                       </div>
                       <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
-                        {s.totalPnl !== null ? `${(pnl ?? 0) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}` : "—"}
+                        {s.totalPnl !== null ? signed(s.totalPnl, s.totalPnlEur) : "—"}
                       </div>
                     </div>
                   </li>
@@ -1499,7 +1541,25 @@ export function DashboardNewLayout({
                           <ProviderAvatar provider={s.provider} name={s.providerDisplayName} />
                           <div>
                             <div className="font-bold text-foreground text-xs">{s.providerDisplayName}</div>
-                            <div className="text-[10px] text-muted-foreground uppercase">{s.provider}</div>
+                            <div className="text-[10px] text-muted-foreground uppercase">
+                              {s.provider}
+                              {s.reportedAt !== null && (
+                                <span
+                                  className={`ml-1.5 normal-case ${s.balanceGaps.size > 0 ? "text-orange-600 dark:text-orange-400" : "text-positive"}`}
+                                  title={[
+                                    `Soldes publiés relevés le ${new Date(s.reportedAt).toLocaleString("fr-FR")}`,
+                                    ...[...s.balanceGaps].map(
+                                      ([asset, gap]) =>
+                                        `${asset} : calculé ${gap.computed.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}, publié ${gap.reported.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}`
+                                    ),
+                                  ].join("\n")}
+                                >
+                                  {s.balanceGaps.size > 0
+                                    ? `· ${s.balanceGaps.size} écart${s.balanceGaps.size > 1 ? "s" : ""} de solde`
+                                    : "· soldes vérifiés"}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </td>
@@ -1534,19 +1594,19 @@ export function DashboardNewLayout({
                           <span className="text-muted-foreground/70">—</span>
                         )}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.realizedPnl > 0 ? "text-positive" : s.realizedPnl < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${shown(s.realizedPnl, s.realizedPnlEur) > 0 ? "text-positive" : shown(s.realizedPnl, s.realizedPnlEur) < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                         {s.realizedPnl !== 0
-                          ? `${s.realizedPnl >= 0 ? "+" : ""}${amount(s.realizedPnl, s.realizedPnlEur)}`
+                          ? signed(s.realizedPnl, s.realizedPnlEur)
                           : "—"}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : s.unrealizedPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.unrealizedPnl === null ? "text-muted-foreground/70" : shown(s.unrealizedPnl, s.unrealizedPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.unrealizedPnl !== null
-                          ? `${(s.unrealizedPnlEur ?? s.unrealizedPnl) >= 0 ? "+" : ""}${amount(s.unrealizedPnl, s.unrealizedPnlEur)}`
+                          ? signed(s.unrealizedPnl, s.unrealizedPnlEur)
                           : "—"}
                       </td>
-                      <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : s.totalPnl >= 0 ? "text-positive" : "text-negative"}`}>
+                      <td className={`num px-4 py-3 text-right font-bold ${s.totalPnl === null ? "text-muted-foreground/70" : shown(s.totalPnl, s.totalPnlEur) >= 0 ? "text-positive" : "text-negative"}`}>
                         {s.totalPnl !== null
-                          ? `${(s.totalPnlEur ?? s.totalPnl) >= 0 ? "+" : ""}${amount(s.totalPnl, s.totalPnlEur)}`
+                          ? signed(s.totalPnl, s.totalPnlEur)
                           : "—"}
                       </td>
                       <td className="num px-4 py-3 text-right text-muted-foreground text-[11px]">
@@ -1597,6 +1657,14 @@ export function DashboardNewLayout({
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.qty > 0 ? t.qty.toLocaleString("fr-FR", { maximumFractionDigits: 6 }) : "—"}
+                                        {s.balanceGaps.has(t.symbol) && (
+                                          <div
+                                            className="text-[10px] text-orange-600 dark:text-orange-400"
+                                            title={`Calculé : ${s.balanceGaps.get(t.symbol)!.computed.toLocaleString("fr-FR", { maximumFractionDigits: 8 })}`}
+                                          >
+                                            publié : {s.balanceGaps.get(t.symbol)!.reported.toLocaleString("fr-FR", { maximumFractionDigits: 6 })}
+                                          </div>
+                                        )}
                                       </td>
                                       <td className="num px-3 py-2 text-right text-muted-foreground text-[11px]">
                                         {t.costBasis > 0 ? amount(t.costBasis, t.costBasisEur) : "—"}
@@ -1609,14 +1677,14 @@ export function DashboardNewLayout({
                                       <td className="num px-3 py-2 text-right font-bold text-foreground text-[11px]">
                                         {t.currentValue !== null ? money(t.currentValue) : "—"}
                                       </td>
-                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.realized > 0 ? "text-positive" : t.realized < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${shown(t.realized, t.realizedEur) > 0 ? "text-positive" : shown(t.realized, t.realizedEur) < 0 ? "text-negative" : "text-muted-foreground/70"}`}>
                                         {t.realized !== 0
-                                          ? `${t.realized >= 0 ? "+" : ""}${amount(t.realized, t.realizedEur)}`
+                                          ? signed(t.realized, t.realizedEur)
                                           : "—"}
                                       </td>
-                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : t.unrealized >= 0 ? "text-positive" : "text-negative"}`}>
+                                      <td className={`num px-3 py-2 text-right font-bold text-[11px] ${t.unrealized === null ? "text-muted-foreground/70" : shown(t.unrealized, t.unrealizedEur) >= 0 ? "text-positive" : "text-negative"}`}>
                                         {t.unrealized !== null
-                                          ? `${(t.unrealizedEur ?? t.unrealized) >= 0 ? "+" : ""}${amount(t.unrealized, t.unrealizedEur)}`
+                                          ? signed(t.unrealized, t.unrealizedEur)
                                           : "—"}
                                       </td>
                                     </tr>

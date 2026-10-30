@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { errorMessage, toast } from "@/lib/toast";
 
@@ -70,11 +70,19 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
     return map;
   }, [tokens]);
 
-  // Toutes les paires candidates à interroger
-  const allPairs = useMemo(() => Array.from(pairToSymbol.keys()), [pairToSymbol]);
+  // Toutes les paires candidates à interroger, sous forme de clé : les
+  // jetons sont recalculés souvent, leurs paires rarement. Suivre l'identité
+  // des tableaux relançait une requête à chaque rendu dès qu'un tableau
+  // amont n'était pas mémorisé.
+  const pairsKey = useMemo(() => Array.from(pairToSymbol.keys()).join(","), [pairToSymbol]);
+  const pairToSymbolRef = useRef(pairToSymbol);
+  useEffect(() => {
+    pairToSymbolRef.current = pairToSymbol;
+  }, [pairToSymbol]);
 
   useEffect(() => {
-    if (tokens.length === 0 || allPairs.length === 0) return;
+    const allPairs = pairsKey ? pairsKey.split(",") : [];
+    if (allPairs.length === 0) return;
 
     let cancelled = false;
     setLoading(true);
@@ -109,7 +117,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
         // Mapper chaque résultat au bon token (on garde le premier prix trouvé par token)
         const prices: Record<string, number> = {};
         for (const item of data) {
-          const tokenSymbol = pairToSymbol.get(item.symbol.toUpperCase());
+          const tokenSymbol = pairToSymbolRef.current.get(item.symbol.toUpperCase());
           if (tokenSymbol && !prices[tokenSymbol]) {
             const parsedPrice = parseFloat(item.price);
             if (!isNaN(parsedPrice)) {
@@ -142,7 +150,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [allPairs, pairToSymbol, tokens.length, fetchTrigger]);
+  }, [pairsKey, fetchTrigger]);
 
   const refresh = () => setFetchTrigger((n) => n + 1);
 
