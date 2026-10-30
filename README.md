@@ -143,6 +143,53 @@ Toutes les variables sont documentées dans [`.env.example`](.env.example). Les 
 | `ORACLY_ENCRYPTION_KEY` | Clé de chiffrement des identifiants d'exchange (32 caractères) |
 | `CMC_API_KEY` | Prix et métadonnées CoinMarketCap |
 | `NEXT_PUBLIC_SITE_URL` | URL publique, pour les métadonnées et le sitemap |
+| `MCP_SERVER_SECRET` | Secret partagé entre le serveur MCP et Convex (voir ci-dessous) |
+
+## Serveur MCP pour Claude
+
+Hashory expose un serveur [MCP](https://modelcontextprotocol.io) sur `/api/mcp` : Claude
+(claude.ai, Claude Desktop, Claude Code) peut lire votre portefeuille et répondre à des
+questions comme « quelle est ma plus-value 2025 ? » ou « montre mes derniers achats de BTC ».
+Tous les outils sont en **lecture seule**.
+
+| Outil | Ce qu'il renvoie |
+| --- | --- |
+| `list_accounts` | Comptes reliés et état de synchronisation |
+| `get_portfolio` | Positions, valeur, prix de revient, latent et réalisé (option : par compte) |
+| `get_performance` | Valeur, apports nets, TWR et comparaison au BTC sur une période |
+| `list_transactions` | Échanges, dépôts et retraits, filtrables par actif, type, compte et dates |
+| `get_tax_report` | Plus-values 150 VH bis par année, avec le détail des cessions en option |
+
+**Mise en place**
+
+1. Dans le dashboard Clerk, *Configure → OAuth applications* : activez
+   **Dynamic client registration**. Claude y inscrit son client, puis l'utilisateur se connecte
+   avec son compte Hashory.
+2. Générez un secret (`openssl rand -hex 32`) et définissez-le **aux deux endroits** :
+   `MCP_SERVER_SECRET` dans les variables d'environnement Next.js (Vercel) et
+   `npx convex env set MCP_SERVER_SECRET <secret>` côté Convex.
+3. Déployez Convex (`npx convex deploy`) puis l'application.
+4. Dans Claude : *Settings → Connectors → Add custom connector*, URL
+   `https://<votre-domaine>/api/mcp`. Avec Claude Code :
+   `claude mcp add --transport http hashory https://<votre-domaine>/api/mcp`.
+
+Côté utilisateur, le mode d'emploi est dans l'application : *Réglages → Connecter Claude*
+(`/dashboard/settings/claude`), aussi accessible depuis le menu du compte et la fenêtre du profil
+(onglet « Claude »). Il donne l'adresse à copier et les étapes pour claude.ai, Claude Desktop et
+Claude Code.
+
+**Sécurité** (`lib/mcp-handler.ts`, testé dans `lib/mcp-handler.test.ts`) :
+
+- le jeton OAuth est vérifié par Clerk à chaque requête ; Convex est ensuite interrogé avec
+  l'identifiant vérifié et le secret partagé (`convex/mcp.ts`), sans lequel il refuse toute lecture ;
+- l'utilisateur peut **couper l'accès** depuis *Réglages → Connecter Claude* : la requête suivante
+  est refusée, sans attendre l'expiration du jeton ;
+- 60 requêtes par minute et par utilisateur, HTTPS obligatoire, origines navigateur limitées à
+  claude.ai et claude.com, corps limité à 64 Ko, délai de 25 s, réponses plafonnées ;
+- chaque appel d'outil est journalisé (outil, nombre d'éléments, IP — jamais le contenu) pendant
+  90 jours et affiché à l'utilisateur ; les erreurs internes ne sont jamais renvoyées à Claude ;
+- les consignes du serveur rappellent à Claude que les libellés sont des données, jamais des
+  instructions.
 
 ## Scripts
 
