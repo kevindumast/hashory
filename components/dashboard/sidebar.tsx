@@ -54,8 +54,8 @@ export function Sidebar({ collapsed = false }: SidebarProps) {
           collapsed ? "justify-center" : "px-5"
         )}
       >
-        <HashoryLogo size={22} />
-        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">Hashory</span>}
+        <HashoryLogo size={26} />
+        {!collapsed && <span className="text-base font-bold tracking-tight text-sidebar-foreground">Hashory</span>}
       </Link>
 
       {/* Nav */}
@@ -311,10 +311,10 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
  */
 export function MobileNav() {
   return (
-    <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4 pt-[env(safe-area-inset-top)] box-content">
-      <Link href="/dashboard" aria-label="Retour au portefeuille" className="flex items-center gap-2">
-        <HashoryLogo size={22} />
-        <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
+    <div className="flex md:hidden sticky top-0 z-40 h-16 items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4 pt-[env(safe-area-inset-top)] box-content">
+      <Link href="/dashboard" aria-label="Retour à la synthèse" className="flex items-center gap-2.5">
+        <HashoryLogo size={32} />
+        <span className="text-lg font-bold tracking-tight text-sidebar-foreground">Hashory</span>
       </Link>
       <div className="flex items-center gap-1">
         <PrivacyToggle />
