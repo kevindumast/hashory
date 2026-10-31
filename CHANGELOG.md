@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.1.14](https://github.com/kevindumast/hashory/compare/hashory-v0.1.13...hashory-v0.1.14) (2026-10-31)
+
+
+### Features
+
+* **binance:** « Sync Trades spot » dans le menu du compte ([#85](https://github.com/kevindumast/hashory/issues/85)) ([4523683](https://github.com/kevindumast/hashory/commit/452368336c9098e2f3ccb1f226606a55faeb9353))
+* **comptes:** tableau du nombre de transactions par an ([#86](https://github.com/kevindumast/hashory/issues/86)) ([3164ee0](https://github.com/kevindumast/hashory/commit/3164ee052be1590976ef2ec47e71d8355713fee8))
+* **dashboard:** refonte de la page Performance dans le style de la landing ([#95](https://github.com/kevindumast/hashory/issues/95)) ([dd7060d](https://github.com/kevindumast/hashory/commit/dd7060d4c3eab7ecc1927fae04b896264ca6e8d8))
+* **dashboard:** refonte du relevé de portefeuille dans le style de la landing ([#92](https://github.com/kevindumast/hashory/issues/92)) ([2b9d77c](https://github.com/kevindumast/hashory/commit/2b9d77c760216b0bbe8c22ff3b94b1718075fcc3))
+* **kucoin:** import complet des exports .xlsx/.csv, achats par carte au prix payé ([#79](https://github.com/kevindumast/hashory/issues/79)) ([c246caa](https://github.com/kevindumast/hashory/commit/c246caa5aefb2eb38f29f94d540a1c9e4fa34157))
+* **mcp:** serveur MCP en lecture seule pour Claude ([#78](https://github.com/kevindumast/hashory/issues/78)) ([2764cdd](https://github.com/kevindumast/hashory/commit/2764cddc9fddc58fdae090099167074be997d123))
+* **mobile:** barre d'onglets flottante et mode discret ([#93](https://github.com/kevindumast/hashory/issues/93)) ([e5b6f19](https://github.com/kevindumast/hashory/commit/e5b6f19967e0944f9ec8d526b516b29900e0e95f))
+* **portefeuille:** contrôle des soldes calculés contre les soldes publiés ([#88](https://github.com/kevindumast/hashory/issues/88)) ([a324911](https://github.com/kevindumast/hashory/commit/a324911d8e01355d8b5408eb2204cad8adbc0086))
+* **portefeuille:** relevé en EUR ou USD, export des transactions en CSV « ; » ([#76](https://github.com/kevindumast/hashory/issues/76)) ([bf94e5e](https://github.com/kevindumast/hashory/commit/bf94e5e256a950f4773234087441b40b519b2c22))
+
+
+### Bug Fixes
+
+* **binance:** frais de retrait enregistrés, bouton « Renommer » branché ([#82](https://github.com/kevindumast/hashory/issues/82)) ([55c75a5](https://github.com/kevindumast/hashory/commit/55c75a5ca3d97176309c7fa2f1324fa0f9db77d2))
+* **binance:** trades spot paginés par identifiant, plus aucun trade raté ([#84](https://github.com/kevindumast/hashory/issues/84)) ([096c61e](https://github.com/kevindumast/hashory/commit/096c61e9e015cb893862052d13f12844dbaa94ed))
+* **chart:** le tooltip de l'historique d'un jeton affiche le bon jour ([#75](https://github.com/kevindumast/hashory/issues/75)) ([ea45338](https://github.com/kevindumast/hashory/commit/ea45338dfe471b23b75f99a337b06dd9a124208d))
+* **kucoin:** conversions à l'heure réelle, positions recalculées après réimport ([#80](https://github.com/kevindumast/hashory/issues/80)) ([193bb55](https://github.com/kevindumast/hashory/commit/193bb55790032e97180517433adf40d1d5556b3b))
+* **logo:** un H lisible à petite taille ([#71](https://github.com/kevindumast/hashory/issues/71)) ([6cb6ba4](https://github.com/kevindumast/hashory/commit/6cb6ba45980f11bb0ea86e3033d4b2ff39b1917c))
+* **mobile:** pages lisibles sur iPhone, sans débordement ([#73](https://github.com/kevindumast/hashory/issues/73)) ([94f3786](https://github.com/kevindumast/hashory/commit/94f37868d659f2850368aa272abc9a69612051f3))
+* **onboarding:** « Ne plus afficher » masque la checklist pour de bon ([#74](https://github.com/kevindumast/hashory/issues/74)) ([d4c4922](https://github.com/kevindumast/hashory/commit/d4c492259efb9132696f8d71fa91492a10749017))
+* **portefeuille:** positions recalculées dès qu'un compte est vidé ou importé ([#81](https://github.com/kevindumast/hashory/issues/81)) ([8e1048c](https://github.com/kevindumast/hashory/commit/8e1048c0056382e1f80dc6d31e936ece09db6553))
+* **prix:** plus de requêtes de prix en boucle ([#90](https://github.com/kevindumast/hashory/issues/90)) ([c6ee30d](https://github.com/kevindumast/hashory/commit/c6ee30d667f28b89aa68e9b0836e28acdcb810cc))
+* **pwa:** le service worker ne sert plus de page d'un ancien déploiement ([#83](https://github.com/kevindumast/hashory/issues/83)) ([230f3ae](https://github.com/kevindumast/hashory/commit/230f3ae4b55fddfbf1c7e09d9f67c34805e121f8))
+* **wallets:** adresse vérifiée selon la chaîne, erreur Helius lisible ([#89](https://github.com/kevindumast/hashory/issues/89)) ([11b7251](https://github.com/kevindumast/hashory/commit/11b7251bfacb163ece22b1ed011a524ad556e2f1))
+
+
+### Performance
+
+* **binance:** historique des ordres incrémental, un seul recalcul par synchro ([#87](https://github.com/kevindumast/hashory/issues/87)) ([36447f7](https://github.com/kevindumast/hashory/commit/36447f7318b4f691581595682a273aa4dee199fe))
+* **convex:** rapport fiscal enregistré, historique réécrit seulement au besoin ([#77](https://github.com/kevindumast/hashory/issues/77)) ([3a3a12d](https://github.com/kevindumast/hashory/commit/3a3a12d00f48019a572027c176df178557dd47d0))
+
 ## [0.1.13](https://github.com/kevindumast/hashory/compare/hashory-v0.1.12...hashory-v0.1.13) (2026-10-22)
 
 
