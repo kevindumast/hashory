@@ -79,16 +79,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <PrivacyProvider>
           <AutoSync />
           <div className="flex h-dvh overflow-hidden bg-background">
-            {/* Sidebar — scroll indépendant */}
+            {/* Sidebar — dépliée ou réduite à un rail d'icônes */}
             <div
               className={cn(
-                "hidden md:block transition-all duration-300 ease-in-out shrink-0 overflow-hidden",
-                sidebarOpen ? "w-[220px]" : "w-0"
+                "hidden md:block shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out",
+                sidebarOpen ? "w-[232px]" : "w-[72px]"
               )}
             >
-              <div className="w-[220px] h-full overflow-y-auto scrollbar-none">
-                <Sidebar />
-              </div>
+              <Sidebar collapsed={!sidebarOpen} />
             </div>
 
             {/* Colonne principale — l'unique container scrollable */}

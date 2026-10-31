@@ -2,17 +2,18 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import {
-  Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays, Activity,
-  User, Settings, LogOut, MoreHorizontal, Plug, KeyRound, Sparkles,
-} from "lucide-react"
+import { motion, useReducedMotion } from "motion/react"
+import { User, Settings, LogOut, MoreHorizontal, Plug, Sparkles } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
+import { formatRelative } from "@/lib/format-relative"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { HashoryLogo } from "@/components/hashory-logo"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context"
 import { PrivacyToggle } from "@/components/dashboard/privacy-mode"
+import { findActiveLink, navSections, type NavItem } from "@/components/dashboard/nav-config"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,94 +23,206 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const navSections = [
-  {
-    title: "Portefeuille",
-    links: [
-      { href: "/dashboard/accounts", label: "Mes comptes", badge: null, icon: Wallet },
-      { href: "/dashboard", label: "Portefeuille", badge: null, icon: LayoutDashboard },
-      { href: "/dashboard/performance", label: "Performance", badge: null, icon: Activity },
-      { href: "/dashboard/seasonal", label: "Saisonnalité", badge: null, icon: CalendarDays },
-    ],
-  },
-  {
-    title: "Fiscalité",
-    links: [
-      { href: "/dashboard/tax-report", label: "Déclaration fiscale", badge: null, icon: FileText },
-      { href: "/dashboard/transactions", label: "Transactions", badge: null, icon: ArrowLeftRight },
-    ],
-  },
-  {
-    title: "Réglages",
-    links: [
-      { href: "/dashboard/settings/api-keys", label: "Clés d'API", badge: null, icon: KeyRound },
-      { href: "/dashboard/settings/claude", label: "Connecter Claude", badge: null, icon: Sparkles },
-    ],
-  },
-]
-
 /** Compteur de transactions affiché en pastille dans la navigation. */
 function useTransactionBadge() {
   const { transactions, isLoading } = useDashboardData()
   return isLoading ? null : String(transactions.length)
 }
 
-export function Sidebar() {
+type SidebarProps = {
+  /** Replié : un rail d'icônes, les libellés passent en infobulle. */
+  collapsed?: boolean
+}
+
+/**
+ * Navigation bureau. Dépliée, elle montre sections et libellés ; repliée,
+ * elle se réduit à un rail d'icônes plutôt que de disparaître.
+ */
+export function Sidebar({ collapsed = false }: SidebarProps) {
+  const pathname = usePathname()
+  const activeHref = findActiveLink(pathname)?.href
   const transactionCount = useTransactionBadge()
-  const { integrationsCount } = useDashboardData()
-  const { openDialog } = useProviderDialog()
 
   return (
-    <aside className="hidden md:flex flex-col w-[220px] h-screen bg-sidebar border-r border-sidebar-border tracking-tight antialiased shrink-0">
+    <aside className="hidden md:flex h-full w-full flex-col bg-sidebar border-r border-sidebar-border tracking-tight antialiased">
       {/* Logo */}
       <Link
         href="/dashboard"
-        aria-label="Retour au portefeuille"
-        className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border transition-opacity hover:opacity-80"
+        aria-label="Retour à la synthèse"
+        className={cn(
+          "flex h-[57px] shrink-0 items-center gap-2 border-b border-sidebar-border transition-opacity hover:opacity-80",
+          collapsed ? "justify-center" : "px-5"
+        )}
       >
         <HashoryLogo size={22} />
-        <span className="text-sm font-semibold tracking-tight text-sidebar-foreground">Hashory</span>
+        {!collapsed && <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">Hashory</span>}
       </Link>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto scrollbar-subtle px-3 py-3 flex flex-col gap-5">
-        {navSections.map((section) => (
+      <nav
+        aria-label="Navigation principale"
+        className="flex flex-1 flex-col gap-5 overflow-y-auto scrollbar-none px-3 py-4"
+      >
+        {navSections.map((section, index) => (
           <div key={section.title}>
-            <p className="num px-2 mb-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-              {section.title}
-            </p>
+            {collapsed ? (
+              index > 0 && <span aria-hidden className="mx-auto mb-3 block h-px w-6 bg-line" />
+            ) : (
+              <p className="eyebrow mb-1.5 px-3 text-[10px] text-muted-foreground">{section.title}</p>
+            )}
             <div className="flex flex-col gap-0.5">
               {section.links.map((link) => (
                 <SidebarLink
                   key={link.href}
-                  {...link}
-                  badge={link.href === "/dashboard/transactions" ? transactionCount : link.badge}
+                  item={link}
+                  active={link.href === activeHref}
+                  collapsed={collapsed}
+                  badge={link.href === "/dashboard/transactions" ? transactionCount : null}
                 />
               ))}
             </div>
           </div>
         ))}
-
-        {/* Raccourci de connexion — l'action principale tant que rien n'est branché */}
-        <button
-          type="button"
-          onClick={openDialog}
-          className={cn(
-            "mt-auto flex cursor-pointer items-center gap-2.5 border-t border-border/60 px-2 py-3 text-sm transition-colors",
-            "text-sidebar-primary hover:bg-muted/20",
-            integrationsCount === 0 && "text-primary"
-          )}
-        >
-          <Plug className="size-4 shrink-0" />
-          <span className="num flex-1 text-left text-[11px] uppercase tracking-[0.18em]">Connecter</span>
-        </button>
       </nav>
 
-      {/* Utilisateur */}
-      <div className="border-t border-sidebar-border px-3 py-2.5">
-        <UserMenu />
-      </div>
+      <SyncFooter collapsed={collapsed} />
     </aside>
+  )
+}
+
+function SidebarLink({
+  item: { href, label, icon: Icon },
+  active,
+  collapsed,
+  badge,
+}: {
+  item: NavItem
+  active: boolean
+  collapsed: boolean
+  badge: string | null
+}) {
+  const reduceMotion = useReducedMotion()
+
+  const link = (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      aria-label={collapsed ? label : undefined}
+      className={cn(
+        "relative isolate flex h-9 items-center gap-3 rounded-xl text-sm transition-colors",
+        collapsed ? "justify-center" : "px-3",
+        active
+          ? "font-bold text-sidebar-foreground"
+          : "text-muted-foreground hover:bg-surface/60 hover:text-sidebar-foreground"
+      )}
+    >
+      {active && (
+        <motion.span
+          layoutId="sidebar-indicator"
+          aria-hidden
+          className="absolute inset-0 -z-10 rounded-xl bg-surface"
+          transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }}
+        />
+      )}
+      <Icon className={cn("size-[18px] shrink-0", active && "text-violet")} strokeWidth={active ? 2.3 : 2} />
+      {!collapsed && <span className="flex-1 truncate">{label}</span>}
+      {!collapsed && badge && (
+        <span className="num rounded-md bg-background/70 px-1.5 text-[11px] font-medium text-muted-foreground">
+          {badge}
+        </span>
+      )}
+    </Link>
+  )
+
+  if (!collapsed) return link
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{link}</TooltipTrigger>
+      <TooltipContent side="right">{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+/**
+ * Pied de sidebar : l'état de synchronisation des sources (comme le
+ * bandeau « Mise à jour disponible » d'une appli bancaire), et l'action
+ * de connexion.
+ */
+function SyncFooter({ collapsed }: { collapsed: boolean }) {
+  const { integrations, isLoadingIntegrations } = useDashboardData()
+  const { openDialog } = useProviderDialog()
+
+  const errors = integrations.filter((i) => i.syncStatus === "error").length
+  const syncing = integrations.some((i) => i.syncStatus === "syncing")
+  const lastSync = integrations.reduce<number | null>(
+    (max, i) => (i.lastSyncedAt && (!max || i.lastSyncedAt > max) ? i.lastSyncedAt : max),
+    null
+  )
+
+  const dot = errors > 0 ? "bg-negative" : syncing ? "bg-positive animate-pulse" : "bg-positive"
+  const status =
+    errors > 0
+      ? `${errors} source${errors > 1 ? "s" : ""} en erreur`
+      : syncing
+        ? "Synchronisation…"
+        : lastSync
+          ? `À jour ${formatRelative(lastSync)}`
+          : "Jamais synchronisé"
+
+  const connect = (
+    <button
+      type="button"
+      onClick={openDialog}
+      aria-label={collapsed ? "Connecter une source" : undefined}
+      className={cn(
+        "flex h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-foreground text-sm font-bold text-background transition-opacity hover:opacity-90",
+        collapsed && "mx-auto w-9"
+      )}
+    >
+      <Plug className="size-4 shrink-0" />
+      {!collapsed && "Connecter une source"}
+    </button>
+  )
+
+  if (collapsed) {
+    return (
+      <div className="flex flex-col items-center gap-3 border-t border-sidebar-border px-3 py-3">
+        {integrations.length > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link href="/dashboard/accounts" aria-label={status} className="flex size-9 items-center justify-center rounded-xl hover:bg-surface/60">
+                <span className={cn("size-2 rounded-full", dot)} />
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent side="right">{status}</TooltipContent>
+          </Tooltip>
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>{connect}</TooltipTrigger>
+          <TooltipContent side="right">Connecter une source</TooltipContent>
+        </Tooltip>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2 border-t border-sidebar-border p-3">
+      {!isLoadingIntegrations && integrations.length > 0 && (
+        <Link
+          href="/dashboard/accounts"
+          className="flex items-center gap-3 rounded-2xl bg-surface px-3 py-2.5 transition-colors hover:bg-muted"
+        >
+          <span className={cn("size-2 shrink-0 rounded-full", dot)} aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-bold text-sidebar-foreground">
+              {integrations.length} source{integrations.length > 1 ? "s" : ""}
+            </span>
+            <span className="block truncate text-[11px] text-muted-foreground">{status}</span>
+          </span>
+        </Link>
+      )}
+      {connect}
+    </div>
   )
 }
 
@@ -189,30 +302,6 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
-}
-
-function SidebarLink({ href, label, badge, icon: Icon }: { href: string; label: string; badge: string | null; icon: React.ElementType }) {
-  const pathname = usePathname()
-  const isActive = pathname === href || (href !== "/dashboard" && pathname.startsWith(href))
-
-  return (
-    <Link
-      href={href}
-      aria-current={isActive ? "page" : undefined}
-      className={cn(
-        "flex items-center gap-2.5 border-l-2 py-2 pl-3 pr-2 text-sm transition-colors",
-        isActive
-          ? "border-primary bg-muted/30 text-sidebar-foreground"
-          : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/20 hover:text-sidebar-foreground"
-      )}
-    >
-      <Icon className="size-4 shrink-0" />
-      <span className="flex-1">{label}</span>
-      {badge && (
-        <span className="num text-[11px] font-medium text-muted-foreground">{badge}</span>
-      )}
-    </Link>
   )
 }
 

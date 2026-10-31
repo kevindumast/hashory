@@ -4,36 +4,12 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
 import { motion, useReducedMotion } from "motion/react"
-import {
-  Activity, ArrowLeftRight, CalendarDays, FileText, KeyRound, LayoutDashboard,
-  MoreHorizontal, Plug, Sparkles, Wallet,
-} from "lucide-react"
+import { MoreHorizontal, Plug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
-
-type NavItem = { href: string; label: string; icon: React.ElementType }
-
-/** Les quatre destinations principales, toujours visibles. */
-const primaryTabs: NavItem[] = [
-  { href: "/dashboard", label: "Synthèse", icon: LayoutDashboard },
-  { href: "/dashboard/accounts", label: "Comptes", icon: Wallet },
-  { href: "/dashboard/performance", label: "Analyse", icon: Activity },
-  { href: "/dashboard/tax-report", label: "Fiscalité", icon: FileText },
-]
-
-/** Le reste, rangé derrière l'onglet « Plus ». */
-const moreItems: NavItem[] = [
-  { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
-  { href: "/dashboard/seasonal", label: "Saisonnalité", icon: CalendarDays },
-  { href: "/dashboard/settings/api-keys", label: "Clés d'API", icon: KeyRound },
-  { href: "/dashboard/settings/claude", label: "Connecter Claude", icon: Sparkles },
-]
-
-function isActivePath(pathname: string, href: string) {
-  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href))
-}
+import { isActivePath, mobileMore as moreItems, mobileTabs as primaryTabs } from "@/components/dashboard/nav-config"
 
 const tabClass =
   "relative flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-full text-[11px] font-bold transition-colors"
@@ -73,7 +49,7 @@ export function BottomNav() {
         className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
       >
         <div className="isolate mx-auto flex max-w-md items-center gap-1 rounded-full border border-line bg-card p-1.5 shadow-[var(--shadow-float)]">
-          {primaryTabs.map(({ href, label, icon: Icon }) => {
+          {primaryTabs.map(({ href, label, shortLabel, icon: Icon }) => {
             const active = activeKey === href
             return (
               <Link
@@ -84,7 +60,7 @@ export function BottomNav() {
               >
                 {active && indicator}
                 <Icon className="size-5" strokeWidth={active ? 2.4 : 2} />
-                <span>{label}</span>
+                <span>{shortLabel ?? label}</span>
               </Link>
             )
           })}
