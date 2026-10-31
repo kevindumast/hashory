@@ -19,6 +19,7 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
+import { PrivacyToggle } from "@/components/dashboard/privacy-mode";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 
@@ -120,6 +121,8 @@ export function DashboardTopbar({
           <Plug className="size-3.5 mr-1.5" />
           Connecter
         </Button>
+
+        <PrivacyToggle />
 
         {/* Notifications : points d'attention, puis activité de synchronisation */}
         <DropdownMenu open={isBellOpen} onOpenChange={setIsBellOpen}>

@@ -4,17 +4,15 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
   Wallet, LayoutDashboard, FileText, ArrowLeftRight, CalendarDays, Activity,
-  User, Settings, LogOut, Menu, MoreHorizontal, Plug, KeyRound, Sparkles,
+  User, Settings, LogOut, MoreHorizontal, Plug, KeyRound, Sparkles,
 } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { useState } from "react"
 import { HashoryLogo } from "@/components/hashory-logo"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { useProviderDialog } from "@/components/dashboard/provider-dialog-context"
+import { PrivacyToggle } from "@/components/dashboard/privacy-mode"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -218,71 +216,20 @@ function SidebarLink({ href, label, badge, icon: Icon }: { href: string; label: 
   )
 }
 
+/**
+ * En-tête mobile : logo, mode discret et compte. La navigation elle-même
+ * vit dans la barre d'onglets du bas (`BottomNav`).
+ */
 export function MobileNav() {
-  const [isOpen, setIsOpen] = useState(false)
-  const pathname = usePathname()
-  const transactionCount = useTransactionBadge()
-
   return (
-    <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4">
+    <div className="flex md:hidden sticky top-0 z-40 h-[57px] items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4 pt-[env(safe-area-inset-top)] box-content">
       <Link href="/dashboard" aria-label="Retour au portefeuille" className="flex items-center gap-2">
         <HashoryLogo size={22} />
         <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
       </Link>
       <div className="flex items-center gap-1">
+        <PrivacyToggle />
         <UserMenu compact />
-        <Sheet open={isOpen} onOpenChange={setIsOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-sidebar-foreground" aria-label="Ouvrir la navigation">
-              <Menu className="h-5 w-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="flex w-[240px] flex-col gap-0 bg-sidebar border-r border-sidebar-border p-0">
-            <Link
-              href="/dashboard"
-              onClick={() => setIsOpen(false)}
-              aria-label="Retour au portefeuille"
-              className="flex items-center gap-2 px-4 h-[57px] border-b border-sidebar-border"
-            >
-              <HashoryLogo size={22} />
-              <span className="text-sm font-semibold text-sidebar-foreground">Hashory</span>
-            </Link>
-            <nav className="flex-1 px-3 py-3 flex flex-col gap-5">
-              {navSections.map((section) => (
-                <div key={section.title}>
-                  <p className="num px-2 mb-2 text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-                    {section.title}
-                  </p>
-                  <div className="flex flex-col gap-0.5">
-                    {section.links.map((link) => {
-                      const Icon = link.icon
-                      const isActive = pathname === link.href || (link.href !== "/dashboard" && pathname.startsWith(link.href))
-                      const badge = link.href === "/dashboard/transactions" ? transactionCount : link.badge
-                      return (
-                        <Link
-                          key={link.href}
-                          href={link.href}
-                          onClick={() => setIsOpen(false)}
-                          aria-current={isActive ? "page" : undefined}
-                          className={cn(
-                            "flex items-center gap-2.5 border-l-2 py-2 pl-3 pr-2 text-sm transition-colors",
-                            isActive
-                              ? "border-primary bg-muted/30 text-sidebar-foreground"
-                              : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/20 hover:text-sidebar-foreground"
-                          )}
-                        >
-                          <Icon className="size-4 shrink-0" />
-                          <span className="flex-1">{link.label}</span>
-                          {badge && <span className="num text-[11px] text-muted-foreground">{badge}</span>}
-                        </Link>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </nav>
-          </SheetContent>
-        </Sheet>
       </div>
     </div>
   )
