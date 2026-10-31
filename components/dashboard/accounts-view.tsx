@@ -10,8 +10,7 @@ import {
   Check,
   AlertCircle,
   X,
-  ExternalLink,
-  Calendar,
+  ArrowUpRight,
   RefreshCw,
   Plus,
   Inbox,
@@ -30,7 +29,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
   DialogContent,
@@ -548,378 +546,461 @@ export function AccountsView() {
 
   const hasAnyAccounts = accountsWithTransactions.length > 0
 
+  // Chiffres de synthèse, lus d'un coup d'œil avant la liste.
+  const summary = React.useMemo(() => {
+    let api = 0
+    let file = 0
+    let errors = 0
+    let syncing = 0
+    let paused = 0
+    for (const account of accountsWithTransactions) {
+      if (account.type === "API") api += 1
+      else file += 1
+      if (account.syncEnabled === false) paused += 1
+      else if (account.status === "error") errors += 1
+      else if (account.status === "syncing") syncing += 1
+    }
+    const total = accountsWithTransactions.length
+    return { total, api, file, errors, syncing, paused, upToDate: total - errors - syncing - paused }
+  }, [accountsWithTransactions])
+
+  const openImport = React.useCallback((account: { id: string; platformId: string }) => {
+    if (account.platformId === "kucoin") {
+      setKucoinImportIntegrationId(account.id)
+      setIsKucoinImportOpen(true)
+    } else if (account.platformId === "finary") {
+      setIsFinaryImportOpen(true)
+    } else {
+      setIsBitstackImportOpen(true)
+    }
+  }, [])
+
   return (
-    <div className="flex flex-col h-full bg-background min-h-screen font-sans p-6 md:p-9 max-w-[1141px] mx-auto">
-      {/* Header */}
-      <div className="flex flex-row justify-between items-center mb-9">
-        <div className="flex flex-col gap-1">
-          <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Portefeuille</p>
-          <h1 className="title text-3xl leading-tight text-foreground">Mes comptes</h1>
+    <div className="mx-auto flex h-full min-h-screen w-full max-w-[1141px] flex-col bg-background p-4 pb-32 font-sans sm:p-6 md:p-9 md:pb-9">
+      {/* En-tête */}
+      <header className="mb-6 flex items-end justify-between gap-4 sm:mb-8">
+        <div className="min-w-0">
+          <p className="eyebrow">Portefeuille</p>
+          <h1 className="title mt-1 text-3xl text-foreground sm:text-4xl">Mes comptes</h1>
         </div>
-        <Button
-          onClick={() => setIsConnectOpen(true)}
-          className="h-10 px-5 rounded-md font-medium cursor-pointer gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Ajouter un compte
+        <Button onClick={() => setIsConnectOpen(true)} className="h-10 shrink-0 cursor-pointer gap-2 px-4 sm:px-5">
+          <Plus className="h-4 w-4" />
+          <span className="sm:hidden">Ajouter</span>
+          <span className="hidden sm:inline">Ajouter un compte</span>
         </Button>
-      </div>
+      </header>
 
-      {/* Filters & Search */}
-      <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
-        {/* Chips */}
-        <div className="flex items-center gap-2">
-          <FilterChip label="Tous" active={typeFilter === "All"} onClick={() => setTypeFilter("All")} />
-          <FilterChip label="API" active={typeFilter === "API"} onClick={() => setTypeFilter("API")} />
-          <FilterChip label="Fichier" active={typeFilter === "File"} onClick={() => setTypeFilter("File")} />
-        </div>
-
-        {/* Search */}
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Rechercher un compte"
-            className="h-[42px] bg-card border-border rounded-md pl-10 pr-9 text-sm placeholder:text-muted-foreground focus-visible:ring-primary/40"
-            aria-label="Rechercher un compte"
+      {/* Synthèse : comptes, volume, état de la synchronisation */}
+      {!isLoading && hasAnyAccounts && (
+        <dl className="mb-4 grid grid-cols-3 gap-2 sm:mb-6 sm:gap-3">
+          <SummaryTile
+            label="Comptes"
+            value={summary.total.toLocaleString("fr-FR")}
+            hint={`${summary.api} API · ${summary.file} fichier${summary.file > 1 ? "s" : ""}`}
           />
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              aria-label="Effacer la recherche"
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+          <SummaryTile
+            label="Transactions"
+            value={transactions.length.toLocaleString("fr-FR")}
+            hint="toutes sources"
+          />
+          <SummaryTile
+            label="À jour"
+            value={`${summary.upToDate}/${summary.total}`}
+            hint={
+              summary.errors > 0
+                ? `${summary.errors} en erreur`
+                : summary.syncing > 0
+                  ? `${summary.syncing} en cours`
+                  : summary.paused > 0
+                    ? `${summary.paused} en pause`
+                    : "tout est synchronisé"
+            }
+            tone={summary.errors > 0 ? "negative" : summary.syncing > 0 ? "warning" : "positive"}
+          />
+        </dl>
+      )}
+
+      {/* Activité par année : la vue d'ensemble passe avant le détail des comptes. */}
+      {!isLoading && <TransactionsPerYear transactions={transactions} className="mb-8 sm:mb-10" />}
+
+      {/* Liste des comptes */}
+      <section aria-labelledby="accounts-list-title">
+        <div className="mb-3 flex items-baseline justify-between gap-3">
+          <h2 id="accounts-list-title" className="title text-xl text-foreground">
+            Comptes connectés
+          </h2>
+          {hasAnyAccounts && (
+            <span className="text-xs text-muted-foreground">
+              {filteredAccounts.length === accountsWithTransactions.length
+                ? `${accountsWithTransactions.length} compte${accountsWithTransactions.length > 1 ? "s" : ""}`
+                : `${filteredAccounts.length} sur ${accountsWithTransactions.length}`}
+            </span>
           )}
         </div>
 
-        {/* View Toggler */}
-        <div
-          role="tablist"
-          aria-label="Affichage des comptes"
-          className="flex items-center bg-muted p-1 rounded-md h-[42px]"
-        >
-          <button
-            role="tab"
-            type="button"
-            aria-label="Vue grille"
-            aria-selected={viewMode === "grid"}
-            onClick={() => setViewMode("grid")}
-            className={cn(
-              "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
-              viewMode === "grid"
-                ? "bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+        {/* Filtres & recherche */}
+        <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1 md:order-2">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Rechercher un compte, une adresse…"
+              className="h-10 rounded-full border-line bg-card pl-10 pr-9 text-sm placeholder:text-muted-foreground focus-visible:ring-primary/40"
+              aria-label="Rechercher un compte"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer la recherche"
+                className="absolute right-2.5 top-1/2 flex h-6 w-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             )}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            role="tab"
-            type="button"
-            aria-label="Vue liste"
-            aria-selected={viewMode === "list"}
-            onClick={() => setViewMode("list")}
-            className={cn(
-              "flex items-center justify-center w-[43px] h-[34px] rounded cursor-pointer transition-colors",
-              viewMode === "list"
-                ? "bg-card text-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <ListIcon className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+          </div>
 
-      {/* Accounts List */}
-      <div className={cn(
-        viewMode === "grid"
-          ? "grid grid-cols-1 md:grid-cols-2 gap-3"
-          : "flex flex-col gap-3"
-      )}>
-        {isLoading ? (
-          <AccountsSkeleton />
-        ) : !hasAnyAccounts ? (
-          <EmptyState onAdd={() => setIsConnectOpen(true)} />
-        ) : filteredAccounts.length === 0 ? (
-          <NoResultsState query={searchQuery} onReset={() => { setSearchQuery(""); setTypeFilter("All") }} />
-        ) : (
-          filteredAccounts.map((account) => (
-            <Accordion type="single" collapsible key={account.id} className="bg-card rounded-lg border border-border overflow-hidden transition-colors hover:border-primary/30">
-              <AccordionItem value={account.id} className="border-none">
-                <AccordionTrigger className="min-w-0 px-4 sm:px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
-                  {/* min-w-0 : sans lui, la ligne refusait de rétrécir sous la
-                      taille de son contenu et débordait de la carte sur mobile. */}
-                  <div className="flex min-w-0 items-center justify-between w-full pr-2 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <Avatar className="w-11 h-11 rounded-full border border-border bg-muted shrink-0">
-                        <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{(account.name ?? "??").slice(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
-                        {account.accountCreatedAt && (
-                          <span className="text-xs text-muted-foreground hidden sm:inline">depuis le {account.accountCreatedAt}</span>
-                        )}
-                        <div className="flex shrink-0 items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50">
-                          <span className="text-[11px] font-medium text-muted-foreground">{account.subAccountsCount}</span>
+          <div className="flex items-center justify-between gap-2 md:order-1">
+            <div className="flex items-center gap-1.5" role="group" aria-label="Filtrer par type">
+              <FilterChip label="Tous" active={typeFilter === "All"} onClick={() => setTypeFilter("All")} />
+              <FilterChip label="API" active={typeFilter === "API"} onClick={() => setTypeFilter("API")} />
+              <FilterChip label="Fichier" active={typeFilter === "File"} onClick={() => setTypeFilter("File")} />
+            </div>
+          </div>
+
+          {/* Sur mobile la grille n'a qu'une colonne : le sélecteur n'y servirait à rien. */}
+          <div
+            role="tablist"
+            aria-label="Affichage des comptes"
+            className="hidden h-10 items-center rounded-full bg-muted p-1 md:order-3 md:flex"
+          >
+            <button
+              role="tab"
+              type="button"
+              aria-label="Vue grille"
+              aria-selected={viewMode === "grid"}
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "flex h-8 w-10 cursor-pointer items-center justify-center rounded-full transition-colors",
+                viewMode === "grid" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              role="tab"
+              type="button"
+              aria-label="Vue liste"
+              aria-selected={viewMode === "list"}
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex h-8 w-10 cursor-pointer items-center justify-center rounded-full transition-colors",
+                viewMode === "list" ? "bg-card text-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+        <div className={cn(viewMode === "grid" ? "grid grid-cols-1 items-start gap-3 md:grid-cols-2" : "flex flex-col gap-3")}>
+          {isLoading ? (
+            <AccountsSkeleton />
+          ) : !hasAnyAccounts ? (
+            <EmptyState onAdd={() => setIsConnectOpen(true)} />
+          ) : filteredAccounts.length === 0 ? (
+            <NoResultsState query={searchQuery} onReset={() => { setSearchQuery(""); setTypeFilter("All") }} />
+          ) : (
+            filteredAccounts.map((account) => {
+              const isRunning = account.health && account.health.kind !== "idle" && account.health.elapsedMs !== null
+              const syncLabel = isRunning
+                ? `en cours depuis ${formatElapsed(account.health!.elapsedMs!)}`
+                : account.lastSync
+              const isPaused = account.syncEnabled === false
+              const typeLabel = account.type === "File" ? "Fichier" : "API"
+
+              return (
+                <Accordion
+                  type="single"
+                  collapsible
+                  key={account.id}
+                  className={cn(
+                    "overflow-hidden rounded-2xl border bg-card transition-colors",
+                    account.status === "error" ? "border-destructive/30" : "border-line hover:border-primary/30"
+                  )}
+                >
+                  <AccordionItem value={account.id} className="border-none">
+                    <AccordionTrigger className="items-center gap-3 rounded-none px-4 py-3.5 hover:bg-muted/30 hover:no-underline sm:px-5 [&>svg]:translate-y-0 [&>svg]:text-muted-foreground">
+                      {/* min-w-0 : sans lui, la ligne refusait de rétrécir sous la
+                          taille de son contenu et débordait de la carte sur mobile. */}
+                      <div className="flex min-w-0 flex-1 items-center gap-3">
+                        <Avatar className="h-10 w-10 shrink-0 rounded-full border border-line bg-muted">
+                          <AvatarImage src={account.iconUrl} alt="" />
+                          <AvatarFallback className="text-xs font-semibold text-muted-foreground">
+                            {(account.name ?? "??").slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[15px] font-bold text-foreground">{account.name}</span>
+                            <span
+                              className="num flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full border border-line bg-surface px-1.5 text-[11px] text-muted-foreground"
+                              title={`${account.subAccountsCount} sous-compte${account.subAccountsCount > 1 ? "s" : ""}`}
+                            >
+                              {account.subAccountsCount}
+                            </span>
+                            {account.health?.message && (
+                              <AlertCircle className="h-4 w-4 shrink-0 text-chart-4" aria-label={account.health.message} />
+                            )}
+                          </div>
+                          <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                            <span className="shrink-0">{typeLabel}</span>
+                            <span aria-hidden>·</span>
+                            <span className="shrink-0">
+                              <span className="num">{account.transactionCount.toLocaleString("fr-FR")}</span> tx
+                            </span>
+                            <span aria-hidden className="hidden sm:inline">·</span>
+                            <span className="hidden truncate sm:inline">{isPaused ? "En pause" : syncLabel}</span>
+                          </p>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-[12px] text-muted-foreground hidden sm:inline whitespace-nowrap">
-                        {/* Pendant une synchronisation, sa durée renseigne
-                            davantage que la date du dernier import réussi. */}
-                        {account.health && account.health.kind !== "idle" && account.health.elapsedMs !== null
-                          ? `depuis ${formatElapsed(account.health.elapsedMs)}`
-                          : account.lastSync}
-                      </span>
-                      {account.missingKey ? (
-                        <MissingKeyChip provider={account.missingKey} />
-                      ) : (
-                        <StatusBadge status={account.status} showText />
-                      )}
-                      {account.health && account.health.message && (
-                        <AlertCircle className="w-4 h-4 text-chart-4 shrink-0" aria-label={account.health.message} />
-                      )}
-                    </div>
-                  </div>
-                </AccordionTrigger>
-
-                <AccordionContent className="px-0 pb-0">
-                  <Separator className="bg-border" />
-                  {account.health?.message && (
-                    <div className="flex flex-wrap items-center gap-3 border-b border-chart-4/30 bg-chart-4/5 px-5 py-3">
-                      <AlertCircle className="w-4 h-4 text-chart-4 shrink-0" />
-                      <p className="text-[13px] text-foreground min-w-0 flex-1">
-                        {account.health.message}{" "}
-                        <span className="text-muted-foreground">
-                          {account.health.kind === "orphaned"
-                            ? "Le compte est resté affiché en synchronisation ; l'arrêter le libère sans rien perdre."
-                            : "Les données déjà importées sont conservées : une synchronisation reprise ne crée pas de doublon."}
-                        </span>
-                      </p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 shrink-0 cursor-pointer"
-                        onClick={() => void handleCancelSync(account.id as Id<"integrations">, account.name)}
-                      >
-                        <CircleStop className="w-3.5 h-3.5" />
-                        Arrêter
-                      </Button>
-                    </div>
-                  )}
-                  <div className="p-5 grid grid-cols-1 md:grid-cols-[1.4fr_auto_auto_1fr] gap-4 items-center">
-                    {/* Platform Info */}
-                    <div className="flex items-center gap-3">
-                      <Avatar className="w-10 h-10 rounded-full border border-border bg-muted">
-                        <AvatarImage src={account.iconUrl} alt={account.name} />
-                        <AvatarFallback className="text-xs font-semibold text-muted-foreground">{(account.name ?? "??").slice(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-sm font-semibold text-foreground truncate">{account.name}</span>
-                        <CopyableAddress address={account.addressOrId} />
-                      </div>
-                    </div>
-
-                    {/* Type */}
-                    <div className="flex items-center gap-2 px-2.5 py-1 rounded-md border border-border w-fit bg-muted/30">
-                      <div className="w-5 h-5 flex items-center justify-center bg-primary/15 rounded-[4px]">
-                        <Calendar className="w-3 h-3 text-primary" />
-                      </div>
-                      <span className="text-[12px] font-medium text-foreground">{account.type}</span>
-                    </div>
-
-                    {/* Transactions Link */}
-                    <Link
-                      href={`/dashboard/transactions?integrationId=${account.id}`}
-                      className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md hover:bg-primary/10 w-fit transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                    >
-                      <span className="text-sm font-semibold text-primary">{account.transactionCount.toLocaleString("fr-FR")} transactions</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-primary" />
-                    </Link>
-
-                    {/* Status & Actions */}
-                    <div className="flex items-center justify-end gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-[12px] text-muted-foreground whitespace-nowrap">
-                          {account.syncEnabled === false ? "En pause" : account.lastSync}
-                        </span>
-                        {account.syncEnabled === false ? (
-                          <span className="num border border-border px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                            Non synchronisé
-                          </span>
+                      <div className="shrink-0">
+                        {isPaused ? (
+                          <span className="chip py-1 text-xs">En pause</span>
                         ) : account.missingKey ? (
-                          <MissingKeyChip provider={account.missingKey} />
+                          <MissingKeyChip provider={account.missingKey} asLink={false} />
                         ) : (
-                          <StatusBadge status={account.status} showText />
+                          <StatusBadge status={account.status} />
                         )}
-                        {/* Toujours offert pendant une synchronisation, pas
-                            seulement quand elle devient suspecte. */}
-                        {account.health?.canCancel && !account.health.message && (
+                      </div>
+                    </AccordionTrigger>
+
+                    <AccordionContent className="px-0 pb-0">
+                      {account.health?.message && (
+                        <div className="flex flex-wrap items-center gap-3 border-y border-chart-4/30 bg-chart-4/5 px-4 py-3 sm:px-5">
+                          <AlertCircle className="h-4 w-4 shrink-0 text-chart-4" />
+                          <p className="min-w-0 flex-1 text-[13px] text-foreground">
+                            {account.health.message}{" "}
+                            <span className="text-muted-foreground">
+                              {account.health.kind === "orphaned"
+                                ? "Le compte est resté affiché en synchronisation ; l'arrêter le libère sans rien perdre."
+                                : "Les données déjà importées sont conservées : une synchronisation reprise ne crée pas de doublon."}
+                            </span>
+                          </p>
                           <Button
-                            variant="ghost"
+                            variant="outline"
                             size="sm"
-                            className="h-7 gap-1.5 px-2 text-[12px] text-muted-foreground hover:text-foreground cursor-pointer"
+                            className="shrink-0 cursor-pointer gap-1.5"
                             onClick={() => void handleCancelSync(account.id as Id<"integrations">, account.name)}
                           >
-                            <CircleStop className="w-3.5 h-3.5" />
+                            <CircleStop className="h-3.5 w-3.5" />
                             Arrêter
                           </Button>
-                        )}
-                        {/* Les imports de fichiers n'ont pas d'API à interroger. */}
-                        {account.type === "API" && (
-                          <Switch
-                            checked={account.syncEnabled !== false}
-                            onCheckedChange={(checked) =>
-                              void handleToggleSync(
-                                account.id as Id<"integrations">,
-                                checked,
-                                account.name
-                              )
-                            }
-                            aria-label={`Synchronisation automatique de ${account.name}`}
-                            className="cursor-pointer"
-                          />
-                        )}
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Actions sur le compte"
-                            className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer"
-                          >
-                            <MoreVertical className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setRenameTarget({ id: account.id as Id<"integrations">, name: account.name })
-                              setRenameValue(account.name)
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Renommer</span>
-                          </DropdownMenuItem>
-                          {account.type === "File" ? (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                if (account.platformId === "kucoin") {
-                                  setKucoinImportIntegrationId(account.id)
-                                  setIsKucoinImportOpen(true)
-                                } else if (account.platformId === "finary") {
-                                  setIsFinaryImportOpen(true)
-                                } else {
-                                  setIsBitstackImportOpen(true)
-                                }
-                              }}
-                              className="cursor-pointer flex items-center justify-between"
-                            >
-                              <span className="text-sm">{account.platformId === "kucoin" ? "Importer les exports (.xlsx, .csv)" : "Importer un fichier CSV"}</span>
-                              <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => handleSyncAccount(account.id, account.platformId)}
-                              disabled={account.status === "syncing"}
-                              className="cursor-pointer flex items-center justify-between"
-                            >
-                              <span className="text-sm">Synchroniser</span>
-                              <RefreshCw className={cn("w-3.5 h-3.5 text-muted-foreground", account.status === "syncing" && "animate-spin")} />
-                            </DropdownMenuItem>
-                          )}
-                          {account.type !== "File" && (<>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncFiatOnly(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Fiat uniquement</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncDustOnly(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Dust/Dribblet</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncBalances(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Balances</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncOrders(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Order History</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleSyncSpotTrades(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Trades spot</span>
-                          </DropdownMenuItem>
-                          {account.platformId === "kucoin" && (
-                          <DropdownMenuItem
-                            onClick={() => handleSyncKucoinConverts(account.id)}
-                            disabled={account.status === "syncing"}
-                            className="cursor-pointer"
-                          >
-                            <span className="text-sm">Sync Converts</span>
-                          </DropdownMenuItem>
-                          )}
-                          {account.platformId === "kucoin" && (
-                          <DropdownMenuItem
-                            onClick={() => { setKucoinImportIntegrationId(account.id); setIsKucoinImportOpen(true); }}
-                            className="cursor-pointer flex items-center justify-between"
-                          >
-                            <span className="text-sm">Importer les exports (.xlsx, .csv)</span>
-                            <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
-                          </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem className="cursor-pointer">
-                            <span className="text-sm">Mettre à jour l&apos;API</span>
-                          </DropdownMenuItem>
-                          </>)}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={() => handlePurgeData(account.id)}
-                            className="cursor-pointer text-orange-600 focus:text-orange-600 dark:text-orange-400 dark:focus:text-orange-400"
-                          >
-                            <span className="text-sm">Vider les données</span>
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleDeleteAccount(account.id)}
-                            className="cursor-pointer text-destructive focus:text-destructive"
-                          >
-                            <span className="text-sm">Supprimer</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ))
-        )}
-      </div>
+                        </div>
+                      )}
 
-      {!isLoading && <TransactionsPerYear transactions={transactions} />}
+                      <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-t border-line px-4 py-4 sm:grid-cols-4 sm:px-5">
+                        <DetailField label="Identifiant" className="col-span-2">
+                          <CopyableAddress address={account.addressOrId} />
+                        </DetailField>
+                        <DetailField label="Source">
+                          <span className="inline-flex items-center gap-1.5">
+                            {account.type === "File" ? (
+                              <FileUp className="h-3.5 w-3.5 text-primary" />
+                            ) : (
+                              <KeyRound className="h-3.5 w-3.5 text-primary" />
+                            )}
+                            {account.type === "File" ? "Import de fichier" : "Clé API"}
+                          </span>
+                        </DetailField>
+                        <DetailField label="Ouvert le">
+                          {account.accountCreatedAt ?? <span className="text-faint">—</span>}
+                        </DetailField>
+                        <DetailField label="Transactions">
+                          <Link
+                            href={`/dashboard/transactions?integrationId=${account.id}`}
+                            className="-mx-1 inline-flex items-center gap-1.5 rounded-md px-1 font-bold text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                          >
+                            <span className="num">{account.transactionCount.toLocaleString("fr-FR")}</span>
+                            <span>voir</span>
+                            <ArrowUpRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </DetailField>
+                        <DetailField label={isRunning ? "Synchronisation" : "Dernière synchro"}>
+                          <span className="num text-[13px]">{syncLabel}</span>
+                        </DetailField>
+                        <DetailField label="Synchro auto" className="col-span-2 sm:col-span-1">
+                          {account.type === "API" ? (
+                            <label className="inline-flex cursor-pointer items-center gap-2">
+                              <Switch
+                                checked={!isPaused}
+                                onCheckedChange={(checked) =>
+                                  void handleToggleSync(account.id as Id<"integrations">, checked, account.name)
+                                }
+                                aria-label={`Synchronisation automatique de ${account.name}`}
+                                className="cursor-pointer"
+                              />
+                              <span className="text-[13px]">{isPaused ? "En pause" : "Activée"}</span>
+                            </label>
+                          ) : (
+                            // Les imports de fichiers n'ont pas d'API à interroger.
+                            <span className="text-muted-foreground">Import manuel</span>
+                          )}
+                        </DetailField>
+                        {account.missingKey && (
+                          <DetailField label="Clé requise" className="col-span-2 sm:col-span-1">
+                            <MissingKeyChip provider={account.missingKey} />
+                          </DetailField>
+                        )}
+                      </dl>
+
+                      <div className="flex items-center justify-between gap-2 border-t border-line bg-surface/50 px-4 py-2.5 sm:px-5">
+                        <div className="min-w-0">
+                          {/* Toujours offert pendant une synchronisation, pas
+                              seulement quand elle devient suspecte. */}
+                          {account.health?.canCancel && !account.health.message && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 cursor-pointer gap-1.5 px-2.5 text-[13px] text-muted-foreground hover:text-foreground"
+                              onClick={() => void handleCancelSync(account.id as Id<"integrations">, account.name)}
+                            >
+                              <CircleStop className="h-3.5 w-3.5" />
+                              Arrêter
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {account.type === "File" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 cursor-pointer gap-1.5 bg-card"
+                              onClick={() => openImport(account)}
+                            >
+                              <FileUp className="h-3.5 w-3.5" />
+                              Importer
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 cursor-pointer gap-1.5 bg-card"
+                              disabled={account.status === "syncing"}
+                              onClick={() => handleSyncAccount(account.id, account.platformId)}
+                            >
+                              <RefreshCw className={cn("h-3.5 w-3.5", account.status === "syncing" && "animate-spin")} />
+                              Synchroniser
+                            </Button>
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Plus d'actions sur ${account.name}`}
+                                className="h-8 w-8 cursor-pointer text-muted-foreground hover:bg-muted hover:text-foreground"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setRenameTarget({ id: account.id as Id<"integrations">, name: account.name })
+                                  setRenameValue(account.name)
+                                }}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Renommer</span>
+                              </DropdownMenuItem>
+                              {account.type !== "File" && (<>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleSyncFiatOnly(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Fiat uniquement</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleSyncDustOnly(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Dust/Dribblet</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleSyncBalances(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Balances</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleSyncOrders(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Order History</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleSyncSpotTrades(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Trades spot</span>
+                              </DropdownMenuItem>
+                              {account.platformId === "kucoin" && (
+                              <DropdownMenuItem
+                                onClick={() => handleSyncKucoinConverts(account.id)}
+                                disabled={account.status === "syncing"}
+                                className="cursor-pointer"
+                              >
+                                <span className="text-sm">Sync Converts</span>
+                              </DropdownMenuItem>
+                              )}
+                              {account.platformId === "kucoin" && (
+                              <DropdownMenuItem
+                                onClick={() => { setKucoinImportIntegrationId(account.id); setIsKucoinImportOpen(true); }}
+                                className="cursor-pointer flex items-center justify-between"
+                              >
+                                <span className="text-sm">Importer les exports (.xlsx, .csv)</span>
+                                <FileUp className="w-3.5 h-3.5 text-muted-foreground" />
+                              </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem className="cursor-pointer">
+                                <span className="text-sm">Mettre à jour l&apos;API</span>
+                              </DropdownMenuItem>
+                              </>)}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handlePurgeData(account.id)}
+                                className="cursor-pointer text-orange-600 focus:text-orange-600 dark:text-orange-400 dark:focus:text-orange-400"
+                              >
+                                <span className="text-sm">Vider les données</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteAccount(account.id)}
+                                className="cursor-pointer text-destructive focus:text-destructive"
+                              >
+                                <span className="text-sm">Supprimer</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                </Accordion>
+              )
+            })
+          )}
+        </div>
+      </section>
 
       <ConnectProviderDialog open={isConnectOpen} onOpenChange={(open) => {
         setIsConnectOpen(open)
@@ -984,6 +1065,56 @@ export function AccountsView() {
   )
 }
 
+function SummaryTile({
+  label,
+  value,
+  hint,
+  tone,
+}: {
+  label: string
+  value: string
+  hint: string
+  tone?: "positive" | "negative" | "warning"
+}) {
+  return (
+    <div className="min-w-0 rounded-2xl border border-line bg-card px-3 py-3 sm:px-4">
+      <dt className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-faint">{label}</dt>
+      <dd className="num mt-1 truncate text-xl font-bold leading-tight text-foreground sm:text-2xl">{value}</dd>
+      <dd
+        className={cn(
+          "mt-0.5 truncate text-[11px] sm:text-xs",
+          tone === "negative"
+            ? "font-semibold text-destructive"
+            : tone === "warning"
+              ? "font-semibold text-chart-4"
+              : tone === "positive"
+                ? "text-positive"
+                : "text-muted-foreground"
+        )}
+      >
+        {hint}
+      </dd>
+    </div>
+  )
+}
+
+function DetailField({
+  label,
+  className,
+  children,
+}: {
+  label: string
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-faint">{label}</dt>
+      <dd className="mt-1 text-sm text-foreground">{children}</dd>
+    </div>
+  )
+}
+
 function CopyableAddress({ address }: { address: string }) {
   const [copied, setCopied] = React.useState(false)
 
@@ -1005,13 +1136,14 @@ function CopyableAddress({ address }: { address: string }) {
       onClick={handleCopy}
       title={copied ? "Copié !" : `Copier ${address}`}
       aria-label={copied ? "Adresse copiée" : "Copier l'adresse"}
-      className="group flex items-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded max-w-[260px]"
+      className="group -mx-1 flex max-w-full cursor-pointer items-center gap-1.5 rounded-md px-1 text-sm text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
     >
-      <span className="truncate">{address}</span>
+      <span className="num truncate text-[13px]">{address}</span>
       {copied ? (
-        <Check className="w-3 h-3 text-positive shrink-0" />
+        <Check className="h-3.5 w-3.5 shrink-0 text-positive" />
       ) : (
-        <Copy className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        // Toujours visible : sur mobile, il n'y a pas de survol pour le révéler.
+        <Copy className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
       )}
     </button>
   )
@@ -1024,10 +1156,10 @@ function FilterChip({ label, active, onClick }: { label: string; active?: boolea
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "px-3 py-1.5 rounded-lg text-sm font-medium cursor-pointer transition-colors border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+        "h-9 cursor-pointer rounded-full border px-3.5 text-sm font-bold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
         active
-          ? "bg-primary text-primary-foreground border-primary"
-          : "bg-card text-muted-foreground border-border hover:text-foreground hover:bg-muted/60"
+          ? "border-foreground bg-foreground text-background"
+          : "border-line bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground"
       )}
     >
       {label}
@@ -1035,50 +1167,62 @@ function FilterChip({ label, active, onClick }: { label: string; active?: boolea
   )
 }
 
-/** Renvoie vers la page où l'utilisateur ajoute la clé qui manque. */
-function MissingKeyChip({ provider }: { provider: string }) {
+/**
+ * Signale la clé qui manque. En lien, renvoie vers la page où l'ajouter ;
+ * sans lien quand la pastille est posée dans un bouton (en-tête d'accordéon).
+ */
+function MissingKeyChip({ provider, asLink = true }: { provider: string; asLink?: boolean }) {
+  const content = (
+    <>
+      <KeyRound className="h-3 w-3" />
+      Clé <span className="hidden sm:inline">{dataProviderLabel(provider)}</span> requise
+    </>
+  )
+  if (!asLink) {
+    return <span className="chip chip-violet whitespace-nowrap py-1 text-xs">{content}</span>
+  }
   return (
     <Link
       href="/dashboard/settings/api-keys"
-      className="chip chip-violet whitespace-nowrap py-0.5 text-[11px] hover:opacity-80"
+      className="chip chip-violet whitespace-nowrap py-1 text-xs hover:opacity-80"
     >
-      <KeyRound className="h-3 w-3" />
-      Clé <span className="hidden sm:inline">{dataProviderLabel(provider)}</span> requise
+      {content}
     </Link>
   )
 }
 
-function StatusBadge({ status, showText }: { status: AccountStatus, showText?: boolean }) {
-  if (status === 'synced') {
+function StatusBadge({ status }: { status: AccountStatus }) {
+  if (status === "synced") {
     return (
-      <div className="num flex items-center gap-1.5 border border-positive/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-positive">
-        <Check className="w-3.5 h-3.5" />
-        {showText && <span className="text-[12px] font-medium">Synchronisé</span>}
-      </div>
+      <span className="chip chip-jade whitespace-nowrap py-1 text-xs">
+        <Check className="h-3.5 w-3.5" />
+        Synchronisé
+      </span>
     )
   }
-  if (status === 'syncing') {
+  if (status === "syncing") {
     return (
-      <div className="num flex items-center gap-1.5 border border-chart-4/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] text-chart-4">
-        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-        {showText && <span className="text-[12px] font-medium">Synchronisation…</span>}
-      </div>
+      <span className="chip whitespace-nowrap bg-chart-4/10 py-1 text-xs text-chart-4">
+        <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        <span className="hidden sm:inline">Synchronisation…</span>
+        <span className="sm:hidden">En cours</span>
+      </span>
     )
   }
-  if (status === 'error') {
+  if (status === "error") {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-destructive/10 text-destructive border border-destructive/20">
-        <AlertCircle className="w-3.5 h-3.5" />
-        {showText && <span className="text-[12px] font-medium">Erreur</span>}
-      </div>
+      <span className="chip whitespace-nowrap bg-destructive/10 py-1 text-xs text-destructive">
+        <AlertCircle className="h-3.5 w-3.5" />
+        Erreur
+      </span>
     )
   }
-  if (status === 'unsupported') {
+  if (status === "unsupported") {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-muted text-muted-foreground border border-border">
-        <X className="w-3.5 h-3.5" />
-        {showText && <span className="text-[12px] font-medium">Non supportée</span>}
-      </div>
+      <span className="chip whitespace-nowrap py-1 text-xs">
+        <X className="h-3.5 w-3.5" />
+        Non supportée
+      </span>
     )
   }
   return null
@@ -1090,10 +1234,10 @@ function AccountsSkeleton() {
       {[0, 1, 2].map((i) => (
         <div
           key={i}
-          className="bg-card rounded-lg border border-border px-5 py-4 flex items-center justify-between animate-pulse"
+          className="flex animate-pulse items-center justify-between rounded-2xl border border-line bg-card px-4 py-3.5 sm:px-5"
         >
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-muted" />
+            <div className="h-10 w-10 rounded-full bg-muted" />
             <div className="flex flex-col gap-2">
               <div className="h-3.5 w-32 rounded bg-muted" />
               <div className="h-3 w-24 rounded bg-muted/60" />
@@ -1108,7 +1252,7 @@ function AccountsSkeleton() {
 
 function EmptyState({ onAdd }: { onAdd: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-14 px-6 rounded-lg border border-dashed border-border bg-card/60">
+    <div className="flex flex-col items-center justify-center text-center py-14 px-6 rounded-2xl border border-dashed border-line bg-card/60">
       <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-4">
         <Inbox className="w-6 h-6 text-primary" />
       </div>
@@ -1126,7 +1270,7 @@ function EmptyState({ onAdd }: { onAdd: () => void }) {
 
 function NoResultsState({ query, onReset }: { query: string; onReset: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-lg border border-dashed border-border bg-card/60">
+    <div className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-2xl border border-dashed border-line bg-card/60">
       <div className="w-11 h-11 rounded-full bg-muted flex items-center justify-center mb-3">
         <Search className="w-5 h-5 text-muted-foreground" />
       </div>
