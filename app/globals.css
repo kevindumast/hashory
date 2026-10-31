@@ -230,6 +230,15 @@
   font-weight: 700;
 }
 
+/* Mode discret (œil du tableau de bord) : les chiffres du contenu sont
+   floutés. Les étiquettes `.num.uppercase` restent lisibles. */
+[data-privacy="on"] main .num:not(.uppercase),
+[data-privacy="on"] main .recharts-cartesian-axis-tick-value {
+  filter: blur(7px);
+  user-select: none;
+  transition: filter 0.2s ease;
+}
+
 /* Pastille douce — étiquette, filtre, état. Teinte via les variantes. */
 .chip {
   display: inline-flex;

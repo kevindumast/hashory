@@ -12,6 +12,9 @@ const DATASET_SPOT_TRADES = "spot_trades";
 export const currencyFormatter = new Intl.NumberFormat("fr-FR", {
   style: "currency",
   currency: "USD",
+  // « 12,50 $ » plutôt que « 12,50 $US » : la devise est déjà choisie par
+  // le sélecteur USD / EUR, le suffixe n'apportait que de la largeur.
+  currencyDisplay: "narrowSymbol",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });

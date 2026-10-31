@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useEffect, useState } from "react";
-import { AlertCircle, Bell, CheckCircle2, HelpCircle, PanelLeft, Plug, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, HelpCircle, PanelLeft, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
 import { ClerkLoaded, ClerkLoading, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -13,14 +13,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { isConvexConfigured } from "@/convex/client";
 import { useTheme } from "next-themes";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
+import { PrivacyToggle } from "@/components/dashboard/privacy-mode";
 import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
+import { formatRelative } from "@/lib/format-relative";
+import { usePathname } from "next/navigation";
+import { findActiveLink } from "@/components/dashboard/nav-config";
 
 type DashboardTopbarProps = {
   onToggleSidebar: () => void;
@@ -28,24 +31,12 @@ type DashboardTopbarProps = {
   onOpenCommandPalette: () => void;
 };
 
-const relativeTime = new Intl.RelativeTimeFormat("fr-FR", { numeric: "auto" });
-
-function formatRelative(timestamp: number): string {
-  const diff = timestamp - Date.now();
-  const minutes = Math.round(diff / 60000);
-  if (Math.abs(minutes) < 60) return relativeTime.format(minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
-  return relativeTime.format(Math.round(hours / 24), "day");
-}
-
 export function DashboardTopbar({
   onToggleSidebar,
   onConnectProvider,
   onOpenCommandPalette,
 }: DashboardTopbarProps) {
   const [mounted, setMounted] = useState(false);
-  const isIntegrationEnabled = useMemo(() => isConvexConfigured, []);
   const { resolvedTheme, setTheme } = useTheme();
   const theme = resolvedTheme ?? "dark";
   const { integrations, isLoadingIntegrations } = useDashboardData();
@@ -61,6 +52,8 @@ export function DashboardTopbar({
       .slice(0, 6);
   }, [integrations]);
 
+  const pathname = usePathname();
+  const pageTitle = findActiveLink(pathname)?.label ?? "Tableau de bord";
   const signals = useSignals();
   const [isBellOpen, setIsBellOpen] = useState(false);
 
@@ -86,7 +79,7 @@ export function DashboardTopbar({
             size="icon"
             onClick={onToggleSidebar}
             aria-label="Basculer le menu latéral"
-            className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent shrink-0"
+            className="size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent shrink-0"
           >
             <PanelLeft className="size-4" />
           </Button>
@@ -94,32 +87,27 @@ export function DashboardTopbar({
         <TooltipContent side="bottom">Basculer le menu</TooltipContent>
       </Tooltip>
 
+      <p className="min-w-0 shrink-0 truncate text-[15px] font-bold tracking-tight text-sidebar-foreground lg:w-48">
+        {pageTitle}
+      </p>
+
       {/* Déclencheur de la palette de commandes */}
       <div className="flex-1 flex justify-center">
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          className="group relative flex h-9 w-full max-w-sm cursor-pointer items-center gap-2.5 border border-border/60 bg-background/40 px-3 text-sm text-muted-foreground transition-colors hover:border-border hover:bg-muted/20"
+          className="group relative flex h-9 w-full max-w-md cursor-pointer items-center gap-2.5 rounded-full bg-surface px-4 text-sm text-muted-foreground transition-colors hover:bg-muted"
         >
-          <Search className="size-3.5 shrink-0" />
-          <span className="num flex-1 text-left text-[11px] uppercase tracking-[0.14em] text-muted-foreground/70">Rechercher…</span>
-          <kbd className="num inline-flex h-5 items-center border border-border/60 px-1.5 text-[10px] text-muted-foreground">
+          <Search className="size-4 shrink-0" />
+          <span className="flex-1 text-left">Rechercher une page, une action…</span>
+          <kbd className="num inline-flex h-5 items-center rounded-md border border-line bg-background px-1.5 text-[10px] text-muted-foreground">
             ⌘K
           </kbd>
         </button>
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="num hidden h-8 cursor-pointer px-3 text-[11px] uppercase tracking-[0.14em] text-sidebar-primary hover:bg-muted/20 sm:inline-flex"
-          onClick={onConnectProvider}
-          disabled={!isIntegrationEnabled}
-        >
-          <Plug className="size-3.5 mr-1.5" />
-          Connecter
-        </Button>
+        <PrivacyToggle />
 
         {/* Notifications : points d'attention, puis activité de synchronisation */}
         <DropdownMenu open={isBellOpen} onOpenChange={setIsBellOpen}>
@@ -132,7 +120,7 @@ export function DashboardTopbar({
                   ? `Notifications : ${signals.length} point${signals.length > 1 ? "s" : ""} d'attention`
                   : "Notifications"
               }
-              className="relative h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
+              className="relative size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
             >
               <Bell className="size-4" />
               {dotColor && (
@@ -233,7 +221,7 @@ export function DashboardTopbar({
                     : "Passer en mode sombre"
                   : "Changer de thème"
               }
-              className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
+              className="size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
               {mounted && (theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />)}
@@ -248,7 +236,7 @@ export function DashboardTopbar({
               asChild
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
+              className="size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
             >
               <a
                 href={`${siteConfig.github}/issues/new`}
