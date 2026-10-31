@@ -230,13 +230,29 @@
   font-weight: 700;
 }
 
-/* Mode discret (œil du tableau de bord) : les chiffres du contenu sont
-   floutés. Les étiquettes `.num.uppercase` restent lisibles. */
-[data-privacy="on"] main .num:not(.uppercase),
-[data-privacy="on"] main .recharts-cartesian-axis-tick-value {
-  filter: blur(7px);
+/* Mode discret (œil du tableau de bord) : chaque caractère d'un chiffre
+   devient une bille pleine, à l'encre — « 639,26 $ » s'affiche « •••••••• ».
+   Les étiquettes `.num.uppercase` restent lisibles. La couleur est forcée à
+   l'encre pour que le vert/rouge ne trahisse pas un gain ou une perte. */
+[data-privacy="on"] main .num:not(.uppercase) {
+  -webkit-text-security: disc;
+  color: var(--foreground) !important;
   user-select: none;
-  transition: filter 0.2s ease;
+}
+/* Navigateurs sans `-webkit-text-security` : texte masqué, billes dessinées. */
+@supports not (-webkit-text-security: disc) {
+  [data-privacy="on"] main .num:not(.uppercase) {
+    color: transparent !important;
+    background-image: radial-gradient(circle, var(--foreground) 0.2em, transparent 0.22em);
+    background-size: 0.62em 100%;
+    background-repeat: repeat-x;
+    background-position: left center;
+  }
+}
+/* Les axes des graphiques (texte SVG) ne connaissent pas les billes : on les
+   retire simplement. */
+[data-privacy="on"] main .recharts-cartesian-axis-tick-value {
+  visibility: hidden;
 }
 
 /* Pastille douce — étiquette, filtre, état. Teinte via les variantes. */
