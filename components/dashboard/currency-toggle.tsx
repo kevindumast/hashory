@@ -15,7 +15,7 @@ export function CurrencyToggle({
   className?: string;
 }) {
   return (
-    <div className={cn("flex border border-border/60", className)} role="group" aria-label="Devise d'affichage">
+    <div className={cn("flex rounded-full bg-surface p-0.5", className)} role="group" aria-label="Devise d'affichage">
       {(["USD", "EUR"] as const).map((currency) => (
         <button
           key={currency}
@@ -28,10 +28,10 @@ export function CurrencyToggle({
               : "Devise de référence des calculs"
           }
           className={cn(
-            "num cursor-pointer px-2 py-0.5 text-[10px] uppercase tracking-[0.14em] transition-colors",
+            "num cursor-pointer rounded-full px-2.5 py-1 text-[10px] uppercase tracking-[0.14em] transition-colors",
             value === currency
-              ? "bg-muted/40 text-foreground"
-              : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
+              ? "bg-card text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           {currency}

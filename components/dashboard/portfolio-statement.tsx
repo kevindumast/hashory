@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
@@ -59,18 +59,20 @@ function Figure({
   value,
   hint,
   tone = "neutral",
+  children,
 }: {
   label: string;
   value: string;
   hint?: string;
   tone?: "neutral" | "positive" | "negative" | "muted";
+  children?: ReactNode;
 }) {
   return (
-    <div className="border-b border-border/60 px-5 py-5 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">{label}</p>
-      <p
+    <div className="flex flex-col gap-1 bg-card px-5 py-4">
+      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">{label}</span>
+      <span
         className={cn(
-          "num mt-2.5 text-2xl font-normal tracking-tight",
+          "num text-lg font-semibold tracking-[-0.02em] sm:text-xl",
           tone === "positive" && "text-positive",
           tone === "negative" && "text-negative",
           tone === "muted" && "text-muted-foreground",
@@ -78,11 +80,14 @@ function Figure({
         )}
       >
         {value}
-      </p>
-      {hint && <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>}
+      </span>
+      {children}
+      {hint && <span className="text-xs leading-snug text-muted-foreground">{hint}</span>}
     </div>
   );
 }
+
+const signed = (fmt: Intl.NumberFormat, value: number) => `${value >= 0 ? "+" : ""}${fmt.format(value)}`;
 
 /**
  * Relevé de position.
@@ -217,139 +222,139 @@ export function PortfolioStatement({
     downloadCsv(portfolioSheet(positions, Date.now(), currency));
   };
 
-  return (
-    <section className="border-y border-border/60">
-      {/* Valeur totale, en tête */}
-      <Reveal>
-        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-border/60 px-5 py-6">
-          <div>
-            <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-              Valeur du portefeuille
-            </p>
-            <p className="num mt-3 text-5xl font-normal tracking-tight text-foreground">
-              {hasPrices ? fmt.format(figures.value) : "—"}
-            </p>
-          </div>
+  const liquidationShare = (part: number) =>
+    liquidation && liquidation.proceeds > 0 ? (part / liquidation.proceeds) * 100 : 0;
 
-          <div className="text-right">
-            <div className="mb-2 flex items-center justify-end gap-2">
+  return (
+    <Reveal>
+      <section className="float-card overflow-hidden">
+        {/* En-tête : valeur totale et résultat */}
+        <div className="px-5 pb-5 pt-5 sm:px-6 sm:pt-6">
+          <div className="flex items-center justify-between gap-3">
+            <p className="eyebrow">Valeur totale</p>
+            <div className="flex items-center gap-1.5">
               <CurrencyToggle value={currency} onChange={onCurrencyChange} />
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
                 onClick={handleExport}
                 disabled={tokens.length === 0}
-                className="num h-7 cursor-pointer px-2 text-[10px] uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground"
+                aria-label="Exporter les positions en CSV"
+                title="Exporter les positions en CSV"
+                className="size-8 cursor-pointer rounded-full text-muted-foreground hover:text-foreground"
               >
-                <Download className="mr-1.5 size-3" />
-                Exporter
+                <Download className="size-4" />
               </Button>
             </div>
-            <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-              Résultat total
-            </p>
-            <p
+          </div>
+
+          <p className="num mt-3 text-4xl font-bold tracking-[-0.035em] text-foreground sm:text-5xl">
+            {hasPrices ? fmt.format(figures.value) : "—"}
+          </p>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span
               className={cn(
-                "num mt-3 text-2xl font-normal",
-                figures.total >= 0 ? "text-positive" : "text-negative"
+                "chip num",
+                figures.total >= 0 ? "chip-jade" : "bg-negative/10 text-negative"
               )}
             >
-              {figures.total >= 0 ? "+" : ""}
-              {fmt.format(figures.total)}
-              <span className="ml-3 text-base">{percent(figures.percent)}</span>
-            </p>
+              {signed(fmt, figures.total)}
+              <span className="opacity-60">·</span>
+              {percent(figures.percent)}
+            </span>
+            <span className="text-xs text-muted-foreground">Résultat total</span>
           </div>
         </div>
-      </Reveal>
 
-      {/* D'où vient ce montant */}
-      <Reveal delay={60}>
-        <div className="grid border-b border-border/60 sm:grid-cols-2 lg:grid-cols-4">
+        {/* D'où vient ce montant */}
+        <div className="grid grid-cols-2 gap-px border-y border-line bg-line lg:grid-cols-4">
           <Figure
             label="Capital investi"
             value={fmt.format(figures.cost)}
-            hint="Prix de revient des positions détenues"
+            hint="Prix de revient des positions"
           />
           <Figure
-            label="Plus-value latente"
-            value={
-              figures.unrealized === null
-                ? "—"
-                : `${figures.unrealized >= 0 ? "+" : ""}${fmt.format(figures.unrealized)}`
-            }
-            hint="Non réalisée : sensible au marché"
+            label="Latent"
+            value={figures.unrealized === null ? "—" : signed(fmt, figures.unrealized)}
+            hint="Non réalisé, suit le marché"
             tone={
               figures.unrealized === null ? "muted" : figures.unrealized >= 0 ? "positive" : "negative"
             }
           />
           <Figure
-            label="Résultat réalisé"
-            value={`${figures.realized >= 0 ? "+" : ""}${fmt.format(figures.realized)}`}
-            hint="Déjà encaissé, définitivement acquis"
+            label="Réalisé"
+            value={signed(fmt, figures.realized)}
+            hint="Encaissé, définitivement acquis"
             tone={figures.realized >= 0 ? "positive" : "negative"}
           />
           <Figure
-            label="Réserve mobilisable"
+            label="Réserve stable"
             value={fmt.format(stablecoinValueUsd * rate)}
-            hint={`${(stablecoinShare * 100).toFixed(1)} % du portefeuille, sans vendre`}
-            tone="muted"
-          />
+            hint={`${(stablecoinShare * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} % mobilisable sans vendre`}
+            tone={stablecoinValueUsd > 0 ? "neutral" : "muted"}
+          >
+            <span className="my-1 h-1 w-full overflow-hidden rounded-full bg-surface">
+              <span
+                className="block h-full rounded-full bg-violet"
+                style={{ width: `${Math.min(100, stablecoinShare * 100)}%` }}
+              />
+            </span>
+          </Figure>
         </div>
-      </Reveal>
 
-      {/* Ce qui resterait réellement en poche */}
-      {liquidation && liquidation.proceeds > 0 && (
-        <Reveal delay={120}>
-          <div className="px-5 py-6">
-            <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground/70">
-              Si vous liquidiez tout aujourd&apos;hui
-            </p>
+        {/* Ce qui resterait réellement en poche */}
+        {liquidation && liquidation.proceeds > 0 && (
+          <div className="p-3 sm:p-4">
+            <div className="rounded-2xl bg-surface px-4 py-4 sm:px-5">
+              <p className="eyebrow text-jade">Si vous liquidiez tout aujourd&apos;hui</p>
 
-            <div className="mt-4 flex flex-wrap items-baseline gap-x-4 gap-y-2">
-              <span className="num text-lg text-muted-foreground">
-                {fmt.format(liquidation.proceeds)}
-              </span>
-              <span className="num text-xs text-muted-foreground/60">moins</span>
-              <span className="num text-lg text-negative">{fmt.format(liquidation.tax)}</span>
-              <span className="num text-xs text-muted-foreground/60">d&apos;impôt</span>
-              <span className="num text-xs text-muted-foreground/60">soit</span>
-              <span className="num text-3xl font-normal text-foreground">
-                {fmt.format(liquidation.net)}
-              </span>
-              <span className="num text-xs text-muted-foreground/60">en poche</span>
+              <div className="mt-3 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <span className="num text-3xl font-bold tracking-[-0.03em] text-foreground">
+                  {fmt.format(liquidation.net)}
+                </span>
+                <span className="text-sm text-muted-foreground">en poche</span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                <span className="num text-foreground">{fmt.format(liquidation.proceeds)}</span> de
+                vente, moins <span className="num text-negative">{fmt.format(liquidation.tax)}</span>{" "}
+                d&apos;impôt
+              </p>
+
+              {/* Composition : capital récupéré, gain net, impôt. */}
+              <div
+                className="mt-4 flex h-2 w-full gap-0.5 overflow-hidden rounded-full"
+                role="img"
+                aria-label={`Capital ${liquidationShare(liquidation.costBasis).toFixed(0)} %, gain net ${liquidationShare(Math.max(0, liquidation.gain - liquidation.tax)).toFixed(0)} %, impôt ${liquidationShare(liquidation.tax).toFixed(0)} %`}
+              >
+                <span className="bg-slate/40" style={{ width: `${liquidationShare(liquidation.costBasis)}%` }} />
+                <span
+                  className="bg-positive"
+                  style={{ width: `${liquidationShare(Math.max(0, liquidation.gain - liquidation.tax))}%` }}
+                />
+                <span className="bg-negative" style={{ width: `${liquidationShare(liquidation.tax)}%` }} />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground" aria-hidden>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-slate/40" /> Capital
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-positive" /> Gain net
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-negative" /> Impôt
+                </span>
+              </div>
+
+              <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+                Estimation au taux forfaitaire de {(PFU_RATE * 100).toFixed(0)} % (art. 150 VH bis
+                du CGI) : {(liquidation.effectiveRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %
+                de toute vente partirait en impôt aux conditions actuelles.
+              </p>
             </div>
-
-            {/* Composition : capital récupéré, gain net, impôt. */}
-            <div
-              className="mt-5 flex h-1.5 w-full overflow-hidden"
-              role="img"
-              aria-label={`Capital ${((liquidation.costBasis / liquidation.proceeds) * 100).toFixed(0)} %, gain net ${(((liquidation.gain - liquidation.tax) / liquidation.proceeds) * 100).toFixed(0)} %, impôt ${((liquidation.tax / liquidation.proceeds) * 100).toFixed(0)} %`}
-            >
-              <span
-                className="bg-muted-foreground/40"
-                style={{ width: `${(liquidation.costBasis / liquidation.proceeds) * 100}%` }}
-              />
-              <span
-                className="bg-positive"
-                style={{
-                  width: `${(Math.max(0, liquidation.gain - liquidation.tax) / liquidation.proceeds) * 100}%`,
-                }}
-              />
-              <span
-                className="bg-negative"
-                style={{ width: `${(liquidation.tax / liquidation.proceeds) * 100}%` }}
-              />
-            </div>
-
-            <p className="mt-4 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-              Estimation au taux forfaitaire de {(PFU_RATE * 100).toFixed(0)} %, selon
-              l&apos;article 150 VH bis du CGI. Une plus-value latente n&apos;est pas de
-              l&apos;argent disponible : {(liquidation.effectiveRate * 100).toFixed(1)} % de toute
-              vente partirait en impôt aux conditions actuelles.
-            </p>
           </div>
-        </Reveal>
-      )}
-    </section>
+        )}
+      </section>
+    </Reveal>
   );
 }
