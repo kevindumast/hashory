@@ -14,8 +14,8 @@ type PrivacyContextValue = {
 const PrivacyContext = createContext<PrivacyContextValue>({ hidden: false, toggle: () => {} })
 
 /**
- * Mode discret : floute les montants du tableau de bord (utile en public ou
- * en partage d'écran). L'état est posé sur `<html data-privacy>` pour que la
+ * Mode discret : remplace les montants du tableau de bord par des billes
+ * (utile en public ou en partage d'écran). L'état est posé sur `<html data-privacy>` pour que la
  * règle CSS de `globals.css` s'applique partout sans toucher aux composants.
  */
 export function PrivacyProvider({ children }: { children: React.ReactNode }) {
