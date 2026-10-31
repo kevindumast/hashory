@@ -139,7 +139,7 @@ Toutes les variables sont documentées dans [`.env.example`](.env.example). Les 
 | --- | --- |
 | `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` | Authentification Clerk |
 | `NEXT_PUBLIC_CONVEX_URL` / `CONVEX_DEPLOYMENT` | Déploiement Convex |
-| `CLERK_JWT_ISSUER_DOMAIN` | Vérification du jeton côté Convex |
+| `CLERK_JWT_ISSUER_DOMAIN` | Vérification du jeton côté Convex (côté Next.js, le serveur MCP le déduit de la clé publishable s'il manque) |
 | `ORACLY_ENCRYPTION_KEY` | Clé de chiffrement des identifiants d'exchange (32 caractères) |
 | `CMC_API_KEY` | Prix et métadonnées CoinMarketCap |
 | `NEXT_PUBLIC_SITE_URL` | URL publique, pour les métadonnées et le sitemap |
