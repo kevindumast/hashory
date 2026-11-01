@@ -8,6 +8,7 @@ import { ProviderDialogProvider } from "./provider-dialog-context";
 import { DashboardDataProvider } from "./dashboard-data-context";
 import { CommandPalette } from "./command-palette";
 import { BottomNav } from "./bottom-nav";
+import { FeedbackDialog } from "./feedback-dialog";
 import { PrivacyProvider } from "./privacy-mode";
 import { useAutoSync } from "@/hooks/dashboard/useAutoSync";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ function AutoSync() {
 export function DashboardShell({ children }: DashboardShellProps) {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // L'état replié de la sidebar est une préférence : on la retient.
@@ -91,13 +93,14 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
             {/* Colonne principale — l'unique container scrollable */}
             <div className="flex flex-col flex-1 min-w-0 overflow-y-auto scrollbar-subtle">
-              <MobileNav />
+              <MobileNav onOpenFeedback={() => setFeedbackOpen(true)} />
 
               <div className="hidden md:block sticky top-0 z-30">
                 <DashboardTopbar
                   onToggleSidebar={toggleSidebar}
                   onConnectProvider={() => setConnectDialogOpen(true)}
                   onOpenCommandPalette={() => setPaletteOpen(true)}
+                  onOpenFeedback={() => setFeedbackOpen(true)}
                 />
               </div>
 
@@ -108,6 +111,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           </div>
 
           <ConnectProviderDialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen} />
+          <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
           <CommandPalette
             open={paletteOpen}
             onOpenChange={setPaletteOpen}

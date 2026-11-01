@@ -27,6 +27,7 @@ import type * as crons from "../crons.js";
 import type * as dataProviderKeys from "../dataProviderKeys.js";
 import type * as deposits from "../deposits.js";
 import type * as ethereum from "../ethereum.js";
+import type * as feedback from "../feedback.js";
 import type * as fiatTransactions from "../fiatTransactions.js";
 import type * as finary from "../finary.js";
 import type * as fxRates from "../fxRates.js";
@@ -74,6 +75,7 @@ declare const fullApi: ApiFromModules<{
   dataProviderKeys: typeof dataProviderKeys;
   deposits: typeof deposits;
   ethereum: typeof ethereum;
+  feedback: typeof feedback;
   fiatTransactions: typeof fiatTransactions;
   finary: typeof finary;
   fxRates: typeof fxRates;

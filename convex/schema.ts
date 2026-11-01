@@ -413,4 +413,19 @@ export default defineSchema({
     hint: v.string(),
     updatedAt: v.number(),
   }).index("by_user_provider", ["clerkUserId", "provider"]),
+  /**
+   * Retours « bug ou idée » du tableau de bord, recopiés en issue GitHub.
+   * L'issue manque si GitHub n'est pas configuré ou a refusé.
+   */
+  feedback: defineTable({
+    clerkId: v.string(),
+    kind: v.union(v.literal("bug"), v.literal("idee")),
+    title: v.string(),
+    body: v.string(),
+    page: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    issueNumber: v.optional(v.number()),
+    issueUrl: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_user_created", ["clerkId", "createdAt"]),
 });
