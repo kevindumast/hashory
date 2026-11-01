@@ -1,6 +1,7 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { Switch } from "@/components/ui/switch";
 import { AUDIT_RETENTION_DAYS, RATE_LIMIT_PER_MINUTE } from "@/lib/mcp";
@@ -28,7 +29,7 @@ const dateTime = new Intl.DateTimeFormat("fr-FR", {
 });
 
 export function ClaudeAccessPanel() {
-  const access = useQuery(api.mcp.myAccess);
+  const access = useActiveQuery(api.mcp.myAccess);
   const setEnabled = useMutation(api.mcp.setEnabled);
 
   const toggle = (enabled: boolean) =>

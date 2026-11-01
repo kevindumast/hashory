@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
@@ -32,7 +32,7 @@ export type IntegrationRecord = {
 export function useIntegrations() {
   const [refreshToken, setRefreshToken] = useState(0);
 
-  const integrations = useQuery(
+  const integrations = useActiveQuery(
     api.integrations.list,
     isConvexConfigured ? { refreshToken } : "skip"
   );

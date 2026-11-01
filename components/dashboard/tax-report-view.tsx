@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { FileText, Download, TrendingUp, TrendingDown, Info, AlertTriangle, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -143,10 +143,10 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 export function TaxReportView() {
-  const result = useQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
+  const result = useActiveQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
   // Le rapport est enregistré par le recalcul : on le relance à l'ouverture,
   // pour qu'une synchronisation récente soit prise en compte.
-  useRecomputeTrigger(true, null);
+  useRecomputeTrigger();
   const currentYear = new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 

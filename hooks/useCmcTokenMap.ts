@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "../convex/_generated/api";
 
 /**
@@ -19,7 +19,7 @@ export function useCmcTokenMap(symbols: string[] = []) {
     [symbols]
   );
 
-  const map = useQuery(
+  const map = useActiveQuery(
     api.cmcTokenMap.getBySymbols,
     uniqueSymbols.length > 0 ? { symbols: uniqueSymbols } : "skip"
   );

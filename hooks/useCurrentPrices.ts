@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { errorMessage, toast } from "@/lib/toast";
+import { usePageActivity } from "@/hooks/usePageActivity";
 
 /**
  * Paires candidates pour valoriser un actif, par ordre de préférence.
@@ -55,6 +56,10 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   const [error, setError] = useState<string | null>(null);
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [refreshingSymbols, setRefreshingSymbols] = useState<Set<string>>(new Set());
+  const { active } = usePageActivity();
+  // Dernier lot reçu, et pour quelles paires : au retour sur la page, on ne
+  // redemande les cours que s'ils ont eu le temps de vieillir.
+  const lastFetchRef = useRef<{ pairsKey: string; trigger: number; at: number } | null>(null);
 
   // Construire la map paire → symbole token pour le mapping inverse
   const pairToSymbol = useMemo(() => {
@@ -83,10 +88,10 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   useEffect(() => {
     const allPairs = pairsKey ? pairsKey.split(",") : [];
     if (allPairs.length === 0) return;
+    // Onglet caché ou délaissé : personne ne regarde les cours.
+    if (!active) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     const fetchBatch = async () => {
       try {
@@ -113,6 +118,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
         const data = (await response.json()) as Array<{ symbol: string; price: string }>;
 
         if (cancelled) return;
+        lastFetchRef.current = { pairsKey, trigger: fetchTrigger, at: Date.now() };
 
         // Mapper chaque résultat au bon token (on garde le premier prix trouvé par token)
         const prices: Record<string, number> = {};
@@ -139,7 +145,17 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
       }
     };
 
-    fetchBatch();
+    const last = lastFetchRef.current;
+    const fresh =
+      last !== null &&
+      last.pairsKey === pairsKey &&
+      last.trigger === fetchTrigger &&
+      Date.now() - last.at < REFRESH_INTERVAL_MS;
+    if (!fresh) {
+      setLoading(true);
+      setError(null);
+      fetchBatch();
+    }
 
     // Les cours ne se figeaient qu'au montage : l'écran restait sur la
     // valeur du premier chargement. La route de prix garde un cache d'une
@@ -150,7 +166,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [pairsKey, fetchTrigger]);
+  }, [pairsKey, fetchTrigger, active]);
 
   const refresh = () => setFetchTrigger((n) => n + 1);
 

@@ -54,7 +54,8 @@ import { FinaryImportDialog } from "@/components/dashboard/finary-import-dialog"
 import { KucoinImportDialog } from "@/components/dashboard/kucoin-import-dialog"
 import { TransactionsPerYear } from "@/components/dashboard/transactions-per-year"
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
-import { useAction, useMutation, useQuery } from "convex/react"
+import { useAction, useMutation } from "convex/react"
+import { useActiveQuery } from "@/hooks/usePageActivity"
 import { api } from "@/convex/_generated/api"
 import { isConvexConfigured } from "@/convex/client"
 import { isFileImportAccount } from "@/lib/providers"
@@ -143,7 +144,7 @@ export function AccountsView() {
   const setSyncEnabled = useMutation(api.integrations.setSyncEnabled)
   const cancelSync = useMutation(api.integrations.cancelSync)
   const renameIntegration = useMutation(api.integrations.rename)
-  const dataProviderKeys = useQuery(api.dataProviderKeys.list)
+  const dataProviderKeys = useActiveQuery(api.dataProviderKeys.list)
   const now = useNow()
 
   // Diagnostic de synchronisation, tenu à part : il se rafraîchit à chaque

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { createFxResolver, type FxPoint } from "@/lib/fx";
@@ -18,7 +18,7 @@ export function useFxRates(years = 5) {
   const toDay = useMemo(() => Math.floor(Date.now() / DAY_MS) * DAY_MS, []);
   const fromDay = toDay - Math.round(years * 365) * DAY_MS;
 
-  const rows = useQuery(
+  const rows = useActiveQuery(
     api.fxRates.getRange,
     isConvexConfigured ? { fromDay, toDay } : "skip"
   );
