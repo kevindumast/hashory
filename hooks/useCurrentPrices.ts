@@ -30,8 +30,62 @@ function buildCandidatePairs(token: PortfolioToken): string[] {
   return candidates;
 }
 
-/** Intervalle de rafraîchissement, aligné sur le cache de la route de prix. */
-const REFRESH_INTERVAL_MS = 60_000;
+/**
+ * Heures locales de mise à jour automatique des cours : matin, midi et soir.
+ *
+ * Hashory suit un portefeuille, il ne sert pas à trader : un cours de
+ * quelques heures suffit, et le bouton d'actualisation reste là pour qui
+ * veut le cours du moment. Interroger chaque minute coûtait une requête par
+ * onglet ouvert, pour rien.
+ */
+export const PRICE_REFRESH_HOURS = [8, 12, 19] as const;
+
+/** Dernier créneau de mise à jour atteint à `now`, la veille au besoin. */
+export function lastRefreshSlot(now: number): number {
+  const date = new Date(now);
+  for (let daysBack = 0; daysBack <= 1; daysBack++) {
+    for (let i = PRICE_REFRESH_HOURS.length - 1; i >= 0; i--) {
+      const slot = new Date(date.getFullYear(), date.getMonth(), date.getDate() - daysBack, PRICE_REFRESH_HOURS[i]).getTime();
+      if (slot <= now) return slot;
+    }
+  }
+  return now;
+}
+
+/** Prochain créneau de mise à jour après `now`, le lendemain au besoin. */
+export function nextRefreshSlot(now: number): number {
+  const date = new Date(now);
+  for (let daysAhead = 0; daysAhead <= 1; daysAhead++) {
+    for (const hour of PRICE_REFRESH_HOURS) {
+      const slot = new Date(date.getFullYear(), date.getMonth(), date.getDate() + daysAhead, hour).getTime();
+      if (slot > now) return slot;
+    }
+  }
+  return now;
+}
+
+const PRICE_CACHE_KEY = "hashory:current-prices";
+
+type PriceCache = { pairsKey: string; at: number; prices: Record<string, number> };
+
+// Les cours du dernier lot survivent au rechargement de la page : sans eux,
+// chaque visite redemandait des cours que le créneau rendait encore valables.
+function readPriceCache(): PriceCache | null {
+  try {
+    const raw = window.localStorage.getItem(PRICE_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as PriceCache) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writePriceCache(cache: PriceCache) {
+  try {
+    window.localStorage.setItem(PRICE_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    /* stockage indisponible : les cours seront redemandés au prochain chargement */
+  }
+}
 
 type PriceResult = {
   /** Prix actuel par symbole de token (ex: { "ETH": 3200, "BTC": 95000 }) */
@@ -47,8 +101,8 @@ type PriceResult = {
 };
 
 /**
- * Récupère les prix actuels depuis Binance en une seule requête batch.
- * Aucun refresh automatique — appelé une fois au montage du composant.
+ * Récupère les prix actuels depuis Binance en une seule requête batch, puis
+ * à chaque créneau de {@link PRICE_REFRESH_HOURS} tant que l'onglet est actif.
  */
 export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   const [currentPrices, setCurrentPrices] = useState<Record<string, number>>({});
@@ -57,8 +111,10 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   const [fetchTrigger, setFetchTrigger] = useState(0);
   const [refreshingSymbols, setRefreshingSymbols] = useState<Set<string>>(new Set());
   const { active } = usePageActivity();
-  // Dernier lot reçu, et pour quelles paires : au retour sur la page, on ne
-  // redemande les cours que s'ils ont eu le temps de vieillir.
+  // Passe d'un cran à chaque créneau atteint, pour relancer l'effet de collecte.
+  const [slotTick, setSlotTick] = useState(0);
+  // Dernier lot reçu, et pour quelles paires : on ne redemande les cours
+  // qu'une fois un créneau passé, ou sur demande.
   const lastFetchRef = useRef<{ pairsKey: string; trigger: number; at: number } | null>(null);
 
   // Construire la map paire → symbole token pour le mapping inverse
@@ -118,7 +174,8 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
         const data = (await response.json()) as Array<{ symbol: string; price: string }>;
 
         if (cancelled) return;
-        lastFetchRef.current = { pairsKey, trigger: fetchTrigger, at: Date.now() };
+        const fetchedAt = Date.now();
+        lastFetchRef.current = { pairsKey, trigger: fetchTrigger, at: fetchedAt };
 
         // Mapper chaque résultat au bon token (on garde le premier prix trouvé par token)
         const prices: Record<string, number> = {};
@@ -135,7 +192,11 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
         // Fusion, et non remplacement : un lot partiel — une paire refusée
         // par la place de marché, par exemple — effacerait sinon des cours
         // parfaitement valides, dont ceux rechargés ligne par ligne.
-        setCurrentPrices((current) => ({ ...current, ...prices }));
+        setCurrentPrices((current) => {
+          const merged = { ...current, ...prices };
+          writePriceCache({ pairsKey, at: fetchedAt, prices: merged });
+          return merged;
+        });
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -145,28 +206,36 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
       }
     };
 
+    const now = Date.now();
+    // Premier passage du hook : on repart des cours enregistrés, si le
+    // créneau en cours les couvre encore.
+    if (lastFetchRef.current === null) {
+      const cached = readPriceCache();
+      if (cached && cached.pairsKey === pairsKey) {
+        lastFetchRef.current = { pairsKey, trigger: fetchTrigger, at: cached.at };
+        setCurrentPrices((current) => ({ ...cached.prices, ...current }));
+      }
+    }
+
     const last = lastFetchRef.current;
     const fresh =
       last !== null &&
       last.pairsKey === pairsKey &&
       last.trigger === fetchTrigger &&
-      Date.now() - last.at < REFRESH_INTERVAL_MS;
+      last.at >= lastRefreshSlot(now);
     if (!fresh) {
       setLoading(true);
       setError(null);
       fetchBatch();
     }
 
-    // Les cours ne se figeaient qu'au montage : l'écran restait sur la
-    // valeur du premier chargement. La route de prix garde un cache d'une
-    // minute, donc interroger à ce rythme ne coûte rien de plus.
-    const timer = window.setInterval(fetchBatch, REFRESH_INTERVAL_MS);
+    const timer = window.setTimeout(() => setSlotTick((n) => n + 1), nextRefreshSlot(now) - now);
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [pairsKey, fetchTrigger, active]);
+  }, [pairsKey, fetchTrigger, active, slotTick]);
 
   const refresh = () => setFetchTrigger((n) => n + 1);
 
