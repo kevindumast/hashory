@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import {
   Area,
   AreaChart,
@@ -61,7 +61,7 @@ export function TokenHistoryChart({
     return [startOfUtcDay(earliest), startOfUtcDay(Date.now())];
   }, [events]);
 
-  const priceHistory = useQuery(
+  const priceHistory = useActiveQuery(
     api.priceHistory.getRange,
     isConvexConfigured && fromDay > 0 ? { symbol, fromDay, toDay } : "skip"
   );

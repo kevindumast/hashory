@@ -1,7 +1,8 @@
 ﻿"use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import Link from "next/link";
 import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers";
 import { parseStrikeCsv, type StrikeImport } from "@/lib/strike";
@@ -415,7 +416,7 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
   const [isDragging, setIsDragging] = useState(false);
 
   const upsertIntegration = useMutation(api.integrations.upsert);
-  const dataProviderKeys = useQuery(api.dataProviderKeys.list);
+  const dataProviderKeys = useActiveQuery(api.dataProviderKeys.list);
   // Wallet lu via un fournisseur tiers avec la clé de l'utilisateur : s'il
   // ne l'a pas encore fournie, on le prévient avant qu'il connecte.
   const requiredKey = dataProviderForSource(provider.value);

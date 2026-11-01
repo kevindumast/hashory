@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { correlationMatrix, type CorrelationMatrix } from "@/lib/performance";
@@ -35,7 +35,7 @@ export function useCorrelationMatrix(symbols: string[], days = 180): Correlation
   const toDay = useMemo(() => Math.floor(Date.now() / DAY_MS) * DAY_MS, []);
   const fromDay = toDay - days * DAY_MS;
 
-  const series = useQuery(
+  const series = useActiveQuery(
     api.priceHistory.getRangeMulti,
     isConvexConfigured && requested.length >= 2
       ? { symbols: requested, fromDay, toDay }

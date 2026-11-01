@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { useAction, useQuery } from "convex/react";
+import { useAction } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { isFileImportAccount } from "@/lib/providers";
@@ -68,7 +69,7 @@ export function useAutoSync() {
   const syncSolana = useAction(api.solana.syncSolanaWallet);
   const syncBitcoin = useAction(api.bitcoin.syncBitcoinWallet);
   const syncTao = useAction(api.tao.syncTaoWallet);
-  const dataProviderKeys = useQuery(api.dataProviderKeys.list);
+  const dataProviderKeys = useActiveQuery(api.dataProviderKeys.list);
 
   // Une seule campagne par session, quels que soient les re-rendus.
   const hasRunRef = useRef(false);

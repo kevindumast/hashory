@@ -54,10 +54,14 @@ export const getState = query({
   handler: async (ctx) => {
     const clerkId = await optionalUserId(ctx);
     if (!clerkId) return null;
-    return await ctx.db
+    const state = await ctx.db
       .query("portfolioSnapshotState")
       .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
       .unique();
+    if (!state) return null;
+    // La page s'en sert pour ne pas relancer un recalcul déjà à jour : même
+    // la vérification relit tout le grand livre.
+    return { ...state, engineIsCurrent: state.engineVersion === ENGINE_VERSION };
   },
 });
 

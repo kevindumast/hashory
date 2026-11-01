@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useUser } from "@clerk/nextjs";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { isConvexConfigured } from "@/convex/client";
@@ -316,42 +316,42 @@ function extractBaseAsset(symbol: string) {
 export function useDashboardMetrics(refreshToken: number) {
   const { user, isLoaded } = useUser();
 
-  const trades = useQuery(
+  const trades = useActiveQuery(
     api.trades.listByUser,
     isConvexConfigured && isLoaded && user
       ? { limit: 1000, refreshToken }
       : "skip"
   );
 
-  const orders = useQuery(
+  const orders = useActiveQuery(
     api.orders.listByUser,
     isConvexConfigured && isLoaded && user
       ? { refreshToken }
       : "skip"
   );
 
-  const deposits = useQuery(
+  const deposits = useActiveQuery(
     api.deposits.listByUser,
     isConvexConfigured && isLoaded && user
       ? { limit: 1000, refreshToken }
       : "skip"
   );
 
-  const withdrawals = useQuery(
+  const withdrawals = useActiveQuery(
     api.withdrawals.listByUser,
     isConvexConfigured && isLoaded && user
       ? { limit: 1000, refreshToken }
       : "skip"
   );
 
-  const fiatTransactions = useQuery(
+  const fiatTransactions = useActiveQuery(
     api.fiatTransactions.listByUser,
     isConvexConfigured && isLoaded && user
       ? {}
       : "skip"
   );
 
-  const balances = useQuery(
+  const balances = useActiveQuery(
     api.balances.listByUser,
     isConvexConfigured && isLoaded && user
       ? { refreshToken }
@@ -360,12 +360,12 @@ export function useDashboardMetrics(refreshToken: number) {
 
   // Positions tirées du grand livre côté serveur : la même comptabilité que
   // la courbe de performance et la saisonnalité.
-  const ledgerPositions = useQuery(
+  const ledgerPositions = useActiveQuery(
     api.portfolioSnapshots.listPositions,
     isConvexConfigured && isLoaded && user ? {} : "skip"
   );
 
-  const syncScopes = useQuery(
+  const syncScopes = useActiveQuery(
     api.integrations.listSyncScopes,
     isConvexConfigured && isLoaded && user
       ? { dataset: DATASET_SPOT_TRADES, refreshToken }

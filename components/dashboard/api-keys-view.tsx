@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { ArrowUpRight, Check, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import { cn } from "@/lib/utils";
  * on n'en montre que les derniers caractères.
  */
 export function ApiKeysView() {
-  const keys = useQuery(api.dataProviderKeys.list);
+  const keys = useActiveQuery(api.dataProviderKeys.list);
   const { integrations } = useDashboardData();
 
   // Combien de wallets de l'utilisateur dépendent de chaque fournisseur.

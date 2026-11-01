@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { Reveal } from "@/components/motion";
@@ -121,7 +121,7 @@ export function PortfolioStatement({
   onCurrencyChange,
   eurPerUsd,
 }: PortfolioStatementProps) {
-  const report = useQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
+  const report = useActiveQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
 
   // Sans taux du jour, on reste en dollars plutôt que d'afficher un faux montant.
   const currency: DisplayCurrency = requestedCurrency === "EUR" && eurPerUsd ? "EUR" : "USD";

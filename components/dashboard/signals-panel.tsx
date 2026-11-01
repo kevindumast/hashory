@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { ArrowUpRight } from "lucide-react";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
@@ -40,7 +40,7 @@ export function useSignals(): Signal[] {
   const correlation = useCorrelationMatrix(
     analytics.assetConcentration.weights.map((entry) => entry.key)
   );
-  const report = useQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
+  const report = useActiveQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
 
   return useMemo(() => {
     if (isLoadingIntegrations || analytics.isLoading) return [];

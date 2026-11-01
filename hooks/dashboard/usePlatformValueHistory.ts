@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
 import { isConvexConfigured } from "@/convex/client";
 import { USD_STABLECOINS, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
@@ -108,7 +108,7 @@ export function usePlatformValueHistory(
     return { fromDay: Math.min(...days), toDay: Math.max(...days) };
   }, [days]);
 
-  const priceRows = useQuery(
+  const priceRows = useActiveQuery(
     api.priceHistory.getRangeMulti,
     isConvexConfigured && range && symbols.length > 0
       ? { symbols, fromDay: range.fromDay, toDay: range.toDay }
