@@ -39,5 +39,5 @@ export function getSiteUrl(): string {
   const vercel = process.env.NEXT_PUBLIC_VERCEL_URL ?? process.env.VERCEL_URL;
   if (vercel) return `https://${vercel.replace(/\/$/, "")}`;
 
-  return "https://hashory.app";
+  return "https://hashory.vercel.app";
 }
