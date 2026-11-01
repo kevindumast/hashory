@@ -10,7 +10,6 @@ export const siteConfig = {
   tagline: "Agrégateur crypto open source",
   locale: "fr_FR",
   github: "https://github.com/kevindumast/hashory",
-  contactEmail: "contact@hashory.app",
   keywords: [
     "portefeuille crypto",
     "agrégateur crypto",
