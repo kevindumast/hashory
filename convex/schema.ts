@@ -9,18 +9,12 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_clerk_id", ["clerkId"]),
-  portfolios: defineTable({
-    userId: v.id("users"),
-    exchange: v.string(),
-    label: v.string(),
-    totalValueUsd: v.optional(v.number()),
-    updatedAt: v.number(),
-  }).index("by_user", ["userId"]),
   trades: defineTable({
     integrationId: v.id("integrations"),
     providerTradeId: v.string(),
     providerOrderId: v.optional(v.string()), // Binance orderId for deduplication with orders table
-    portfolioId: v.optional(v.id("portfolios")),
+    /** Ancien lien vers la table `portfolios`, supprimée ; plus écrit. */
+    portfolioId: v.optional(v.string()),
     tradeType: v.optional(v.union(v.literal("SPOT"), v.literal("CONVERT"), v.literal("FIAT"), v.literal("DUST"))),
     symbol: v.string(),
     side: v.union(v.literal("BUY"), v.literal("SELL")),
@@ -80,24 +74,6 @@ export default defineSchema({
   })
     .index("by_integration", ["integrationId"])
     .index("by_integration_trade", ["integrationId", "providerTradeId"]),
-  analytics: defineTable({
-    portfolioId: v.id("portfolios"),
-    metric: v.string(),
-    value: v.number(),
-    computedAt: v.number(),
-    window: v.optional(v.string()),
-  }).index("by_portfolio_metric", ["portfolioId", "metric"]),
-  aiRecommendations: defineTable({
-    portfolioId: v.id("portfolios"),
-    summary: v.string(),
-    recommendationType: v.union(
-      v.literal("REALLOCATION"),
-      v.literal("STOP_LOSS"),
-      v.literal("RISK")
-    ),
-    payload: v.optional(v.any()),
-    generatedAt: v.number(),
-  }).index("by_portfolio_type", ["portfolioId", "recommendationType"]),
   integrations: defineTable({
     clerkUserId: v.string(),
     provider: v.string(),
@@ -265,9 +241,7 @@ export default defineSchema({
     closeUsd: v.number(),
     source: v.union(v.literal("binance"), v.literal("coingecko"), v.literal("manual")),
     updatedAt: v.number(),
-  })
-    .index("by_symbol_day", ["symbol", "dayUtc"])
-    .index("by_symbol", ["symbol"]),
+  }).index("by_symbol_day", ["symbol", "dayUtc"]),
   /**
    * Valeur et performance quotidiennes, calculées par `lib/portfolio-history`
    * depuis le grand livre. Une série par périmètre : le portefeuille entier
@@ -290,10 +264,7 @@ export default defineSchema({
     costBasisUsd: v.optional(v.number()),
     realizedPnlUsd: v.optional(v.number()),
     computedAt: v.number(),
-  })
-    .index("by_user_day", ["clerkId", "dayUtc"])
-    .index("by_user", ["clerkId"])
-    .index("by_user_scope_day", ["clerkId", "scope", "dayUtc"]),
+  }).index("by_user_scope_day", ["clerkId", "scope", "dayUtc"]),
   /**
    * Positions du portefeuille entier au dernier recalcul, tirées du même
    * déroulé que la performance : le dashboard affiche ainsi des prix de
@@ -342,36 +313,6 @@ export default defineSchema({
     engineVersion: v.optional(v.number()),
     updatedAt: v.number(),
   }).index("by_user", ["clerkId"]),
-  internalTransfers: defineTable({
-    integrationId: v.id("integrations"),
-    transferId: v.string(),
-    account: v.string(),
-    coin: v.string(),
-    amount: v.number(),
-    fee: v.optional(v.number()),
-    executedAt: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_integration", ["integrationId"])
-    .index("by_integration_transfer", ["integrationId", "transferId"]),
-  spotTradesSyncQueue: defineTable({
-    integrationId: v.id("integrations"),
-    symbols: v.array(v.string()),
-    startTime: v.optional(v.number()),
-    status: v.union(v.literal("pending"), v.literal("processing"), v.literal("completed"), v.literal("failed")),
-    error: v.optional(v.string()),
-    result: v.optional(v.object({
-      fetched: v.number(),
-      inserted: v.number(),
-      earliest: v.optional(v.number()),
-      latest: v.optional(v.number()),
-    })),
-    createdAt: v.number(),
-    startedAt: v.optional(v.number()),
-    completedAt: v.optional(v.number()),
-  })
-    .index("by_integration_status", ["integrationId", "status"])
-    .index("by_status", ["status"]),
   /**
    * Clés d'API des fournisseurs de données de chaîne (Helius, Etherscan…),
    * apportées par chaque utilisateur : la lecture de ses wallets consomme
