@@ -15,12 +15,28 @@ export const MCP_SCOPES = ["profile", "email"];
 /**
  * URL du domaine Clerk (Frontend API), qui émet les jetons OAuth. C'est le
  * même domaine que l'émetteur des jetons Convex.
+ *
+ * `CLERK_JWT_ISSUER_DOMAIN` n'existe que côté Convex : sur Vercel, l'absence
+ * de cette variable faisait échouer toutes les métadonnées OAuth, et Claude
+ * ne pouvait pas s'inscrire. On se rabat donc sur `CLERK_ISSUER_URL`, puis
+ * sur le domaine encodé dans la clé publique Clerk (`pk_…_<base64>$`).
  */
 export function clerkIssuer(): string {
-  const domain = process.env.CLERK_JWT_ISSUER_DOMAIN;
-  if (!domain) throw new Error("CLERK_JWT_ISSUER_DOMAIN n'est pas défini.");
+  const domain =
+    process.env.CLERK_JWT_ISSUER_DOMAIN ||
+    process.env.CLERK_ISSUER_URL ||
+    domainFromPublishableKey(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
+  if (!domain) throw new Error("Domaine Clerk introuvable : définir CLERK_JWT_ISSUER_DOMAIN.");
   const url = domain.startsWith("http") ? domain : `https://${domain}`;
   return url.replace(/\/+$/, "");
+}
+
+/** Domaine Frontend API encodé dans une clé publique Clerk, ou null. */
+export function domainFromPublishableKey(key: string | undefined): string | null {
+  const encoded = key?.match(/^pk_(?:test|live)_(.+)$/)?.[1];
+  if (!encoded) return null;
+  const decoded = Buffer.from(encoded, "base64").toString("utf8");
+  return decoded.endsWith("$") ? decoded.slice(0, -1) : null;
 }
 
 /** Métadonnées de la ressource protégée, servies sous `/.well-known`. */

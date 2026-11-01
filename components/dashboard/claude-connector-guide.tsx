@@ -34,7 +34,7 @@ const EXAMPLES = [
  * monté. Le premier rendu part d'une valeur identique côté serveur et client.
  */
 function useMcpUrl() {
-  const [origin, setOrigin] = useState(process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://hashory.app");
+  const [origin, setOrigin] = useState(process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://hashory.vercel.app");
   useEffect(() => setOrigin(window.location.origin), []);
   return `${origin}${MCP_PATH}`;
 }
