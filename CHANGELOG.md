@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/kevindumast/hashory/compare/hashory-v0.1.14...hashory-v1.0.0) (2026-11-01)
+
+
+### Features
+
+* Hashory 1.0.0, première version de production ([#100](https://github.com/kevindumast/hashory/issues/100)) ([c564bbe](https://github.com/kevindumast/hashory/commit/c564bbe30275a24d22fed99e2bac4160f0b3f820))
+
 ## [0.1.14](https://github.com/kevindumast/hashory/compare/hashory-v0.1.13...hashory-v0.1.14) (2026-11-01)
 
 
