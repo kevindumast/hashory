@@ -23,7 +23,6 @@ const columns = [
     links: [
       { label: "Code source", href: siteConfig.github, external: true },
       { label: "Signaler un bug", href: `${siteConfig.github}/issues/new`, external: true },
-      { label: "Nous écrire", href: `mailto:${siteConfig.contactEmail}`, external: true },
     ],
   },
 ];

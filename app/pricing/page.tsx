@@ -60,7 +60,7 @@ const tiers = [
       "SSO et audit logs",
     ],
     cta: "Nous contacter",
-    ctaHref: "mailto:contact@hashory.app",
+    ctaHref: "https://github.com/kevindumast/hashory/issues/new",
     recommended: false,
   },
 ];
