@@ -40,7 +40,7 @@ function ProviderAvatar({ provider, name }: { provider: string; name: string }) 
     // eslint-disable-next-line @next/next/no-img-element
     <img src={src} alt={name} className="w-7 h-7 shrink-0 rounded-full object-cover border border-border bg-muted" />
   ) : (
-    <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary uppercase border border-border">
+    <div className="w-7 h-7 shrink-0 bg-violet-soft rounded-full flex items-center justify-center text-[10px] font-bold text-violet uppercase">
       {name.slice(0, 2)}
     </div>
   );
@@ -988,32 +988,67 @@ export function DashboardNewLayout({
                 {/* Téléphone : une ligne par jeton — valeur et résultat d'un
                     coup d'œil, au lieu d'un tableau de neuf colonnes coupé. */}
                 <ul className="md:hidden divide-y divide-border/50">
-                  {sorted.map(({ token, currentValue, totalPnl, totalPnlEur }) => {
+                  {sorted.map(({ token, currentPrice, currentValue, totalPnl, totalPnlEur }) => {
                     const pnl = totalPnlEur ?? totalPnl;
+                    const icon = getCmcIconUrl(token.symbol);
+                    const weight = currentValue !== null && totalTokensValue > 0 ? currentValue / totalTokensValue : null;
+                    const isExpanded = expandedTokens.has(token.symbol);
                     return (
-                      <li key={token.symbol} className="flex items-center gap-3 px-4 py-3">
-                        {getCmcIconUrl(token.symbol) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={getCmcIconUrl(token.symbol) || ""} alt="" className="w-7 h-7 shrink-0 rounded-full object-cover bg-muted" />
-                        ) : (
-                          <div className="w-7 h-7 shrink-0 bg-muted rounded-full flex items-center justify-center text-[10px] font-semibold text-primary">
-                            {token.symbol.slice(0, 2)}
+                      <li key={token.symbol}>
+                        <button
+                          type="button"
+                          aria-expanded={isExpanded}
+                          aria-label={`${token.symbol} — ${isExpanded ? "masquer" : "voir"} le détail`}
+                          onClick={() =>
+                            setExpandedTokens((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(token.symbol)) next.delete(token.symbol);
+                              else next.add(token.symbol);
+                              return next;
+                            })
+                          }
+                          className="flex w-full cursor-pointer items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-muted/40"
+                        >
+                          {icon ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={icon} alt="" className="size-9 shrink-0 rounded-full object-cover bg-muted" />
+                          ) : (
+                            <div className="size-9 shrink-0 rounded-full bg-violet-soft flex items-center justify-center text-[11px] font-bold uppercase text-violet">
+                              {token.symbol.slice(0, 2)}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[15px] font-bold text-foreground">{token.symbol}</div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              <span className="num">
+                                {token.currentQuantity.toLocaleString("fr-FR", { maximumSignificantDigits: 6 })}
+                              </span>
+                              {weight !== null && weight >= 0.001 && (
+                                <span className="num"> · {(weight * 100).toLocaleString("fr-FR", { maximumFractionDigits: weight < 0.1 ? 1 : 0 })} %</span>
+                              )}
+                            </div>
+                          </div>
+                          {currentValue !== null ? (
+                            <div className="text-right">
+                              <div className="num text-[15px] font-bold text-foreground">{money(currentValue)}</div>
+                              <div className={`num text-xs font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
+                                {totalPnl !== null ? signed(totalPnl, totalPnlEur) : "—"}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Prix indisponible</span>
+                          )}
+                        </button>
+                        {isExpanded && (
+                          <div className="border-t border-border/30 bg-muted/10 px-4 py-4">
+                            <TokenHistoryChart symbol={token.symbol} events={token.events} />
+                            <TokenPlatformBreakdown
+                              sources={token.quantityBySource}
+                              currentPrice={currentPrice ?? null}
+                              money={money}
+                            />
                           </div>
                         )}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-bold text-foreground">{token.symbol}</div>
-                          <div className="num truncate text-[11px] text-muted-foreground">
-                            {token.currentQuantity.toLocaleString("fr-FR", { maximumSignificantDigits: 6 })}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="num text-sm font-bold text-foreground">
-                            {currentValue !== null ? money(currentValue) : "—"}
-                          </div>
-                          <div className={`num text-[11px] font-bold ${pnl === null ? "text-muted-foreground/70" : pnl >= 0 ? "text-positive" : "text-negative"}`}>
-                            {totalPnl !== null ? signed(totalPnl, totalPnlEur) : "—"}
-                          </div>
-                        </div>
                       </li>
                     );
                   })}

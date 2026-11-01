@@ -7,6 +7,8 @@ import { ConnectProviderDialog } from "./connect-provider-dialog";
 import { ProviderDialogProvider } from "./provider-dialog-context";
 import { DashboardDataProvider } from "./dashboard-data-context";
 import { CommandPalette } from "./command-palette";
+import { BottomNav } from "./bottom-nav";
+import { PrivacyProvider } from "./privacy-mode";
 import { useAutoSync } from "@/hooks/dashboard/useAutoSync";
 import { cn } from "@/lib/utils";
 
@@ -74,42 +76,44 @@ export function DashboardShell({ children }: DashboardShellProps) {
       }}
     >
       <DashboardDataProvider>
-        <AutoSync />
-        <div className="flex h-screen overflow-hidden bg-background">
-          {/* Sidebar — scroll indépendant */}
-          <div
-            className={cn(
-              "hidden md:block transition-all duration-300 ease-in-out shrink-0 overflow-hidden",
-              sidebarOpen ? "w-[220px]" : "w-0"
-            )}
-          >
-            <div className="w-[220px] h-full overflow-y-auto scrollbar-none">
-              <Sidebar />
+        <PrivacyProvider>
+          <AutoSync />
+          <div className="flex h-dvh overflow-hidden bg-background">
+            {/* Sidebar — dépliée ou réduite à un rail d'icônes */}
+            <div
+              className={cn(
+                "hidden md:block shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out",
+                sidebarOpen ? "w-[232px]" : "w-[72px]"
+              )}
+            >
+              <Sidebar collapsed={!sidebarOpen} />
+            </div>
+
+            {/* Colonne principale — l'unique container scrollable */}
+            <div className="flex flex-col flex-1 min-w-0 overflow-y-auto scrollbar-subtle">
+              <MobileNav />
+
+              <div className="hidden md:block sticky top-0 z-30">
+                <DashboardTopbar
+                  onToggleSidebar={toggleSidebar}
+                  onConnectProvider={() => setConnectDialogOpen(true)}
+                  onOpenCommandPalette={() => setPaletteOpen(true)}
+                />
+              </div>
+
+              <main className="flex-1">{children}</main>
+
+              <BottomNav />
             </div>
           </div>
 
-          {/* Colonne principale — l'unique container scrollable */}
-          <div className="flex flex-col flex-1 min-w-0 overflow-y-auto scrollbar-subtle">
-            <MobileNav />
-
-            <div className="hidden md:block sticky top-0 z-30">
-              <DashboardTopbar
-                onToggleSidebar={toggleSidebar}
-                onConnectProvider={() => setConnectDialogOpen(true)}
-                onOpenCommandPalette={() => setPaletteOpen(true)}
-              />
-            </div>
-
-            <main className="flex-1">{children}</main>
-          </div>
-        </div>
-
-        <ConnectProviderDialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen} />
-        <CommandPalette
-          open={paletteOpen}
-          onOpenChange={setPaletteOpen}
-          onConnectProvider={() => setConnectDialogOpen(true)}
-        />
+          <ConnectProviderDialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen} />
+          <CommandPalette
+            open={paletteOpen}
+            onOpenChange={setPaletteOpen}
+            onConnectProvider={() => setConnectDialogOpen(true)}
+          />
+        </PrivacyProvider>
       </DashboardDataProvider>
     </ProviderDialogProvider>
   );

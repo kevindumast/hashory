@@ -89,6 +89,8 @@ export const viewport: Viewport = {
     { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
   ],
   colorScheme: "light dark",
+  // La barre d'onglets mobile tient compte de l'encoche et de l'indicateur d'accueil.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
