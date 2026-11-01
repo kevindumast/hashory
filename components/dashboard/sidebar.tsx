@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { motion, useReducedMotion } from "motion/react"
-import { User, Settings, LogOut, MoreHorizontal, Plug, Sparkles } from "lucide-react"
+import { User, Settings, LogOut, MoreHorizontal, Plug, Sparkles, MessageSquareWarning } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
 import { formatRelative } from "@/lib/format-relative"
@@ -309,7 +309,7 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
  * En-tête mobile : logo, mode discret et compte. La navigation elle-même
  * vit dans la barre d'onglets du bas (`BottomNav`).
  */
-export function MobileNav() {
+export function MobileNav({ onOpenFeedback }: { onOpenFeedback: () => void }) {
   return (
     <div className="flex md:hidden sticky top-0 z-40 h-16 items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4 pt-[env(safe-area-inset-top)] box-content">
       <Link href="/dashboard" aria-label="Retour à la synthèse" className="flex items-center gap-2.5">
@@ -318,6 +318,15 @@ export function MobileNav() {
       </Link>
       <div className="flex items-center gap-1">
         <PrivacyToggle />
+        <button
+          type="button"
+          onClick={onOpenFeedback}
+          aria-label="Signaler un bug ou une idée"
+          title="Bug ou idée ?"
+          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+        >
+          <MessageSquareWarning className="size-4" />
+        </button>
         <UserMenu compact />
       </div>
     </div>

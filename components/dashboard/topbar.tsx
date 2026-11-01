@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useEffect, useState } from "react";
-import { AlertCircle, Bell, CheckCircle2, HelpCircle, PanelLeft, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, MessageSquareWarning, PanelLeft, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
 import { ClerkLoaded, ClerkLoading, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,7 +19,6 @@ import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
 import { PrivacyToggle } from "@/components/dashboard/privacy-mode";
-import { siteConfig } from "@/lib/site";
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/format-relative";
 import { usePathname } from "next/navigation";
@@ -29,12 +28,14 @@ type DashboardTopbarProps = {
   onToggleSidebar: () => void;
   onConnectProvider: () => void;
   onOpenCommandPalette: () => void;
+  onOpenFeedback: () => void;
 };
 
 export function DashboardTopbar({
   onToggleSidebar,
   onConnectProvider,
   onOpenCommandPalette,
+  onOpenFeedback,
 }: DashboardTopbarProps) {
   const [mounted, setMounted] = useState(false);
   const { resolvedTheme, setTheme } = useTheme();
@@ -233,22 +234,16 @@ export function DashboardTopbar({
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              asChild
               variant="ghost"
               size="icon"
+              onClick={onOpenFeedback}
+              aria-label="Signaler un bug ou une idée"
               className="size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
             >
-              <a
-                href={`${siteConfig.github}/issues/new`}
-                target="_blank"
-                rel="noreferrer noopener"
-                aria-label="Signaler un problème"
-              >
-                <HelpCircle className="size-4" />
-              </a>
+              <MessageSquareWarning className="size-4" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Support &amp; retours</TooltipContent>
+          <TooltipContent side="bottom">Bug ou idée ?</TooltipContent>
         </Tooltip>
 
         <div className="flex items-center pl-1">
