@@ -98,7 +98,15 @@ type PriceResult = {
   refreshSymbol: (symbol: string) => Promise<void>;
   /** Actifs dont le cours est en cours de rechargement individuel. */
   refreshingSymbols: Set<string>;
+  /** Heure du dernier lot de cours reçu, nulle avant le premier. */
+  updatedAt: number | null;
 };
+
+/** Créneaux de mise à jour, pour l'affichage : « 8 h, 12 h et 19 h ». */
+export function formatRefreshHours(): string {
+  const hours = PRICE_REFRESH_HOURS.map((hour) => `${hour} h`);
+  return `${hours.slice(0, -1).join(", ")} et ${hours[hours.length - 1]}`;
+}
 
 /**
  * Récupère les prix actuels depuis Binance en une seule requête batch, puis
@@ -113,6 +121,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
   const { active } = usePageActivity();
   // Passe d'un cran à chaque créneau atteint, pour relancer l'effet de collecte.
   const [slotTick, setSlotTick] = useState(0);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   // Dernier lot reçu, et pour quelles paires : on ne redemande les cours
   // qu'une fois un créneau passé, ou sur demande.
   const lastFetchRef = useRef<{ pairsKey: string; trigger: number; at: number } | null>(null);
@@ -197,6 +206,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
           writePriceCache({ pairsKey, at: fetchedAt, prices: merged });
           return merged;
         });
+        setUpdatedAt(fetchedAt);
         setError(null);
       } catch (err) {
         if (cancelled) return;
@@ -214,6 +224,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
       if (cached && cached.pairsKey === pairsKey) {
         lastFetchRef.current = { pairsKey, trigger: fetchTrigger, at: cached.at };
         setCurrentPrices((current) => ({ ...cached.prices, ...current }));
+        setUpdatedAt(cached.at);
       }
     }
 
@@ -286,5 +297,5 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
     }
   };
 
-  return { currentPrices, loading, error, refresh, refreshSymbol, refreshingSymbols };
+  return { currentPrices, loading, error, refresh, refreshSymbol, refreshingSymbols, updatedAt };
 }
