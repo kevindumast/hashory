@@ -10,8 +10,6 @@ type DashboardData = ReturnType<typeof useDashboardMetrics> & {
   currentPrices: Record<string, number>;
   pricesLoading: boolean;
   pricesError: string | null;
-  /** Heure du dernier lot de cours reçu, nulle avant le premier. */
-  pricesUpdatedAt: number | null;
   /** Recharge tous les cours. Distinct de `refresh`, qui relit aussi les données. */
   refreshPrices: () => void;
   /** Recharge le cours d'un seul actif. */
@@ -51,7 +49,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
     refresh: refreshPrices,
     refreshSymbol,
     refreshingSymbols,
-    updatedAt: pricesUpdatedAt,
   } = useCurrentPrices(metrics.portfolioTokens);
 
   const refresh = useCallback(() => {
@@ -65,7 +62,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       currentPrices,
       pricesLoading,
       pricesError,
-      pricesUpdatedAt,
       refreshPrices,
       refreshSymbol,
       refreshingSymbols,
@@ -80,7 +76,6 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
       currentPrices,
       pricesLoading,
       pricesError,
-      pricesUpdatedAt,
       refreshPrices,
       refreshSymbol,
       refreshingSymbols,

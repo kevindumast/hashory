@@ -69,19 +69,7 @@ function formatAxisValue(v: number): string {
   if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k $`;
   return `${sign}${Math.round(abs)} $`;
 }
-
-/** Heure du dernier relevé des cours : « 12:04 », « hier 19:02 » ou « 30/10 19:02 ». */
-function formatPricesUpdatedAt(timestamp: number): string {
-  const date = new Date(timestamp);
-  const time = date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  const today = new Date();
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  if (date.toDateString() === today.toDateString()) return time;
-  if (date.toDateString() === yesterday.toDateString()) return `hier ${time}`;
-  return `${date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} ${time}`;
-}
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
-import { formatRefreshHours } from "@/hooks/useCurrentPrices";
 import { LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
 
 type DashboardNewLayoutProps = {
@@ -150,7 +138,7 @@ export function DashboardNewLayout({
   const [chartFilter, setChartFilter] = useState<ChartFilter>({ type: "all" });
   const [expandedTokens, setExpandedTokens] = useState<Set<string>>(new Set());
   const [expandedPlatforms, setExpandedPlatforms] = useState<Set<string>>(new Set());
-  const { currentPrices, pricesLoading, pricesError, pricesUpdatedAt, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, reportedBalances, integrations } =
+  const { currentPrices, pricesLoading, pricesError, refreshPrices, refreshSymbol, refreshingSymbols, ledgerAccounts, reportedBalances, integrations } =
     useDashboardData();
   const { getCmcIconUrl } = useCmcTokenMap(portfolioTokens.map(t => t.symbol));
   const { snapshots: portfolioSnapshots, isComputing: snapshotsComputing } = usePortfolioSnapshots();
@@ -909,15 +897,6 @@ export function DashboardNewLayout({
           <div className="flex items-center gap-3">
             {pricesError && <span className="text-[10px] text-negative">{pricesError}</span>}
             <CurrencyToggle value={displayCurrency} onChange={setDisplayCurrency} />
-            {pricesUpdatedAt !== null && (
-              <span
-                className="text-[10px] text-muted-foreground"
-                title={`Cours mis à jour automatiquement à ${formatRefreshHours()}`}
-              >
-                Cours de {formatPricesUpdatedAt(pricesUpdatedAt)}
-                <span className="hidden sm:inline"> · màj auto à {formatRefreshHours()}</span>
-              </span>
-            )}
             <button
               onClick={refreshPrices}
               disabled={pricesLoading}
