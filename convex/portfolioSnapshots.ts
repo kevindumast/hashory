@@ -110,12 +110,11 @@ export const getStateInternal = internalQuery({
 /**
  * Supprime ce qui n'appartient plus à la série d'un périmètre : les jours
  * hors de sa nouvelle plage. Par lots, pour rester sous les limites.
- * `scope` absent vise les lignes de l'ancien moteur, sans périmètre.
  */
 export const pruneSnapshots = internalMutation({
   args: {
     clerkId: v.string(),
-    scope: v.optional(v.string()),
+    scope: v.string(),
     fromDay: v.number(),
     toDay: v.number(),
   },
@@ -130,6 +129,51 @@ export const pruneSnapshots = internalMutation({
       .take(1000);
     for (const doc of [...before, ...after]) await ctx.db.delete(doc._id);
     return { hasMore: before.length === 1000 || after.length === 1000 };
+  },
+});
+
+/**
+ * Supprime les séries des comptes qui n'existent plus. Un compte supprimé,
+ * ou réimporté sous un autre identifiant, laissait sa série jour par jour
+ * en base pour toujours. Les périmètres sont parcourus de proche en proche
+ * sur l'index : une lecture par périmètre, pas par jour. Par lots.
+ */
+export const pruneOrphanScopes = internalMutation({
+  args: { clerkId: v.string() },
+  handler: async (ctx, { clerkId }) => {
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
+      .collect();
+    const valid = new Set([ALL_SCOPE, ...integrations.map((integration) => String(integration._id))]);
+
+    let next = await ctx.db
+      .query("portfolioSnapshots")
+      .withIndex("by_user_scope_day", (q) => q.eq("clerkId", clerkId))
+      .first();
+    while (next) {
+      const scope = next.scope;
+      if (scope === undefined || !valid.has(scope)) {
+        const rows = await ctx.db
+          .query("portfolioSnapshots")
+          .withIndex("by_user_scope_day", (q) => q.eq("clerkId", clerkId).eq("scope", scope))
+          .take(1000);
+        for (const row of rows) await ctx.db.delete(row._id);
+        if (rows.length === 1000) return { hasMore: true };
+      }
+      if (scope === undefined) {
+        next = await ctx.db
+          .query("portfolioSnapshots")
+          .withIndex("by_user_scope_day", (q) => q.eq("clerkId", clerkId))
+          .first();
+        continue;
+      }
+      next = await ctx.db
+        .query("portfolioSnapshots")
+        .withIndex("by_user_scope_day", (q) => q.eq("clerkId", clerkId).gt("scope", scope))
+        .first();
+    }
+    return { hasMore: false };
   },
 });
 
@@ -195,8 +239,6 @@ export const insertSnapshots = internalMutation({
         flowUsd: v.number(),
         profitPercent: v.number(),
         btcPercent: v.number(),
-        costBasisUsd: v.number(),
-        realizedPnlUsd: v.number(),
       })
     ),
   },
@@ -315,6 +357,12 @@ export const recomputeForUser = action({
       state.lastComputedDay === todayUtc;
     if (!force && isUpToDate) return { status: "up-to-date" };
 
+    // Séries des comptes disparus, et lignes de l'ancien moteur sans périmètre.
+    let orphans: { hasMore: boolean } = { hasMore: true };
+    while (orphans.hasMore) {
+      orphans = await ctx.runMutation(internal.portfolioSnapshots.pruneOrphanScopes, { clerkId });
+    }
+
     const operations = buildLedger(input);
     if (operations.length === 0) {
       // Comptes vidés ou supprimés : leurs positions ne doivent pas survivre.
@@ -376,7 +424,7 @@ export const recomputeForUser = action({
 
     const btcStart = book.usd("BTC", fromDay);
 
-    const prune = async (scope: string | undefined, from: number, to: number) => {
+    const prune = async (scope: string, from: number, to: number) => {
       while (true) {
         const result: { hasMore: boolean } = await ctx.runMutation(internal.portfolioSnapshots.pruneSnapshots, {
           clerkId,
@@ -387,8 +435,6 @@ export const recomputeForUser = action({
         if (!result.hasMore) break;
       }
     };
-    // Lignes de l'ancien moteur, sans périmètre : toutes obsolètes.
-    await prune(undefined, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
 
     const scopes: (string | undefined)[] = [undefined, ...accounts];
     let days = 0;
@@ -411,8 +457,6 @@ export const recomputeForUser = action({
           flowUsd: point.flowUsd,
           profitPercent: (point.twrIndex - 1) * 100,
           btcPercent: btc !== null && btcStart ? (btc / btcStart - 1) * 100 : 0,
-          costBasisUsd: point.costBasisUsd,
-          realizedPnlUsd: point.realizedPnlUsd,
         };
       });
 

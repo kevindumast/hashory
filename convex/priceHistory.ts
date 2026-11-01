@@ -96,7 +96,7 @@ export const getLatestDay = internalQuery({
   handler: async (ctx, { symbol }) => {
     const latest = await ctx.db
       .query("tokenPriceHistory")
-      .withIndex("by_symbol", (q) => q.eq("symbol", symbol.toUpperCase()))
+      .withIndex("by_symbol_day", (q) => q.eq("symbol", symbol.toUpperCase()))
       .order("desc")
       .first();
     return latest?.dayUtc ?? null;
