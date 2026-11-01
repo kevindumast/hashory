@@ -29,8 +29,13 @@ function buildCandidatePairs(token: PortfolioToken): string[] {
   return candidates;
 }
 
-/** Intervalle de rafraîchissement, aligné sur le cache de la route de prix. */
-const REFRESH_INTERVAL_MS = 60_000;
+/**
+ * Intervalle de rafraîchissement automatique. Hashory suit un portefeuille,
+ * il ne sert pas à trader : un cours d'une heure suffit, et le bouton
+ * d'actualisation reste là pour le cours du moment. Chaque minute, c'était
+ * un appel à la route de prix par onglet ouvert.
+ */
+const REFRESH_INTERVAL_MS = 60 * 60_000;
 
 type PriceResult = {
   /** Prix actuel par symbole de token (ex: { "ETH": 3200, "BTC": 95000 }) */
@@ -142,8 +147,7 @@ export function useCurrentPrices(tokens: PortfolioToken[]): PriceResult {
     fetchBatch();
 
     // Les cours ne se figeaient qu'au montage : l'écran restait sur la
-    // valeur du premier chargement. La route de prix garde un cache d'une
-    // minute, donc interroger à ce rythme ne coûte rien de plus.
+    // valeur du premier chargement.
     const timer = window.setInterval(fetchBatch, REFRESH_INTERVAL_MS);
 
     return () => {
