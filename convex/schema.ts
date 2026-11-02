@@ -302,6 +302,24 @@ export default defineSchema({
     report: v.string(),
     computedAt: v.number(),
   }).index("by_user", ["clerkId"]),
+  /**
+   * Indice Fear & Greed (alternative.me), un document par année : l'historique
+   * entier se lit en une dizaine de documents plutôt qu'en milliers de lignes.
+   */
+  fearGreedYears: defineTable({
+    year: v.number(),
+    points: v.array(v.object({ dayUtc: v.number(), value: v.number() })),
+    updatedAt: v.number(),
+  }).index("by_year", ["year"]),
+  /**
+   * Achats et ventes contre monnaie, cumulés par jour, tirés du même déroulé
+   * que les séries de performance. Un document par utilisateur.
+   */
+  tradeFlows: defineTable({
+    clerkId: v.string(),
+    days: v.array(v.object({ dayUtc: v.number(), boughtUsd: v.number(), soldUsd: v.number() })),
+    computedAt: v.number(),
+  }).index("by_user", ["clerkId"]),
   portfolioSnapshotState: defineTable({
     clerkId: v.string(),
     earliestEventDay: v.optional(v.number()),

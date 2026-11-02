@@ -12,6 +12,8 @@ import {
 import { useCorrelationMatrix } from "@/hooks/dashboard/useCorrelationMatrix";
 import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { cn } from "@/lib/utils";
+import { Metric, MetricGrid, Notice, SectionLabel } from "./ui";
+import { MarketMoodSection } from "./market-mood-section";
 
 const percent = (value: number, digits = 1) =>
   `${value >= 0 ? "+" : ""}${(value * 100).toLocaleString("fr-FR", {
@@ -28,66 +30,6 @@ const dateLabel = (dayUtc: number | null) =>
     : new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "short", year: "numeric" }).format(
         new Date(dayUtc)
       );
-
-/** Une valeur chiffrée avec son libellé et sa lecture. */
-function Metric({
-  label,
-  value,
-  hint,
-  tone = "neutral",
-  large = false,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: "neutral" | "positive" | "negative";
-  large?: boolean;
-}) {
-  return (
-    <div className="flex h-full flex-col gap-1 bg-card px-5 py-4">
-      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">{label}</span>
-      <span
-        className={cn(
-          "num font-semibold tracking-[-0.02em]",
-          large ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl",
-          tone === "positive" && "text-positive",
-          tone === "negative" && "text-negative",
-          tone === "neutral" && "text-foreground"
-        )}
-      >
-        {value}
-      </span>
-      {hint && <span className="text-xs leading-snug text-muted-foreground">{hint}</span>}
-    </div>
-  );
-}
-
-function SectionLabel({ index, children }: { index: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="chip chip-violet num px-2 py-0.5 text-[11px]">{index}</span>
-      <h2 className="title text-xl text-foreground sm:text-2xl">{children}</h2>
-    </div>
-  );
-}
-
-/** Grille de cellules séparées par un filet, posée dans une carte. */
-function MetricGrid({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="float-card overflow-hidden">
-      <div className="grid grid-cols-2 gap-px bg-line lg:grid-cols-4">{children}</div>
-    </div>
-  );
-}
-
-/** Avertissement doux : bloc gris, mention en ambre. */
-function Notice({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="rounded-2xl bg-surface px-4 py-3 text-sm leading-relaxed text-muted-foreground">
-      {children}
-    </p>
-  );
-}
 
 /** Barre de poids : une jauge arrondie. */
 function WeightBar({ weight }: { weight: number }) {
@@ -340,10 +282,20 @@ export function PerformanceClient() {
         </section>
       )}
 
-      {/* ─── 03 · Risque ─── */}
+      {/* ─── 03 · Humeur du marché ─── */}
+      {hasSeries && (
+        <MarketMoodSection
+          range={{
+            fromDay: indexSeries[0].dayUtc,
+            toDay: indexSeries[indexSeries.length - 1].dayUtc,
+          }}
+        />
+      )}
+
+      {/* ─── 04 · Risque ─── */}
       <section className="space-y-4">
         <Reveal>
-          <SectionLabel index="03">Risque</SectionLabel>
+          <SectionLabel index="04">Risque</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>
@@ -412,10 +364,10 @@ export function PerformanceClient() {
         </Reveal>
       </section>
 
-      {/* ─── 04 · Concentration ─── */}
+      {/* ─── 05 · Concentration ─── */}
       <section className="space-y-4">
         <Reveal>
-          <SectionLabel index="04">Concentration</SectionLabel>
+          <SectionLabel index="05">Concentration</SectionLabel>
         </Reveal>
 
         <div className="grid gap-4 lg:grid-cols-12">
@@ -465,10 +417,10 @@ export function PerformanceClient() {
         </div>
       </section>
 
-      {/* ─── 05 · Attribution ─── */}
+      {/* ─── 06 · Attribution ─── */}
       <section className="space-y-4">
         <Reveal>
-          <SectionLabel index="05">D&apos;où vient le résultat</SectionLabel>
+          <SectionLabel index="06">D&apos;où vient le résultat</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>
@@ -558,10 +510,10 @@ export function PerformanceClient() {
         </Reveal>
       </section>
 
-      {/* ─── 06 · Corrélations ─── */}
+      {/* ─── 07 · Corrélations ─── */}
       <section className="space-y-4">
         <Reveal>
-          <SectionLabel index="06">Corrélations</SectionLabel>
+          <SectionLabel index="07">Corrélations</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>
@@ -667,10 +619,10 @@ export function PerformanceClient() {
         </Reveal>
       </section>
 
-      {/* ─── 07 · Contrepartie ─── */}
+      {/* ─── 08 · Contrepartie ─── */}
       <section className="space-y-4">
         <Reveal>
-          <SectionLabel index="07">Risque de contrepartie</SectionLabel>
+          <SectionLabel index="08">Risque de contrepartie</SectionLabel>
         </Reveal>
 
         <Reveal delay={60}>

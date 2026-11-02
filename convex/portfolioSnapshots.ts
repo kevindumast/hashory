@@ -6,6 +6,7 @@ import { optionalUserId, requireUserId } from "./auth";
 import { buildLedger, type LedgerInput } from "../lib/ledger";
 import { buildTaxReport, findInSeries } from "./taxReport";
 import { buildPortfolioHistory } from "../lib/portfolio-history";
+import { dailyTradeFlows } from "../lib/fear-greed";
 import {
   assetsToPrice,
   createPriceBook,
@@ -367,6 +368,7 @@ export const recomputeForUser = action({
     if (operations.length === 0) {
       // Comptes vidés ou supprimés : leurs positions ne doivent pas survivre.
       await ctx.runMutation(internal.portfolioSnapshots.replacePositions, { clerkId, positions: [], accounts: [] });
+      await ctx.runMutation(internal.fearGreed.storeTradeFlows, { clerkId, days: [] });
       return { status: "no-events" };
     }
     const earliest = operations[0].timestamp;
@@ -410,6 +412,13 @@ export const recomputeForUser = action({
       return findInSeries(prices, asset, day);
     });
     await ctx.runMutation(internal.taxReport.storeTaxReport, { clerkId, report: JSON.stringify(report) });
+
+    // Achats et ventes par jour, pour les confronter à l'indice Fear & Greed.
+    // Un seul document : l'écran n'a pas à relire les trades.
+    await ctx.runMutation(internal.fearGreed.storeTradeFlows, {
+      clerkId,
+      days: dailyTradeFlows(operations, book),
+    });
 
     // Rien de neuf depuis le dernier calcul, sinon la date : l'historique
     // passé est inchangé, seuls les derniers jours sont à réécrire. Relire
