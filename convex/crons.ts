@@ -11,4 +11,10 @@ const crons = cronJobs();
  */
 crons.daily("change EUR/USD de la BCE", { hourUTC: 15, minuteUTC: 30 }, internal.fxRates.backfillEurUsd, {});
 
+/**
+ * Indice Fear & Greed, publié peu après minuit UTC. Le premier passage sur
+ * une table vide charge tout l'historique.
+ */
+crons.daily("indice Fear & Greed", { hourUTC: 1, minuteUTC: 15 }, internal.fearGreed.refresh, {});
+
 export default crons;
