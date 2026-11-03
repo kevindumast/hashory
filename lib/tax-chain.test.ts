@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { buildLedger, type LedgerInput, type LedgerTradeInput } from "./ledger";
-import { computeCessionChain, summarizeByYear } from "./tax-chain";
+import { MAX_FLAGGED_ITEMS, computeCessionChain, flaggedItems, summarizeByYear } from "./tax-chain";
 import { ANNUAL_EXEMPTION_EUR, PFU_RATE } from "./tax";
 import { createPriceBook, type PriceSeries } from "./valuation";
 import { krakenInput } from "./test-fixtures";
@@ -221,6 +221,31 @@ describe("transferts", () => {
     assert.equal(chain.cessions.length, 1);
     close(chain.cessions[0].gainLossEur, 40_000);
     assert.equal(chain.unknownCostInflows[0].reason, "untracked-deposit");
+  });
+
+  it("classe le détail des avertissements par valeur et le tronque", () => {
+    const flow = (valueEur: number | null, date: number) => ({ date, account: "a", asset: "BTC", quantity: 1, valueEur });
+    const sorted = flaggedItems([flow(10, 1), flow(null, 2), flow(50, 3), flow(10, 4)]);
+    assert.deepEqual(
+      sorted.map((item) => [item.valueEur, item.date]),
+      [[50, 3], [10, 4], [10, 1], [null, 2]]
+    );
+    assert.equal(flaggedItems(Array.from({ length: MAX_FLAGGED_ITEMS + 5 }, (_, i) => flow(i, i))).length, MAX_FLAGGED_ITEMS);
+  });
+
+  it("dit sur quel compte et par quelle transaction les jetons sont entrés ou sortis", () => {
+    const chain = chainOf(
+      {
+        ...empty,
+        deposits: [{ id: "d", account: "kraken", asset: "BTC", amount: 1, timestamp: day(0), txId: "0xabc" }],
+        withdrawals: [{ id: "w", account: "kraken", asset: "BTC", amount: 0.5, fee: 0, timestamp: day(5), txId: "0xdef" }],
+      },
+      prices
+    );
+    assert.equal(chain.unknownCostInflows[0].account, "kraken");
+    assert.equal(chain.unknownCostInflows[0].txId, "0xabc");
+    assert.equal(chain.untrackedOutflows[0].account, "kraken");
+    assert.equal(chain.untrackedOutflows[0].txId, "0xdef");
   });
 
   it("impose à coût nul une vente sans achat dans l'historique, et la signale", () => {

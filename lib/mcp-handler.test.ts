@@ -36,8 +36,8 @@ function fakeData(overrides: Partial<McpData> = {}): McpData {
       warnings: {
         hasIncompleteValuation: false,
         hasMissingFxRates: false,
-        unknownCostInflows: { count: 0, valueEur: 0 },
-        untrackedOutflows: { count: 0, valueEur: 0 },
+        unknownCostInflows: { count: 0, valueEur: 0, items: [] },
+        untrackedOutflows: { count: 0, valueEur: 0, items: [] },
       },
     }),
     foreignAccounts: async () => ({ incomeYear: 2025, filingYear: 2026, accounts: [] }),

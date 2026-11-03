@@ -58,14 +58,59 @@ export type Cession = {
 /** Jetons entrés sans coût d'acquisition connu. */
 export type UnknownCostInflow = {
   date: number;
+  /** Compte où les jetons sont apparus. */
+  account: string;
   asset: string;
   quantity: number;
   valueEur: number | null;
   reason: "untracked-deposit" | "missing-history";
+  /** Hash de la transaction on-chain, pour un dépôt. */
+  txId?: string;
 };
 
 /** Jetons sortis vers un compte non suivi : peut-être une cession non vue. */
-export type UntrackedOutflow = { date: number; asset: string; quantity: number; valueEur: number | null };
+export type UntrackedOutflow = {
+  date: number;
+  account: string;
+  asset: string;
+  quantity: number;
+  valueEur: number | null;
+  txId?: string;
+};
+
+/**
+ * Une opération derrière un avertissement, telle que le rapport la garde
+ * pour que l'utilisateur la retrouve. `account` est l'identifiant du compte.
+ */
+export type FlaggedFlow = {
+  date: number;
+  account: string;
+  asset: string;
+  quantity: number;
+  valueEur: number | null;
+  /** Entrées seulement : dépôt d'un compte non suivi, ou vente sans achat connu. */
+  reason?: UnknownCostInflow["reason"];
+  txId?: string;
+};
+
+/** Au-delà, le détail est tronqué : le rapport enregistré reste petit. */
+export const MAX_FLAGGED_ITEMS = 200;
+
+/** Les plus grosses d'abord, ce sont elles qui pèsent sur l'impôt ; à valeur égale, les plus récentes. */
+export function flaggedItems(list: FlaggedFlow[]): FlaggedFlow[] {
+  return [...list]
+    .sort((a, b) => (b.valueEur ?? 0) - (a.valueEur ?? 0) || b.date - a.date)
+    .slice(0, MAX_FLAGGED_ITEMS)
+    .map(({ date, account, asset, quantity, valueEur, reason, txId }) => ({
+      date,
+      account,
+      asset,
+      quantity,
+      valueEur,
+      ...(reason ? { reason } : {}),
+      ...(txId ? { txId } : {}),
+    }));
+}
 
 export type CessionChain = {
   cessions: Cession[];
@@ -127,6 +172,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
     if (shortfall > DUST) {
       unknownCostInflows.push({
         date: timestamp,
+        account,
         asset,
         quantity: shortfall,
         valueEur: valueEur(asset, shortfall, timestamp),
@@ -195,6 +241,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         const shortfall = given.quantity - sold.quantity;
         unknownCostInflows.push({
           date: timestamp,
+          account,
           asset: given.asset,
           quantity: shortfall,
           valueEur: valueEur(given.asset, shortfall, timestamp),
@@ -271,18 +318,22 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
       add(operation.account, operation.asset, operation.quantity, 0);
       unknownCostInflows.push({
         date: operation.timestamp,
+        account: operation.account,
         asset: operation.asset,
         quantity: operation.quantity,
         valueEur: valueEur(operation.asset, operation.quantity, operation.timestamp),
         reason: "untracked-deposit",
+        txId: operation.txId,
       });
     } else {
       remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp);
       untrackedOutflows.push({
         date: operation.timestamp,
+        account: operation.account,
         asset: operation.asset,
         quantity: operation.quantity,
         valueEur: valueEur(operation.asset, operation.quantity, operation.timestamp),
+        txId: operation.txId,
       });
     }
   }

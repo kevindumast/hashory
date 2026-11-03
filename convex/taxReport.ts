@@ -3,7 +3,13 @@ import { v } from "convex/values";
 import { optionalUserId } from "./auth";
 import { loadLedgerInput } from "./ledgerData";
 import { ANNUAL_EXEMPTION_EUR, PFU_RATE } from "../lib/tax";
-import { computeCessionChain, summarizeByYear, type Cession } from "../lib/tax-chain";
+import {
+  computeCessionChain,
+  flaggedItems,
+  summarizeByYear,
+  type Cession,
+  type FlaggedFlow,
+} from "../lib/tax-chain";
 import { buildLedger, isFiat, type Operation } from "../lib/ledger";
 import {
   createPriceBook,
@@ -63,10 +69,12 @@ export type TaxReportResult = {
   hasIncompleteValuation: boolean;
   hasMissingFxRates: boolean;
   /** Jetons détenus sans coût d'acquisition connu, comptés à coût nul. */
-  unknownCostInflows: { count: number; valueEur: number };
+  unknownCostInflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
   /** Jetons partis vers un compte non suivi : cessions possibles non vues. */
-  untrackedOutflows: { count: number; valueEur: number };
+  untrackedOutflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
 };
+
+export type { FlaggedFlow };
 
 const DAY_MS = 86_400_000;
 /** Au-delà, un cours est trop ancien pour valoriser une ligne. */
@@ -214,6 +222,8 @@ export async function buildTaxReport(
 
   const todayRate = book.eurPerUsd(Date.now());
   const total = (list: { valueEur: number | null }[]) => list.reduce((sum, item) => sum + (item.valueEur ?? 0), 0);
+  // Le fiat retiré vers une banque n'est pas une sortie d'actif numérique.
+  const outflows = chain.untrackedOutflows.filter((outflow) => !isFiat(outflow.asset));
 
   return {
     reports,
@@ -227,11 +237,12 @@ export async function buildTaxReport(
     unknownCostInflows: {
       count: chain.unknownCostInflows.length,
       valueEur: total(chain.unknownCostInflows),
+      items: flaggedItems(chain.unknownCostInflows),
     },
     untrackedOutflows: {
-      // Le fiat retiré vers une banque n'est pas une sortie d'actif numérique.
-      count: chain.untrackedOutflows.filter((outflow) => !isFiat(outflow.asset)).length,
-      valueEur: total(chain.untrackedOutflows),
+      count: outflows.length,
+      valueEur: total(outflows),
+      items: flaggedItems(outflows),
     },
   };
 }

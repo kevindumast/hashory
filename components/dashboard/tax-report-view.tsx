@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { AlertTriangle, CheckCircle2, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { Metric, MetricGrid, Notice, SectionLabel } from "@/app/dashboard/perfor
 import { TaxSimulator } from "@/components/dashboard/tax-simulator";
 import { ForeignAccounts } from "@/components/dashboard/foreign-accounts";
 import { YearEndOptimizer } from "@/components/dashboard/year-end-optimizer";
+import { FlaggedFlows } from "@/components/dashboard/flagged-flows";
 import { cn } from "@/lib/utils";
 import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
 import { taxSheet } from "@/lib/export";
@@ -232,8 +233,10 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 /** Ce qui fonde le calcul, et ce qui pourrait le fausser. */
+type Check = { ok: boolean; title: string; okText: string; warnText: string; detail?: ReactNode };
+
 function Reliability({ result }: { result: TaxReportResult }) {
-  const checks = [
+  const checks: Check[] = [
     {
       ok: !result.hasIncompleteValuation,
       title: "Cours historiques",
@@ -251,13 +254,27 @@ function Reliability({ result }: { result: TaxReportResult }) {
       ok: result.unknownCostInflows.count === 0,
       title: "Origine des jetons",
       okText: "Tous les jetons détenus ont un prix d'acquisition connu.",
-      warnText: `${result.unknownCostInflows.count} entrée${result.unknownCostInflows.count > 1 ? "s" : ""} de jetons (environ ${eur.format(result.unknownCostInflows.valueEur)}) viennent d'un compte non suivi : leur prix d'acquisition est compté nul, ce qui peut majorer l'impôt. Connectez la plateforme d'origine pour le réduire.`,
+      warnText: `${result.unknownCostInflows.count} entrée${result.unknownCostInflows.count > 1 ? "s" : ""} de jetons (environ ${eur.format(result.unknownCostInflows.valueEur)}) sans prix d'acquisition connu : il est compté nul, ce qui peut majorer l'impôt. Connectez la plateforme d'origine pour le réduire.`,
+      detail: (
+        <FlaggedFlows
+          items={result.unknownCostInflows.items}
+          total={result.unknownCostInflows.count}
+          direction="in"
+        />
+      ),
     },
     {
       ok: result.untrackedOutflows.count === 0,
       title: "Sorties suivies",
       okText: "Aucun envoi vers un compte que Hashory ne suit pas.",
       warnText: `${result.untrackedOutflows.count} envoi${result.untrackedOutflows.count > 1 ? "s" : ""} (environ ${eur.format(result.untrackedOutflows.valueEur)}) vers un compte non suivi : une vente réalisée là-bas n'apparaît pas ici.`,
+      detail: (
+        <FlaggedFlows
+          items={result.untrackedOutflows.items}
+          total={result.untrackedOutflows.count}
+          direction="out"
+        />
+      ),
     },
   ];
   const issues = checks.filter((check) => !check.ok).length;
@@ -289,6 +306,7 @@ function Reliability({ result }: { result: TaxReportResult }) {
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">{check.title}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{check.ok ? check.okText : check.warnText}</p>
+              {!check.ok && check.detail}
             </div>
           </li>
         ))}
