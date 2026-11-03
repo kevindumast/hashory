@@ -15,7 +15,7 @@ export function TransactionsPerYear({ transactions }: { transactions: Transactio
   const max = Math.max(...rows.map((row) => row.total))
 
   return (
-    <section className="mt-9 rounded-lg border border-border bg-card">
+    <section className="mb-9 rounded-lg border border-border bg-card">
       <div className="px-5 pt-4 pb-3">
         <p className="num text-[10px] uppercase tracking-[0.24em] text-muted-foreground">Activité</p>
         <h2 className="title text-lg leading-tight text-foreground">Transactions par an</h2>
