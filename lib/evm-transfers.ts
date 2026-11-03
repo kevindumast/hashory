@@ -217,136 +217,139 @@ export function parseTokenTxs(
   return { deposits, withdrawals, maxBlock };
 }
 
-// ─── Moralis (historique de wallet) ──────────────────────────────────────
+// ─── Alchemy (alchemy_getAssetTransfers) ─────────────────────────────────
 
-export interface MoralisNativeTransfer {
-  from_address: string;
-  to_address: string | null;
-  value: string;
-  internal_transaction?: boolean;
-}
-
-export interface MoralisErc20Transfer {
-  address: string;
-  from_address: string;
-  to_address: string | null;
-  value: string;
-  token_symbol: string | null;
-  token_decimals: string | null;
-  log_index: number;
-  possible_spam?: boolean;
-}
-
-export interface MoralisHistoryItem {
+export interface AlchemyTransfer {
+  /** Numéro de bloc en hexadécimal. */
+  blockNum: string;
+  /** « {hash}:external » ou « {hash}:log:{index} ». */
+  uniqueId: string;
   hash: string;
-  block_number: string;
-  block_timestamp: string;
-  from_address: string;
-  receipt_status: string;
-  /** Frais en unités natives (« 0.000105 »), pas en wei. */
-  transaction_fee?: string | null;
-  native_transfers?: MoralisNativeTransfer[];
-  erc20_transfers?: MoralisErc20Transfer[];
+  from: string;
+  to: string | null;
+  asset: string | null;
+  category: string;
+  rawContract: {
+    /** Montant brut en hexadécimal. */
+    value: string | null;
+    address: string | null;
+    /** Décimales en hexadécimal, null si inconnues. */
+    decimal: string | null;
+  };
+  /** Absent sur BNB Smart Chain : Alchemy ne le fournit que sur quelques réseaux. */
+  metadata?: { blockTimestamp?: string } | null;
+}
+
+/** Blocs dont il faut demander l'horodatage, faute de métadonnées. */
+export function alchemyBlocksMissingTimestamp(transfers: readonly AlchemyTransfer[]): string[] {
+  const blocks = new Set<string>();
+  for (const transfer of transfers) {
+    if (!transfer.metadata?.blockTimestamp) blocks.add(transfer.blockNum.toLowerCase());
+  }
+  return [...blocks];
 }
 
 /**
- * Historique Moralis : chaque transaction porte ses transferts natifs
- * (internes compris) et ses transferts de jetons. Les jetons signalés comme
- * spam — légion sur BSC — sont écartés : ils pollueraient le portefeuille de
- * soldes sans valeur.
+ * Transactions dont l'adresse a payé le gas en envoyant du natif : ce sont
+ * les seules dont on lit le reçu, comme on n'impute le gas qu'aux envois
+ * natifs sur les chaînes lues via Etherscan.
  */
-export function parseMoralisHistory(
-  items: readonly MoralisHistoryItem[],
+export function alchemyOutgoingNativeHashes(
+  transfers: readonly AlchemyTransfer[],
+  address: string
+): string[] {
+  const self = address.toLowerCase();
+  const hashes = new Set<string>();
+  for (const transfer of transfers) {
+    if (transfer.category === "external" && transfer.from.toLowerCase() === self) {
+      hashes.add(transfer.hash);
+    }
+  }
+  return [...hashes];
+}
+
+/** Frais d'une transaction à partir de son reçu (valeurs hexadécimales). */
+export function feeFromReceipt(receipt: { gasUsed: string; effectiveGasPrice: string }): number {
+  return Number(BigInt(receipt.gasUsed) * BigInt(receipt.effectiveGasPrice)) / 1e18;
+}
+
+/**
+ * Transferts Alchemy : envois natifs (« external ») et jetons (« erc20 »).
+ * Les horodatages (`blockTimes`, en ms, indexés par bloc hexadécimal) et les
+ * frais (`fees`, par hash) viennent d'appels séparés quand Alchemy ne les
+ * fournit pas. Un transfert sans date fait échouer la lecture plutôt que
+ * d'être daté au hasard : le curseur n'avance pas, la synchro suivante
+ * réessaie.
+ */
+export function parseAlchemyTransfers(
+  transfers: readonly AlchemyTransfer[],
   address: string,
-  chain: EvmChain
+  chain: EvmChain,
+  lookups: { blockTimes: ReadonlyMap<string, number>; fees: ReadonlyMap<string, number> }
 ): ParsedTransfers {
   const self = address.toLowerCase();
   const tag = nativeTag(chain);
   const deposits: WalletDeposit[] = [];
   const withdrawals: WalletWithdrawal[] = [];
+  const seen = new Set<string>();
   let maxBlock = 0;
 
-  for (const item of items) {
-    const blockNumber = parseInt(item.block_number, 10);
+  for (const transfer of transfers) {
+    const blockNumber = parseInt(transfer.blockNum, 16);
     if (blockNumber > maxBlock) maxBlock = blockNumber;
 
-    if (item.receipt_status !== "1") continue;
+    const isNative = transfer.category === "external";
+    if (!isNative && transfer.category !== "erc20") continue;
 
-    const timeStamp = Date.parse(item.block_timestamp);
-    if (Number.isNaN(timeStamp)) continue;
+    const decimals = isNative ? 18 : parseInt(transfer.rawContract.decimal ?? "", 16);
+    if (Number.isNaN(decimals) || !transfer.rawContract.value) continue;
 
-    // Le gas n'est imputé qu'une fois, au premier envoi natif de la
-    // transaction — comme pour les chaînes lues via Etherscan.
-    let fee = item.from_address.toLowerCase() === self ? Number(item.transaction_fee ?? 0) || 0 : 0;
+    const value = BigInt(transfer.rawContract.value);
+    if (value === BigInt(0)) continue;
 
-    (item.native_transfers ?? []).forEach((transfer, index) => {
-      const value = BigInt(transfer.value);
-      if (value === BigInt(0)) return;
-      const amount = Number(value) / 1e18;
-      const from = transfer.from_address.toLowerCase();
-      const to = (transfer.to_address ?? "").toLowerCase();
+    const metaTime = transfer.metadata?.blockTimestamp;
+    const timeStamp = metaTime
+      ? Date.parse(metaTime)
+      : lookups.blockTimes.get(transfer.blockNum.toLowerCase());
+    if (timeStamp === undefined || Number.isNaN(timeStamp)) {
+      throw new Error(`Horodatage introuvable pour le bloc ${blockNumber}`);
+    }
 
-      if (to === self && from !== self) {
-        deposits.push({
-          depositId: `${item.hash}-${tag}-${index}-in`,
-          coin: chain.nativeSymbol,
-          amount,
-          network: chain.id,
-          status: "CONFIRMED",
-          insertTime: timeStamp,
-          txId: item.hash,
-        });
-      } else if (from === self) {
-        withdrawals.push({
-          withdrawId: `${item.hash}-${tag}-${index}-out`,
-          coin: chain.nativeSymbol,
-          amount,
-          network: chain.id,
-          status: "CONFIRMED",
-          applyTime: timeStamp,
-          txId: item.hash,
-          fee,
-        });
-        fee = 0;
-      }
-    });
+    const amount = Number(value) / 10 ** decimals;
+    const from = transfer.from.toLowerCase();
+    const to = (transfer.to ?? "").toLowerCase();
+    const contract = (transfer.rawContract.address ?? "").toLowerCase();
+    const coin = isNative ? chain.nativeSymbol : transfer.asset || contract.slice(0, 8);
+    const logIndex = transfer.uniqueId.split(":").pop();
+    const base = isNative ? `${transfer.hash}-${tag}` : `${transfer.hash}-${contract}-${logIndex}`;
 
-    for (const transfer of item.erc20_transfers ?? []) {
-      if (transfer.possible_spam) continue;
-      const decimals = parseInt(transfer.token_decimals ?? "", 10);
-      if (Number.isNaN(decimals)) continue;
-      const value = BigInt(transfer.value);
-      if (value === BigInt(0)) continue;
-
-      const amount = Number(value) / 10 ** decimals;
-      const from = transfer.from_address.toLowerCase();
-      const to = (transfer.to_address ?? "").toLowerCase();
-      const contract = transfer.address.toLowerCase();
-      const symbol = transfer.token_symbol || contract.slice(0, 8);
-      const id = `${item.hash}-${contract}-${transfer.log_index}`;
-
-      if (to === self && from !== self) {
-        deposits.push({
-          depositId: `${id}-in`,
-          coin: symbol,
-          amount,
-          network: chain.id,
-          status: "CONFIRMED",
-          insertTime: timeStamp,
-          txId: item.hash,
-        });
-      } else if (from === self) {
-        withdrawals.push({
-          withdrawId: `${id}-out`,
-          coin: symbol,
-          amount,
-          network: chain.id,
-          status: "CONFIRMED",
-          applyTime: timeStamp,
-          txId: item.hash,
-          fee: 0,
-        });
-      }
+    if (to === self && from !== self) {
+      const depositId = `${base}-in`;
+      if (seen.has(depositId)) continue;
+      seen.add(depositId);
+      deposits.push({
+        depositId,
+        coin,
+        amount,
+        network: chain.id,
+        status: "CONFIRMED",
+        insertTime: timeStamp,
+        txId: transfer.hash,
+      });
+    } else if (from === self) {
+      const withdrawId = `${base}-out`;
+      if (seen.has(withdrawId)) continue;
+      seen.add(withdrawId);
+      withdrawals.push({
+        withdrawId,
+        coin,
+        amount,
+        network: chain.id,
+        status: "CONFIRMED",
+        applyTime: timeStamp,
+        txId: transfer.hash,
+        fee: isNative ? (lookups.fees.get(transfer.hash) ?? 0) : 0,
+      });
     }
   }
 

@@ -3,13 +3,16 @@ import { describe, it } from "node:test";
 
 import { EVM_CHAINS } from "./evm-chains";
 import {
+  alchemyBlocksMissingTimestamp,
+  alchemyOutgoingNativeHashes,
+  feeFromReceipt,
   interpretEtherscanResponse,
-  parseMoralisHistory,
+  parseAlchemyTransfers,
   parseNativeTxs,
   parseTokenTxs,
+  type AlchemyTransfer,
   type EtherscanTokenTx,
   type EtherscanTx,
-  type MoralisHistoryItem,
 } from "./evm-transfers";
 
 const ME = "0xe62cd3e7b0afe4d43b03435c737072e77cbf1fb4";
@@ -223,147 +226,160 @@ describe("interpretEtherscanResponse", () => {
   });
 });
 
-function moralisItem(overrides: Partial<MoralisHistoryItem>): MoralisHistoryItem {
+function alchemyNative(overrides: Partial<AlchemyTransfer>): AlchemyTransfer {
+  const hash = overrides.hash ?? "0xa1";
   return {
-    hash: "0xm1",
-    block_number: "40000000",
-    block_timestamp: "2024-06-01T12:00:00.000Z",
-    from_address: OTHER,
-    receipt_status: "1",
-    transaction_fee: "0.000105",
-    native_transfers: [],
-    erc20_transfers: [],
+    blockNum: "0x2625a00",
+    uniqueId: `${hash}:external`,
+    hash,
+    from: OTHER,
+    to: ME,
+    asset: "BNB",
+    category: "external",
+    rawContract: { value: "0x1bc16d674ec80000", address: null, decimal: "0x12" },
     ...overrides,
   };
 }
 
-describe("parseMoralisHistory (BNB Smart Chain)", () => {
-  const bsc = EVM_CHAINS.bsc;
-  const at = Date.parse("2024-06-01T12:00:00.000Z");
+function alchemyToken(overrides: Partial<AlchemyTransfer>): AlchemyTransfer {
+  const hash = overrides.hash ?? "0xt1";
+  return {
+    blockNum: "0x2625a01",
+    uniqueId: `${hash}:log:7`,
+    hash,
+    from: OTHER,
+    to: ME,
+    asset: "USDT",
+    category: "erc20",
+    rawContract: { value: "0x4563918244f40000", address: USDC, decimal: "0x12" },
+    ...overrides,
+  };
+}
 
-  it("enregistre un BNB reçu, sans frais pour le destinataire", () => {
-    const parsed = parseMoralisHistory(
-      [
-        moralisItem({
-          native_transfers: [{ from_address: OTHER, to_address: ME_MIXED, value: "2000000000000000000" }],
-        }),
-      ],
-      ME_MIXED,
-      bsc
-    );
+describe("parseAlchemyTransfers (BNB Smart Chain)", () => {
+  const bsc = EVM_CHAINS.bsc;
+  const at = 1_717_243_200_000;
+  const blockTimes = new Map([
+    ["0x2625a00", at],
+    ["0x2625a01", at + 1000],
+  ]);
+  const noFees = new Map<string, number>();
+
+  it("enregistre un BNB reçu, daté par le bloc, sans frais pour le destinataire", () => {
+    const parsed = parseAlchemyTransfers([alchemyNative({})], ME_MIXED, bsc, { blockTimes, fees: noFees });
     assert.deepEqual(parsed.deposits, [
       {
-        depositId: "0xm1-bnb-0-in",
+        depositId: "0xa1-bnb-in",
         coin: "BNB",
         amount: 2,
         network: "bsc",
         status: "CONFIRMED",
         insertTime: at,
-        txId: "0xm1",
+        txId: "0xa1",
       },
     ]);
     assert.equal(parsed.withdrawals.length, 0);
+    assert.equal(parsed.maxBlock, 0x2625a00);
   });
 
-  it("impute le gas une seule fois, au premier envoi natif", () => {
-    const parsed = parseMoralisHistory(
-      [
-        moralisItem({
-          from_address: ME,
-          native_transfers: [
-            { from_address: ME, to_address: OTHER, value: "1000000000000000000" },
-            { from_address: ME, to_address: OTHER, value: "500000000000000000", internal_transaction: true },
-          ],
-        }),
-      ],
+  it("impute au BNB envoyé les frais lus dans le reçu", () => {
+    const parsed = parseAlchemyTransfers(
+      [alchemyNative({ hash: "0xout", from: ME, to: OTHER })],
       ME,
-      bsc
+      bsc,
+      { blockTimes, fees: new Map([["0xout", 0.000021]]) }
     );
     assert.deepEqual(
-      parsed.withdrawals.map((w) => [w.withdrawId, w.amount, w.fee]),
-      [
-        ["0xm1-bnb-0-out", 1, 0.000105],
-        ["0xm1-bnb-1-out", 0.5, 0],
-      ]
+      parsed.withdrawals.map((w) => [w.withdrawId, w.coin, w.amount, w.fee]),
+      [["0xout-bnb-out", "BNB", 2, 0.000021]]
     );
   });
 
-  it("compte un BNB reçu par transfert interne (sortie de contrat)", () => {
-    const parsed = parseMoralisHistory(
-      [
-        moralisItem({
-          from_address: ME,
-          native_transfers: [
-            { from_address: OTHER, to_address: ME, value: "300000000000000000", internal_transaction: true },
-          ],
-        }),
-      ],
+  it("lit les jetons BEP-20 avec leurs décimales, sans frais", () => {
+    const parsed = parseAlchemyTransfers(
+      [alchemyToken({}), alchemyToken({ hash: "0xt2", from: ME, to: OTHER })],
       ME,
-      bsc
-    );
-    assert.equal(parsed.deposits.length, 1);
-    assert.equal(parsed.deposits[0].amount, 0.3);
-  });
-
-  it("lit les jetons BEP-20 et écarte le spam", () => {
-    const parsed = parseMoralisHistory(
-      [
-        moralisItem({
-          erc20_transfers: [
-            {
-              address: USDC,
-              from_address: OTHER,
-              to_address: ME,
-              value: "5000000000000000000",
-              token_symbol: "USDT",
-              token_decimals: "18",
-              log_index: 7,
-            },
-            {
-              address: OTHER,
-              from_address: OTHER,
-              to_address: ME,
-              value: "999000000000000000000",
-              token_symbol: "FREE-AIRDROP",
-              token_decimals: "18",
-              log_index: 8,
-              possible_spam: true,
-            },
-          ],
-        }),
-      ],
-      ME,
-      bsc
+      bsc,
+      { blockTimes, fees: noFees }
     );
     assert.deepEqual(
-      parsed.deposits.map((d) => [d.depositId, d.coin, d.amount]),
-      [[`0xm1-${USDC.toLowerCase()}-7-in`, "USDT", 5]]
+      parsed.deposits.map((d) => [d.depositId, d.coin, d.amount, d.insertTime]),
+      [[`0xt1-${USDC.toLowerCase()}-7-in`, "USDT", 5, at + 1000]]
+    );
+    assert.deepEqual(
+      parsed.withdrawals.map((w) => [w.withdrawId, w.fee]),
+      [[`0xt2-${USDC.toLowerCase()}-7-out`, 0]]
     );
   });
 
-  it("écarte une transaction échouée mais en retient le bloc", () => {
-    const parsed = parseMoralisHistory(
+  it("préfère l'horodatage fourni par Alchemy quand il existe", () => {
+    const parsed = parseAlchemyTransfers(
+      [alchemyNative({ blockNum: "0x1", metadata: { blockTimestamp: "2024-01-01T00:00:00.000Z" } })],
+      ME,
+      bsc,
+      { blockTimes: new Map(), fees: noFees }
+    );
+    assert.equal(parsed.deposits[0].insertTime, Date.parse("2024-01-01T00:00:00.000Z"));
+  });
+
+  it("refuse de dater un transfert au hasard", () => {
+    // Le curseur ne doit pas avancer au-delà d'un transfert non enregistré.
+    assert.throws(
+      () => parseAlchemyTransfers([alchemyNative({ blockNum: "0x99" })], ME, bsc, { blockTimes, fees: noFees }),
+      /Horodatage introuvable/
+    );
+  });
+
+  it("ignore les jetons aux décimales inconnues et les montants nuls", () => {
+    const parsed = parseAlchemyTransfers(
       [
-        moralisItem({
-          receipt_status: "0",
-          block_number: "40000099",
-          native_transfers: [{ from_address: OTHER, to_address: ME, value: "1" }],
-        }),
+        alchemyToken({ hash: "0xunk", rawContract: { value: "0x1", address: USDC, decimal: null } }),
+        alchemyNative({ hash: "0xzero", rawContract: { value: "0x0", address: null, decimal: "0x12" } }),
       ],
       ME,
-      bsc
-    );
-    assert.equal(parsed.deposits.length, 0);
-    assert.equal(parsed.maxBlock, 40_000_099);
-  });
-
-  it("tolère des listes de transferts absentes", () => {
-    const parsed = parseMoralisHistory(
-      [{ ...moralisItem({}), native_transfers: undefined, erc20_transfers: undefined }],
-      ME,
-      bsc
+      bsc,
+      { blockTimes, fees: noFees }
     );
     assert.deepEqual(parsed.deposits, []);
-    assert.deepEqual(parsed.withdrawals, []);
+  });
+
+  it("n'enregistre qu'une fois un transfert vu dans les deux sens", () => {
+    // Un envoi à soi-même remonte dans la requête des reçus et des envois.
+    const self = alchemyNative({ hash: "0xself", from: ME, to: ME });
+    const parsed = parseAlchemyTransfers([self, self], ME, bsc, { blockTimes, fees: noFees });
+    assert.equal(parsed.withdrawals.length, 1);
+  });
+
+  it("nomme un jeton sans symbole par son contrat", () => {
+    const parsed = parseAlchemyTransfers([alchemyToken({ asset: null })], ME, bsc, { blockTimes, fees: noFees });
+    assert.equal(parsed.deposits[0].coin, USDC.toLowerCase().slice(0, 8));
+  });
+});
+
+describe("lectures complémentaires Alchemy", () => {
+  it("ne demande l'horodatage que des blocs non datés, sans doublon", () => {
+    const blocks = alchemyBlocksMissingTimestamp([
+      alchemyNative({ blockNum: "0xA" }),
+      alchemyToken({ blockNum: "0xa" }),
+      alchemyNative({ blockNum: "0xb", metadata: { blockTimestamp: "2024-01-01T00:00:00Z" } }),
+    ]);
+    assert.deepEqual(blocks, ["0xa"]);
+  });
+
+  it("ne lit le reçu que des envois natifs de l'adresse", () => {
+    const hashes = alchemyOutgoingNativeHashes(
+      [
+        alchemyNative({ hash: "0xsent", from: ME_MIXED, to: OTHER }),
+        alchemyNative({ hash: "0xreceived" }),
+        alchemyToken({ hash: "0xtoken", from: ME, to: OTHER }),
+      ],
+      ME
+    );
+    assert.deepEqual(hashes, ["0xsent"]);
+  });
+
+  it("calcule les frais à partir du gas consommé et de son prix effectif", () => {
+    // 21 000 gas à 1 gwei : 0,000021 BNB.
+    assert.equal(feeFromReceipt({ gasUsed: "0x5208", effectiveGasPrice: "0x3b9aca00" }), 0.000021);
   });
 });

@@ -6,27 +6,37 @@ import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
 import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 import { dataProviderLabel } from "../lib/data-providers";
-import { etherscanLikeBaseUrl, evmChain, evmDataset, type EvmChain } from "../lib/evm-chains";
 import {
+  alchemyRpcUrl,
+  etherscanLikeBaseUrl,
+  evmChain,
+  evmDataset,
+  type EvmChain,
+} from "../lib/evm-chains";
+import {
+  alchemyBlocksMissingTimestamp,
+  alchemyOutgoingNativeHashes,
+  feeFromReceipt,
   interpretEtherscanResponse,
-  parseMoralisHistory,
+  parseAlchemyTransfers,
   parseNativeTxs,
   parseTokenTxs,
+  type AlchemyTransfer,
   type EtherscanResponse,
   type EtherscanTokenTx,
   type EtherscanTx,
-  type MoralisHistoryItem,
   type ParsedTransfers,
 } from "../lib/evm-transfers";
 
 const PAGE_SIZE = 1000;
 const MAX_PAGES = 10;
 
-const MORALIS_API_BASE = "https://deep-index.moralis.io/api/v2.2";
-const MORALIS_PAGE_SIZE = 100;
-// Une page coûte des crédits Moralis : au-delà, la suite est lue à la
-// prochaine synchronisation, qui reprend au curseur.
-const MORALIS_MAX_PAGES = 20;
+// Une page Alchemy compte jusqu'à 1 000 transferts. Au-delà de ce nombre
+// de pages, la suite est lue à la prochaine synchronisation, qui reprend au
+// curseur.
+const ALCHEMY_MAX_PAGES = 10;
+// Taille des lots JSON-RPC (horodatages de blocs, reçus de transaction).
+const ALCHEMY_BATCH_SIZE = 100;
 
 interface SyncCursor {
   lastBlockNumber: number;
@@ -73,8 +83,9 @@ export async function runEvmWalletSync(
   });
 
   try {
-    if (chain.dataProvider === "moralis") {
-      await syncMoralisHistory(ctx, integrationId, address, apiKey, chain);
+    if (chain.dataProvider === "alchemy") {
+      await syncAlchemyTransfers(ctx, integrationId, address, apiKey, chain, "in");
+      await syncAlchemyTransfers(ctx, integrationId, address, apiKey, chain, "out");
     } else {
       await syncEtherscanStream(ctx, integrationId, address, apiKey, chain, "native");
       await syncEtherscanStream(ctx, integrationId, address, apiKey, chain, "erc20");
@@ -212,61 +223,153 @@ async function syncEtherscanStream(
   await writeCursor(ctx, integrationId, dataset, scope, newMaxBlock);
 }
 
-interface MoralisHistoryResponse {
-  cursor?: string | null;
-  result?: MoralisHistoryItem[];
-  message?: string;
+type JsonRpcResponse<T> = {
+  id?: number | string | null;
+  result?: T;
+  error?: { code?: number; message?: string };
+};
+
+/** Appel JSON-RPC Alchemy, unitaire ou par lot, avec ses erreurs traduites. */
+async function alchemyRpc<T>(url: string, body: unknown): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (response.status === 401) throw rejectedDataProviderKey("alchemy");
+  if (response.status === 403) {
+    const text = await response.text();
+    // Une app Alchemy n'ouvre que les réseaux cochés dans son tableau de bord.
+    if (/not enabled|network/i.test(text)) {
+      throw new ConvexError({
+        code: "network_not_enabled",
+        provider: "alchemy",
+        message:
+          "Votre app Alchemy n'a pas accès à BNB Smart Chain : activez ce réseau dans le tableau de bord Alchemy.",
+      });
+    }
+    throw rejectedDataProviderKey("alchemy");
+  }
+  if (response.status === 429) {
+    throw new ConvexError({
+      code: "rate_limited",
+      provider: "alchemy",
+      message: "Alchemy limite le débit de votre clé : réessayez plus tard.",
+    });
+  }
+  if (!response.ok) {
+    throw new Error(`Alchemy API error: ${response.statusText}`);
+  }
+  return (await response.json()) as T;
 }
 
-/** Historique Moralis : transferts natifs et jetons en un seul flux. */
-async function syncMoralisHistory(
+/** Résultat d'un appel unitaire, ou l'erreur JSON-RPC qu'il porte. */
+function rpcResult<T>(payload: JsonRpcResponse<T>): T {
+  if (payload.error) {
+    if (/must be authenticated|invalid api key/i.test(payload.error.message ?? "")) {
+      throw rejectedDataProviderKey("alchemy");
+    }
+    throw new Error(`Alchemy error: ${payload.error.message ?? "réponse invalide"}`);
+  }
+  return payload.result as T;
+}
+
+/** Appels identiques par lots, résultats rendus dans l'ordre des paramètres. */
+async function alchemyBatch<T>(url: string, method: string, paramsList: unknown[][]): Promise<T[]> {
+  const results: T[] = [];
+  for (let start = 0; start < paramsList.length; start += ALCHEMY_BATCH_SIZE) {
+    const chunk = paramsList.slice(start, start + ALCHEMY_BATCH_SIZE);
+    const payload = await alchemyRpc<JsonRpcResponse<T>[]>(
+      url,
+      chunk.map((params, index) => ({ jsonrpc: "2.0", id: index, method, params }))
+    );
+    const byId = new Map(payload.map((item) => [Number(item.id), item]));
+    chunk.forEach((_, index) => {
+      const item = byId.get(index);
+      if (!item) throw new Error(`Alchemy error: réponse manquante pour ${method}`);
+      results.push(rpcResult(item));
+    });
+  }
+  return results;
+}
+
+/**
+ * Transferts reçus (`in`) ou envoyés (`out`) par l'adresse. Alchemy filtre
+ * sur un seul côté du transfert à la fois : chaque sens a son curseur.
+ */
+async function syncAlchemyTransfers(
   ctx: ActionCtx,
   integrationId: Id<"integrations">,
   address: string,
   apiKey: string,
-  chain: EvmChain
+  chain: EvmChain,
+  direction: "in" | "out"
 ) {
-  const dataset = evmDataset(chain, "history");
+  const url = alchemyRpcUrl(chain, apiKey);
+  if (!url) throw new Error(`Aucune API Alchemy pour ${chain.label}`);
+
+  const dataset = evmDataset(chain, direction);
   const scope = address;
   const startBlock = await readCursor(ctx, integrationId, dataset, scope);
   let newMaxBlock = startBlock;
-  let cursor: string | null = null;
+  let pageKey: string | undefined;
 
-  for (let page = 0; page < MORALIS_MAX_PAGES; page++) {
-    const params = new URLSearchParams({
-      chain: `0x${chain.chainId.toString(16)}`,
-      order: "ASC",
-      limit: String(MORALIS_PAGE_SIZE),
-      from_block: String(startBlock),
+  for (let page = 0; page < ALCHEMY_MAX_PAGES; page++) {
+    const payload = await alchemyRpc<
+      JsonRpcResponse<{ transfers?: AlchemyTransfer[]; pageKey?: string }>
+    >(url, {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "alchemy_getAssetTransfers",
+      params: [
+        {
+          fromBlock: `0x${startBlock.toString(16)}`,
+          toBlock: "latest",
+          [direction === "in" ? "toAddress" : "fromAddress"]: address,
+          category: ["external", "erc20"],
+          order: "asc",
+          excludeZeroValue: true,
+          maxCount: "0x3e8",
+          ...(pageKey ? { pageKey } : {}),
+        },
+      ],
     });
-    if (cursor) params.set("cursor", cursor);
+    const result = rpcResult(payload);
+    const transfers = result?.transfers ?? [];
 
-    const response = await fetch(`${MORALIS_API_BASE}/wallets/${address}/history?${params}`, {
-      headers: { "X-API-Key": apiKey, Accept: "application/json" },
+    // Alchemy ne date pas les transferts sur BSC : on lit les blocs.
+    const blocks = alchemyBlocksMissingTimestamp(transfers);
+    const blockRows = await alchemyBatch<{ timestamp: string } | null>(
+      url,
+      "eth_getBlockByNumber",
+      blocks.map((block) => [block, false])
+    );
+    const blockTimes = new Map<string, number>();
+    blocks.forEach((block, index) => {
+      const row = blockRows[index];
+      if (row?.timestamp) blockTimes.set(block, parseInt(row.timestamp, 16) * 1000);
     });
-    if (response.status === 401 || response.status === 403) {
-      throw rejectedDataProviderKey("moralis");
-    }
-    if (response.status === 429) {
-      throw new ConvexError({
-        code: "rate_limited",
-        provider: "moralis",
-        message: "Moralis limite le débit de votre clé : réessayez plus tard.",
-      });
-    }
-    if (!response.ok) {
-      throw new Error(`Moralis API error: ${response.statusText}`);
-    }
 
-    const data = (await response.json()) as MoralisHistoryResponse;
-    const items = Array.isArray(data.result) ? data.result : [];
+    // Ni les frais : on lit le reçu des envois natifs.
+    const hashes = alchemyOutgoingNativeHashes(transfers, address);
+    const receipts = await alchemyBatch<{ gasUsed: string; effectiveGasPrice: string } | null>(
+      url,
+      "eth_getTransactionReceipt",
+      hashes.map((hash) => [hash])
+    );
+    const fees = new Map<string, number>();
+    hashes.forEach((hash, index) => {
+      const receipt = receipts[index];
+      if (receipt?.gasUsed && receipt.effectiveGasPrice) fees.set(hash, feeFromReceipt(receipt));
+    });
 
-    const parsed = parseMoralisHistory(items, address, chain);
+    const parsed = parseAlchemyTransfers(transfers, address, chain, { blockTimes, fees });
     if (parsed.maxBlock > newMaxBlock) newMaxBlock = parsed.maxBlock;
     await insertTransfers(ctx, integrationId, parsed);
 
-    cursor = data.cursor || null;
-    if (!cursor || items.length === 0) break;
+    pageKey = result?.pageKey || undefined;
+    if (!pageKey || transfers.length === 0) break;
   }
 
   await writeCursor(ctx, integrationId, dataset, scope, newMaxBlock);

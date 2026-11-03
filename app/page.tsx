@@ -170,7 +170,7 @@ const faqItems = [
   {
     question: "Pourquoi fournir mes propres clés d'API ?",
     answer:
-      "Pour lire l'historique d'un wallet Solana, Ethereum, Arbitrum, Base, BNB Smart Chain ou Bittensor, Hashory interroge un service spécialisé (Helius, Etherscan, Blockscout, Moralis, TaoStats). Chacun y utilise sa propre clé : c'est votre crédit qui est consommé, personne d'autre n'y touche, et vous gardez le contrôle — vous voyez l'usage chez le fournisseur et révoquez la clé quand vous voulez. Les offres gratuites suffisent largement pour un portefeuille personnel.",
+      "Pour lire l'historique d'un wallet Solana, Ethereum, Arbitrum, Base, BNB Smart Chain ou Bittensor, Hashory interroge un service spécialisé (Helius, Etherscan, Blockscout, Alchemy, TaoStats). Chacun y utilise sa propre clé : c'est votre crédit qui est consommé, personne d'autre n'y touche, et vous gardez le contrôle — vous voyez l'usage chez le fournisseur et révoquez la clé quand vous voulez. Les offres gratuites suffisent largement pour un portefeuille personnel.",
   },
   {
     question: "Hashory est-il vraiment open source ?",

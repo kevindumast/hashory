@@ -315,7 +315,7 @@ const providerConfigs: ProviderConfig[] = [
   {
     value: "bsc",
     label: "BNB Smart Chain",
-    description: "Connexion par adresse publique, lue via Moralis.",
+    description: "Connexion par adresse publique, lue via Alchemy.",
     category: "blockchain",
     fields: [
       {

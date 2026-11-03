@@ -5,7 +5,9 @@
  * propre historique et son propre indexeur. Etherscan couvre Ethereum et
  * Arbitrum avec une clé gratuite ; Base et BNB Smart Chain n'y sont plus
  * accessibles qu'avec une offre payante, d'où Blockscout pour Base et
- * Moralis pour BSC — tous deux gratuits pour un portefeuille personnel.
+ * Alchemy pour BSC — tous deux gratuits pour un portefeuille personnel.
+ * Binance n'expose aucune API d'historique gratuite : BscScan, l'explorateur
+ * de référence, a rejoint Etherscan et son offre payante.
  *
  * Importé par les fonctions Convex comme par l'interface : aucune
  * dépendance serveur ici.
@@ -23,7 +25,9 @@ export type EvmChain = {
   /** Jeton qui paie le gas sur la chaîne. */
   nativeSymbol: string;
   /** Indexeur interrogé, dont l'utilisateur fournit la clé. */
-  dataProvider: Extract<DataProviderId, "etherscan" | "blockscout" | "moralis">;
+  dataProvider: Extract<DataProviderId, "etherscan" | "blockscout" | "alchemy">;
+  /** Sous-domaine Alchemy du réseau, pour les chaînes lues par Alchemy. */
+  alchemyNetwork?: string;
 };
 
 export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
@@ -53,7 +57,8 @@ export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
     label: "BNB Smart Chain",
     chainId: 56,
     nativeSymbol: "BNB",
-    dataProvider: "moralis",
+    dataProvider: "alchemy",
+    alchemyNetwork: "bnb-mainnet",
   },
 };
 
@@ -69,7 +74,7 @@ export function evmChain(id: string): EvmChain | null {
 
 /**
  * Point d'entrée de l'API « à la Etherscan » d'une chaîne : même modules,
- * mêmes paramètres, seule la base change. BSC, lu par Moralis, n'en a pas.
+ * mêmes paramètres, seule la base change. BSC, lu par Alchemy, n'en a pas.
  */
 export function etherscanLikeBaseUrl(chain: EvmChain): string | null {
   switch (chain.dataProvider) {
@@ -82,7 +87,17 @@ export function etherscanLikeBaseUrl(chain: EvmChain): string | null {
   }
 }
 
-/** Ensemble de curseurs propre à chaque chaîne et à chaque flux. */
-export function evmDataset(chain: EvmChain, stream: "native" | "erc20" | "history"): string {
+/** Point d'entrée JSON-RPC Alchemy d'une chaîne, clé comprise. */
+export function alchemyRpcUrl(chain: EvmChain, apiKey: string): string | null {
+  if (!chain.alchemyNetwork) return null;
+  return `https://${chain.alchemyNetwork}.g.alchemy.com/v2/${encodeURIComponent(apiKey)}`;
+}
+
+/**
+ * Ensemble de curseurs propre à chaque chaîne et à chaque flux : natif et
+ * jetons pour les API à la Etherscan, reçus et envois pour Alchemy, qui
+ * filtre sur l'un ou l'autre côté du transfert.
+ */
+export function evmDataset(chain: EvmChain, stream: "native" | "erc20" | "in" | "out"): string {
   return `${chain.id}_${stream}`;
 }
