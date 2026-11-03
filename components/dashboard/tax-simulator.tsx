@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const money = (value: number) =>
-  value.toLocaleString("fr-FR", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  value.toLocaleString("fr-FR", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 });
 
 const NET_PRESETS = [1_000, 5_000, 10_000, 25_000];
 
@@ -223,9 +223,19 @@ export function TaxSimulator() {
           {result === null ? (
             <Reveal delay={180}>
               <p className="border-l-2 border-chart-4 py-3 pl-4 text-sm leading-relaxed text-muted-foreground">
-                <span className="text-chart-4">Objectif hors d&apos;atteinte</span> — même en cédant
-                l&apos;intégralité du portefeuille ({money(portfolioValue)}), l&apos;impôt dû ne
-                permet pas d&apos;encaisser cette somme nette.
+                <span className="text-chart-4">Objectif hors d&apos;atteinte</span> —{" "}
+                {amount >= portfolioValue ? (
+                  // L'impôt n'y est pour rien : le portefeuille entier vaut moins que la somme visée.
+                  <>
+                    votre portefeuille entier vaut {money(portfolioValue)}, moins que le montant visé.
+                    Choisissez une somme plus petite.
+                  </>
+                ) : (
+                  <>
+                    même en cédant l&apos;intégralité du portefeuille ({money(portfolioValue)}),
+                    l&apos;impôt dû ne permet pas d&apos;encaisser cette somme nette.
+                  </>
+                )}
               </p>
             </Reveal>
           ) : (

@@ -16,7 +16,8 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { reconcileBalances } from "@/lib/ledger";
+import { EUR_STABLECOINS, isFiat, reconcileBalances } from "@/lib/ledger";
+import { FiatIcon, hasFiatIcon } from "@/components/ui/fiat-icon";
 import { currencyFormatter, USD_STABLECOINS, type HistoryPoint, type ProfitSummary, type PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
 import { usePortfolioSnapshots } from "@/hooks/usePortfolioSnapshots";
 import { TokenHistoryChart } from "@/components/dashboard/token-history-chart";
@@ -62,12 +63,25 @@ const eurFormatter = new Intl.NumberFormat("fr-FR", {
   maximumFractionDigits: 2,
 });
 
+const compactFormatter = new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 });
+
+/** Graduation d'axe à la française : « 2,5 k $ », pas « 2.5k $ ». */
 function formatAxisValue(v: number): string {
-  const abs = Math.abs(v);
-  const sign = v < 0 ? "-" : "";
-  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1).replace(/\.0$/, "")}M $`;
-  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1).replace(/\.0$/, "")}k $`;
-  return `${sign}${Math.round(abs)} $`;
+  return `${compactFormatter.format(v)} $`;
+}
+
+/** Pourcentage à la française : « 68,3 % », « +5,8 % ». */
+function formatPercent(value: number, digits = 1, withSign = false): string {
+  const text = value.toLocaleString("fr-FR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return `${withSign && value >= 0 ? "+" : ""}${text} %`;
+}
+
+/** Nature d'un actif du portefeuille, affichée sous son symbole. */
+function assetKind(symbol: string): string {
+  const upper = symbol.toUpperCase();
+  if (isFiat(upper)) return "Monnaie";
+  if (USD_STABLECOINS.has(upper) || EUR_STABLECOINS.has(upper)) return "Stablecoin";
+  return "Crypto";
 }
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap";
 import { LoaderCircle, RefreshCw, ChevronRight, X } from "lucide-react";
@@ -81,6 +95,8 @@ type DashboardNewLayoutProps = {
 
 const CHART_PERIODS = ["1D", "1W", "1M", "ALL"] as const;
 type ChartPeriod = typeof CHART_PERIODS[number];
+
+const PERIOD_LABELS: Record<ChartPeriod, string> = { "1D": "1J", "1W": "1S", "1M": "1M", ALL: "Tout" };
 
 const monthLabelFormatter = new Intl.DateTimeFormat("fr-FR", { month: "short", timeZone: "UTC" });
 
@@ -494,7 +510,7 @@ export function DashboardNewLayout({
                     : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
                 }`}
               >
-                {p}
+                {PERIOD_LABELS[p]}
               </button>
             );
           })}
@@ -813,7 +829,7 @@ export function DashboardNewLayout({
                       tickLine={false}
                       axisLine={false}
                       width={62}
-                      tickFormatter={(v) => `${v.toFixed(0)}%`}
+                      tickFormatter={(v) => formatPercent(v, 0)}
                       style={{ fontSize: "11px" }}
                       tick={{ fill: "var(--muted-foreground)", className: "num" }}
                     />
@@ -826,7 +842,7 @@ export function DashboardNewLayout({
                           label={axisKeyToLabel(label as string | number)}
                           formatter={(value) => {
                             const n = Number(value);
-                            return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+                            return formatPercent(n, 2, true);
                           }}
                         />
                       }
@@ -1121,7 +1137,9 @@ export function DashboardNewLayout({
                                   />
                                 </button>
                                 <div className="w-7 h-7 shrink-0 relative">
-                                  {getCmcIconUrl(token.symbol) ? (
+                                  {hasFiatIcon(token.symbol) ? (
+                                    <FiatIcon symbol={token.symbol} />
+                                  ) : getCmcIconUrl(token.symbol) ? (
                                     // URL calculée au rendu + repli DOM sur erreur : next/image ne s'y prête pas.
                                     // eslint-disable-next-line @next/next/no-img-element
                                     <img
@@ -1144,7 +1162,7 @@ export function DashboardNewLayout({
                                 </div>
                                 <div>
                                   <div className="font-bold text-foreground text-xs">{token.symbol}</div>
-                                  <div className="text-[10px] text-muted-foreground uppercase">Crypto</div>
+                                  <div className="text-[10px] text-muted-foreground uppercase">{assetKind(token.symbol)}</div>
                                 </div>
                               </div>
                             </td>
@@ -1185,8 +1203,7 @@ export function DashboardNewLayout({
                                   const gap = currentPrice / token.avgCostBasis - 1;
                                   return (
                                     <span className={gap >= 0 ? "text-positive" : "text-negative"}>
-                                      {gap >= 0 ? "+" : ""}
-                                      {(gap * 100).toFixed(1)} %
+                                      {formatPercent(gap * 100, 1, true)}
                                     </span>
                                   );
                                 })()
@@ -1207,7 +1224,7 @@ export function DashboardNewLayout({
                                     />
                                   </div>
                                   <span className="num font-bold text-foreground min-w-[44px]">
-                                    {((currentValue / totalTokensValue) * 100).toFixed(1)}%
+                                    {formatPercent((currentValue / totalTokensValue) * 100)}
                                   </span>
                                 </div>
                               ) : (
@@ -1622,7 +1639,7 @@ export function DashboardNewLayout({
                               />
                             </div>
                             <span className="num font-bold text-foreground min-w-[44px]">
-                              {((s.currentValueUsd / totalPlatformValue) * 100).toFixed(1)}%
+                              {formatPercent((s.currentValueUsd / totalPlatformValue) * 100)}
                             </span>
                           </div>
                         ) : (

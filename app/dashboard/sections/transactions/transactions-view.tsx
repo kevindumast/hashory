@@ -41,6 +41,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { type TransactionEntry, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 import { EUR_STABLECOINS, USD_STABLECOINS, isFiat, normalizeAsset, splitPair } from "@/lib/ledger"
+import { FiatIcon, hasFiatIcon } from "@/components/ui/fiat-icon"
 import {
   REVIEW_REASON_LABELS,
   type ReviewReason,
@@ -73,6 +74,13 @@ const priceLarge = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, ma
 /** Prix lisible : deux décimales au-delà de 1, six chiffres significatifs en deçà. */
 function formatPrice(value: number): string {
   return Math.abs(value) >= 1 ? priceLarge.format(value) : quantitySmall.format(value)
+}
+
+/** Frais en monnaie (fiat ou stablecoin) : toujours deux décimales, « 0,30 EUR » et non « 0,3 EUR ». */
+function formatFee(value: number, asset: string | undefined): string {
+  const normalized = asset ? normalizeAsset(asset) : ""
+  const isMoney = isFiat(normalized) || USD_STABLECOINS.has(normalized) || EUR_STABLECOINS.has(normalized)
+  return isMoney && Math.abs(value) >= 0.01 ? priceLarge.format(value) : formatQuantity(value)
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -153,6 +161,22 @@ const isEur = (asset: string) => asset === "EUR" || EUR_STABLECOINS.has(asset)
 function needsSpotPrice(asset: string): boolean {
   const normalized = normalizeAsset(asset)
   return !isUsd(normalized) && !isEur(normalized) && !isFiat(normalized)
+}
+
+type TradeEntry = Extract<TransactionEntry, { type: "trade" }>
+
+function hasRecordedAssets(tx: TradeEntry): boolean {
+  return !!tx.fromAsset && !!tx.toAsset && (tx.fromAmount ?? 0) > 0 && (tx.toAmount ?? 0) > 0
+}
+
+/** Base et cotation d'un échange : actifs enregistrés d'abord, symbole ensuite. */
+function tradePair(tx: TradeEntry): { base: string; quote: string } | null {
+  if (hasRecordedAssets(tx)) {
+    const from = normalizeAsset(tx.fromAsset!)
+    const to = normalizeAsset(tx.toAsset!)
+    return tx.side === "BUY" ? { base: to, quote: from } : { base: from, quote: to }
+  }
+  return splitPair(tx.symbol)
 }
 
 function valueOf(
@@ -290,7 +314,7 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
     const assets = new Set<string>()
     for (const tx of transactions) {
       if (tx.type === "trade") {
-        const quote = splitPair(tx.symbol)?.quote
+        const quote = tradePair(tx)?.quote
         if (quote && needsSpotPrice(quote)) assets.add(quote)
       } else if (tx.baseAsset && needsSpotPrice(tx.baseAsset)) {
         assets.add(normalizeAsset(tx.baseAsset))
@@ -340,11 +364,17 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
       const account = tx.providerDisplayName
 
       if (tx.type === "trade") {
-        const pair = splitPair(tx.symbol)
+        const pair = tradePair(tx)
         const base = pair?.base ?? tx.baseAsset
         const quote = pair?.quote ?? "?"
-        const quoteQty = tx.quoteQuantity ?? tx.price * tx.quantity
-        const baseFlow = { quantity: tx.quantity, currency: base }
+        // Les actifs donnés/reçus enregistrés priment sur le découpage du
+        // symbole, ambigu pour USDTUSD (USDT·USD ou USD·TUSD).
+        const known = hasRecordedAssets(tx)
+        const baseQty = known ? (tx.side === "BUY" ? tx.toAmount! : tx.fromAmount!) : tx.quantity
+        const quoteQty = known
+          ? (tx.side === "BUY" ? tx.fromAmount! : tx.toAmount!)
+          : (tx.quoteQuantity ?? tx.price * tx.quantity)
+        const baseFlow = { quantity: baseQty, currency: base }
         const quoteFlow = { quantity: quoteQty, currency: quote }
         const out = tx.side === "BUY" ? quoteFlow : baseFlow
         const received = tx.side === "BUY" ? baseFlow : quoteFlow
@@ -581,7 +611,10 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
           </Button>
           <Button onClick={openDialog} className="flex-1 md:flex-none">
             <Plus />
-            Ajouter<span className="hidden sm:inline">&nbsp;des transactions</span>
+            {/* Un seul nœud texte : l'écart du bouton entre deux nœuds doublait l'espace. */}
+            <span>
+              Ajouter<span className="hidden sm:inline"> des transactions</span>
+            </span>
           </Button>
         </div>
       </header>
@@ -860,7 +893,7 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
                         <td className="whitespace-nowrap px-3 py-3 text-right">
                           {row.fee ? (
                             <>
-                              <span className="num text-[13px] text-foreground">{formatQuantity(row.fee)}</span>
+                              <span className="num text-[13px] text-foreground">{formatFee(row.fee, row.feeAsset)}</span>
                               {row.feeAsset && <span className="ml-1 text-[11px] text-muted-foreground">{row.feeAsset}</span>}
                             </>
                           ) : (
@@ -942,7 +975,7 @@ function SortButton({
       type="button"
       onClick={onClick}
       className={cn(
-        "inline-flex items-center gap-1.5 uppercase tracking-[0.14em] transition-colors hover:text-foreground",
+        "inline-flex items-center gap-1.5 align-middle uppercase leading-none tracking-[0.14em] transition-colors hover:text-foreground",
         active && "text-foreground",
         align === "right" && "flex-row-reverse",
       )}
@@ -1021,28 +1054,8 @@ function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
   )
 }
 
-// Devises fiat : pas d'icône CMC, on dessine le signe monétaire sur une pastille colorée.
-const FIAT_ICONS: Record<string, { glyph: string; bg: string }> = {
-  EUR: { glyph: "€", bg: "#003399" },
-  USD: { glyph: "$", bg: "#2E7D32" },
-  GBP: { glyph: "£", bg: "#5B2C83" },
-  CHF: { glyph: "₣", bg: "#D52B1E" },
-  JPY: { glyph: "¥", bg: "#BC002D" },
-}
-
 function TokenAvatar({ symbol, url, size = 28 }: { symbol: string; url: string | null | undefined; size?: number }) {
-  const fiat = FIAT_ICONS[symbol.toUpperCase()]
-  if (fiat) {
-    return (
-      <span
-        aria-hidden
-        style={{ width: size, height: size, backgroundColor: fiat.bg, fontSize: Math.round(size * 0.55) }}
-        className="flex shrink-0 items-center justify-center rounded-full font-bold leading-none text-white"
-      >
-        {fiat.glyph}
-      </span>
-    )
-  }
+  if (hasFiatIcon(symbol)) return <FiatIcon symbol={symbol} size={size} />
   if (url) {
     return <Image src={url} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" />
   }
@@ -1214,7 +1227,7 @@ function TransactionDetail({
               <DetailItem label="Frais">
                 {row.fee ? (
                   <>
-                    <span className="num">{formatQuantity(row.fee)}</span> {row.feeAsset}
+                    <span className="num">{formatFee(row.fee, row.feeAsset)}</span> {row.feeAsset}
                   </>
                 ) : (
                   <Missing />

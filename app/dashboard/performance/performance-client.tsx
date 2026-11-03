@@ -493,7 +493,7 @@ export function PerformanceClient() {
                         >
                           {row.pnlUsd.toLocaleString("fr-FR", {
                             style: "currency",
-                            currency: "USD",
+                            currency: "USD", currencyDisplay: "narrowSymbol",
                             maximumFractionDigits: 0,
                           })}
                         </td>

@@ -71,7 +71,7 @@ const formatEur = (value: number) =>
   value.toLocaleString("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 
 const formatUsd = (value: number) =>
-  value.toLocaleString("fr-FR", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  value.toLocaleString("fr-FR", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 });
 
 /**
  * Évalue toutes les conditions et retourne les signaux actifs, les plus

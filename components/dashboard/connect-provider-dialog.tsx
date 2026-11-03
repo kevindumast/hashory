@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useMutation } from "convex/react";
@@ -221,13 +221,13 @@ const providerConfigs: ProviderConfig[] = [
     fields: [
       {
         name: "apiKey",
-        label: "API Key",
+        label: "Clé API",
         placeholder: "Ex: aBcD1234...",
         helper: "Depuis Kraken > Paramètres > API > Ajouter une clé.",
       },
       {
         name: "apiSecret",
-        label: "Private Key",
+        label: "Clé privée",
         placeholder: "Ex: zYxW9876...",
         helper:
           "Cochez uniquement « Query Funds » et « Query Ledger Entries ». La clé est chiffrée immédiatement côté serveur.",
@@ -243,13 +243,13 @@ const providerConfigs: ProviderConfig[] = [
     fields: [
       {
         name: "apiKey",
-        label: "API Key",
+        label: "Clé API",
         placeholder: "Ex: aBcD1234...",
         helper: "Depuis Binance > Gestion API > Créer une clé.",
       },
       {
         name: "apiSecret",
-        label: "API Secret",
+        label: "Clé secrète",
         placeholder: "Ex: zYxW9876...",
         helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
         secret: true,
@@ -406,7 +406,7 @@ const providerConfigs: ProviderConfig[] = [
       },
       {
         name: "apiSecret",
-        label: "API Secret",
+        label: "Clé secrète",
         placeholder: "Ex: zYxW9876...",
         helper: "Copiez ce secret une seule fois, il est chiffré immédiatement côté serveur.",
         secret: true,
@@ -921,7 +921,11 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
                           id={field.name}
                           type={inputType}
                           placeholder={field.placeholder}
-                          autoComplete="off"
+                          // « off » ne suffit pas : le navigateur y versait l'e-mail et le
+                          // mot de passe enregistrés. « new-password » l'en empêche.
+                          autoComplete={isSecret ? "new-password" : "off"}
+                          data-1p-ignore
+                          data-lpignore="true"
                           spellCheck={false}
                           value={value}
                           onChange={(event) => setValue(event.target.value)}

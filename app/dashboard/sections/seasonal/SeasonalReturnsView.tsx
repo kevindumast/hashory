@@ -4,9 +4,10 @@ import React, { useMemo } from "react";
 import type { PortfolioSnapshot } from "@/hooks/usePortfolioSnapshots";
 import type { IntegrationRecord } from "@/hooks/dashboard/useIntegrations";
 import { compoundReturns, monthlyReturns, quarterlyReturns } from "@/lib/portfolio-history";
+import { accountName } from "@/lib/provider-names";
 
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-const MONTHS_SHORT = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+const MONTHS_SHORT = ["Janv","Févr","Mars","Avr","Mai","Juin","Juil","Août","Sept","Oct","Nov","Déc"];
 const QUARTERS = ["T1","T2","T3","T4"];
 const QUARTER_MONTHS = [[0,1,2],[3,4,5],[6,7,8],[9,10,11]];
 
@@ -48,7 +49,9 @@ function median(vals: (number | null)[]) {
 }
 
 function fmt(v: number | null) {
-  return v === null ? "—" : `${v >= 0 ? "+" : ""}${v.toFixed(2)}%`;
+  if (v === null) return "—";
+  const text = v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${v >= 0 ? "+" : ""}${text} %`;
 }
 
 function ReturnCell({ value }: { value: number | null }) {
@@ -102,7 +105,7 @@ function ReturnsTable({ title, data, cols, colsFull }: { title: string; data: Ma
         <table className="w-full border-collapse">
           <thead>
             <tr className="border-b border-border/60">
-              <th className="px-4 py-3 text-left num text-[10px] uppercase tracking-[0.24em] text-muted-foreground w-16">Temps</th>
+              <th className="px-4 py-3 text-left num text-[10px] uppercase tracking-[0.24em] text-muted-foreground w-16">Année</th>
               {cols.map((col, i) => <th key={col} title={colsFull[i]} className="px-2 py-3 text-center num text-[10px] uppercase tracking-[0.24em] text-muted-foreground min-w-[80px]">{col}</th>)}
               <th className="px-2 py-3 text-center num text-[10px] uppercase tracking-[0.24em] text-muted-foreground min-w-[80px]">Total</th>
             </tr>
@@ -159,7 +162,7 @@ export function SeasonalReturnsView({ snapshots, integrations, selectedIntegrati
           {integrations.map((intg) => (
             <button key={intg._id} onClick={() => onSelectIntegration(String(intg._id))}
               className={`px-3 py-1 text-[11px] font-bold rounded transition-colors cursor-pointer ${selectedIntegration === String(intg._id) ? "bg-primary text-primary-foreground" : "bg-muted/40 text-muted-foreground hover:bg-muted hover:text-foreground"}`}>
-              {intg.displayName ?? intg.provider}
+              {accountName(intg)}
             </button>
           ))}
         </div>
@@ -172,11 +175,11 @@ export function SeasonalReturnsView({ snapshots, integrations, selectedIntegrati
         </div>
       ) : snapshots.length === 0 ? (
         <div className="flex h-64 items-center justify-center text-muted-foreground text-sm">
-          Aucune donnée disponible. Synchronisez vos intégrations.
+          Aucune donnée pour l&apos;instant : connectez ou synchronisez un compte.
         </div>
       ) : (
         <>
-          <ReturnsTable title="Retours mensuels (%)" data={monthly} cols={MONTHS_SHORT} colsFull={MONTHS} />
+          <ReturnsTable title="Rendements mensuels (%)" data={monthly} cols={MONTHS_SHORT} colsFull={MONTHS} />
           <ReturnsTable title="Rendements trimestriels (%)" data={quarterly} cols={QUARTERS} colsFull={quarterColsFull} />
           <p className="text-[10px] text-muted-foreground/70 italic">
             Rendement pondéré par le temps, en dollars : apports et retraits n&apos;entrent pas dans la
