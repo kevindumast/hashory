@@ -11,6 +11,7 @@ import {
   Coins,
   CornerDownLeft,
   FileText,
+  History,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -65,6 +66,7 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
       { id: "nav-accounts", label: "Mes comptes", group: "Navigation", icon: Wallet, run: go("/dashboard/accounts"), keywords: "integrations plateformes" },
       { id: "nav-performance", label: "Performance et risque", group: "Navigation", icon: Activity, run: go("/dashboard/performance"), keywords: "sharpe drawdown volatilite risque benchmark" },
       { id: "nav-seasonal", label: "Saisonnalité", group: "Navigation", icon: CalendarDays, run: go("/dashboard/seasonal"), keywords: "saison mensuel" },
+      { id: "nav-recap", label: "Rétrospective de l'année", group: "Navigation", icon: History, run: go("/dashboard/recap"), keywords: "bilan annee wrapped habitudes frais verdict ventes" },
       { id: "nav-tax", label: "Déclaration fiscale", group: "Navigation", icon: FileText, run: go("/dashboard/tax-report"), keywords: "impots 2086 fisc" },
       { id: "nav-transactions", label: "Transactions", group: "Navigation", icon: ArrowLeftRight, run: go("/dashboard/transactions"), keywords: "trades historique" },
       {

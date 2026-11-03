@@ -1,5 +1,5 @@
 import {
-  Activity, ArrowLeftRight, CalendarDays, FileText, KeyRound, LayoutDashboard,
+  Activity, ArrowLeftRight, CalendarDays, FileText, History, KeyRound, LayoutDashboard,
   Sparkles, Wallet, type LucideIcon,
 } from "lucide-react"
 
@@ -25,6 +25,7 @@ export const navSections: NavSection[] = [
       { href: "/dashboard/accounts", label: "Mes comptes", shortLabel: "Comptes", icon: Wallet },
       { href: "/dashboard/performance", label: "Performance", shortLabel: "Analyse", icon: Activity },
       { href: "/dashboard/seasonal", label: "Saisonnalité", icon: CalendarDays },
+      { href: "/dashboard/recap", label: "Rétrospective", icon: History },
     ],
   },
   {

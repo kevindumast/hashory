@@ -40,7 +40,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { type TransactionEntry, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
-import { EUR_STABLECOINS, USD_STABLECOINS, isFiat, normalizeAsset, splitPair } from "@/lib/ledger"
+import { EUR_STABLECOINS, USD_STABLECOINS, isFiat, normalizeAsset } from "@/lib/ledger"
+import { tradeFlows } from "@/lib/trade-flows"
 import { FiatIcon, hasFiatIcon } from "@/components/ui/fiat-icon"
 import {
   REVIEW_REASON_LABELS,
@@ -161,22 +162,6 @@ const isEur = (asset: string) => asset === "EUR" || EUR_STABLECOINS.has(asset)
 function needsSpotPrice(asset: string): boolean {
   const normalized = normalizeAsset(asset)
   return !isUsd(normalized) && !isEur(normalized) && !isFiat(normalized)
-}
-
-type TradeEntry = Extract<TransactionEntry, { type: "trade" }>
-
-function hasRecordedAssets(tx: TradeEntry): boolean {
-  return !!tx.fromAsset && !!tx.toAsset && (tx.fromAmount ?? 0) > 0 && (tx.toAmount ?? 0) > 0
-}
-
-/** Base et cotation d'un échange : actifs enregistrés d'abord, symbole ensuite. */
-function tradePair(tx: TradeEntry): { base: string; quote: string } | null {
-  if (hasRecordedAssets(tx)) {
-    const from = normalizeAsset(tx.fromAsset!)
-    const to = normalizeAsset(tx.toAsset!)
-    return tx.side === "BUY" ? { base: to, quote: from } : { base: from, quote: to }
-  }
-  return splitPair(tx.symbol)
 }
 
 function valueOf(
@@ -314,8 +299,8 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
     const assets = new Set<string>()
     for (const tx of transactions) {
       if (tx.type === "trade") {
-        const quote = tradePair(tx)?.quote
-        if (quote && needsSpotPrice(quote)) assets.add(quote)
+        const flows = tradeFlows(tx)
+        if (flows.pairKnown && needsSpotPrice(flows.quote.asset)) assets.add(flows.quote.asset)
       } else if (tx.baseAsset && needsSpotPrice(tx.baseAsset)) {
         assets.add(normalizeAsset(tx.baseAsset))
       }
@@ -364,21 +349,13 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
       const account = tx.providerDisplayName
 
       if (tx.type === "trade") {
-        const pair = tradePair(tx)
-        const base = pair?.base ?? tx.baseAsset
-        const quote = pair?.quote ?? "?"
-        // Les actifs donnés/reçus enregistrés priment sur le découpage du
-        // symbole, ambigu pour USDTUSD (USDT·USD ou USD·TUSD).
-        const known = hasRecordedAssets(tx)
-        const baseQty = known ? (tx.side === "BUY" ? tx.toAmount! : tx.fromAmount!) : tx.quantity
-        const quoteQty = known
-          ? (tx.side === "BUY" ? tx.fromAmount! : tx.toAmount!)
-          : (tx.quoteQuantity ?? tx.price * tx.quantity)
-        const baseFlow = { quantity: baseQty, currency: base }
-        const quoteFlow = { quantity: quoteQty, currency: quote }
-        const out = tx.side === "BUY" ? quoteFlow : baseFlow
-        const received = tx.side === "BUY" ? baseFlow : quoteFlow
-        const value = pair ? valueOf(quote, quoteQty, eurPerUsd, spotPrices) : { usd: null, eur: null, approximate: false }
+        const flows = tradeFlows(tx)
+        const pair = flows.pairKnown ? { base: flows.base.asset, quote: flows.quote.asset } : null
+        const out = { quantity: flows.given.quantity, currency: flows.given.asset }
+        const received = { quantity: flows.received.quantity, currency: flows.received.asset }
+        const value = pair
+          ? valueOf(flows.quote.asset, flows.quote.quantity, eurPerUsd, spotPrices)
+          : { usd: null, eur: null, approximate: false }
         return {
           id: tx.id,
           kind: "trade",
