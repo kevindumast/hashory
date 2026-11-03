@@ -262,6 +262,24 @@ describe("transferts", () => {
     assert.equal(cheap.untrackedOutflows.length, 1);
   });
 
+  it("déduit le prix d'un jeton sans cours du swap lui-même", () => {
+    const chain = chainOf(
+      {
+        ...empty,
+        trades: [buy("b", "BTC", 1, 10_000, day(0))],
+        withdrawals: [{ id: "w", account: "exchange", asset: "BTC", amount: 0.25, fee: 0, timestamp: day(5) }],
+        deposits: [{ id: "d", account: "sol", asset: "IO", amount: 100, timestamp: day(5) + 120_000 }],
+      },
+      prices
+    );
+    assert.equal(chain.serviceSwaps.length, 1);
+    const [swap] = chain.serviceSwaps;
+    assert.equal(swap.implied?.side, "received");
+    close(swap.receivedEur, swap.givenEur);
+    close(swap.implied!.priceEur, swap.givenEur / 100);
+    assert.equal(chain.unknownCostInflows.length, 0);
+  });
+
   it("ignore les faux jetons d'empoisonnement d'adresse", () => {
     assert.equal(isSpoofedSymbol("ꓴꓢꓓС"), true);
     assert.equal(isSpoofedSymbol("USDC"), false);

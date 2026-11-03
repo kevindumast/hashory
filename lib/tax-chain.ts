@@ -123,6 +123,11 @@ export type ServiceSwap = {
   received: { account: string; asset: string; quantity: number; txId?: string };
   givenEur: number;
   receivedEur: number;
+  /**
+   * Un côté n'avait pas de cours : sa valeur est celle de l'autre, au taux
+   * de l'échange lui-même. `priceEur` est alors le prix unitaire déduit.
+   */
+  implied?: { side: "given" | "received"; priceEur: number };
 };
 
 /** Délai maximal entre l'envoi et la réception d'un échange via un service. */
@@ -131,6 +136,8 @@ export const SWAP_WINDOW_MS = 2 * 3_600_000;
 const SWAP_MIN_RATIO = 0.8;
 /** … et pas plus que l'envoi, à l'écart des cours près. */
 const SWAP_MAX_RATIO = 1.05;
+/** Sans cours d'un côté, la réception doit suivre l'envoi de près. */
+export const IMPLIED_SWAP_WINDOW_MS = 30 * 60_000;
 
 /**
  * Symbole imitant un vrai jeton avec des caractères d'autres alphabets
@@ -150,7 +157,7 @@ export function isSpoofedSymbol(asset: string): boolean {
 function matchServiceSwaps(
   operations: Operation[],
   valueEur: (asset: string, quantity: number, timestamp: number) => number | null
-): Map<string, TransferOperation> {
+): Map<string, { deposit: TransferOperation; implied: boolean }> {
   const open = (kind: "deposit" | "withdrawal") =>
     operations.filter(
       (op): op is TransferOperation =>
@@ -158,24 +165,48 @@ function matchServiceSwaps(
     );
   const deposits = open("deposit");
   const used = new Set<string>();
-  const pairs = new Map<string, TransferOperation>();
+  const pairs = new Map<string, { deposit: TransferOperation; implied: boolean }>();
 
   for (const withdrawal of open("withdrawal").sort((a, b) => a.timestamp - b.timestamp)) {
     const sent = valueEur(withdrawal.asset, withdrawal.quantity, withdrawal.timestamp);
-    if (sent === null || sent <= 0) continue;
-    const match = deposits
-      .filter((deposit) => {
-        if (used.has(deposit.id) || deposit.asset === withdrawal.asset) return false;
-        const delay = deposit.timestamp - withdrawal.timestamp;
-        // Strictement après : à horodatage égal, le livre range le dépôt en premier.
-        if (delay <= 0 || delay > SWAP_WINDOW_MS) return false;
-        const received = valueEur(deposit.asset, deposit.quantity, deposit.timestamp);
-        return received !== null && received >= sent * SWAP_MIN_RATIO && received <= sent * SWAP_MAX_RATIO;
-      })
-      .sort((a, b) => a.timestamp - b.timestamp)[0];
-    if (match) {
-      used.add(match.id);
-      pairs.set(withdrawal.id, match);
+    const inWindow = (deposit: TransferOperation, window: number) => {
+      if (used.has(deposit.id) || deposit.asset === withdrawal.asset) return false;
+      const delay = deposit.timestamp - withdrawal.timestamp;
+      // Strictement après : à horodatage égal, le livre range le dépôt en premier.
+      return delay > 0 && delay <= window;
+    };
+
+    // Les deux côtés ont un cours : les valeurs doivent se répondre.
+    const priced =
+      sent !== null && sent > 0
+        ? deposits
+            .filter((deposit) => {
+              if (!inWindow(deposit, SWAP_WINDOW_MS)) return false;
+              const received = valueEur(deposit.asset, deposit.quantity, deposit.timestamp);
+              return received !== null && received >= sent * SWAP_MIN_RATIO && received <= sent * SWAP_MAX_RATIO;
+            })
+            .sort((a, b) => a.timestamp - b.timestamp)[0]
+        : undefined;
+    if (priced) {
+      used.add(priced.id);
+      pairs.set(withdrawal.id, { deposit: priced, implied: false });
+      continue;
+    }
+
+    // Un côté sans cours (jeton peu coté) : c'est l'échange qui donne son
+    // prix. Faute de pouvoir comparer les valeurs, on exige une réception
+    // rapide et sans ambiguïté — un seul candidat sans cours.
+    const unpriced = deposits.filter(
+      (deposit) =>
+        inWindow(deposit, IMPLIED_SWAP_WINDOW_MS) &&
+        (sent === null || valueEur(deposit.asset, deposit.quantity, deposit.timestamp) === null)
+    );
+    const pricedSide =
+      unpriced.length === 1 &&
+      (sent !== null || valueEur(unpriced[0].asset, unpriced[0].quantity, unpriced[0].timestamp) !== null);
+    if (pricedSide) {
+      used.add(unpriced[0].id);
+      pairs.set(withdrawal.id, { deposit: unpriced[0], implied: true });
     }
   }
   return pairs;
@@ -274,11 +305,19 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
     if (operation.kind !== "exchange" && isSpoofedSymbol(operation.asset)) continue;
 
     // Échange via un service : le coût des jetons envoyés passe aux jetons reçus.
-    const swapDeposit = operation.kind === "withdrawal" ? swaps.get(operation.id) : undefined;
-    if (operation.kind === "withdrawal" && swapDeposit) {
+    const swap = operation.kind === "withdrawal" ? swaps.get(operation.id) : undefined;
+    if (operation.kind === "withdrawal" && swap) {
+      const swapDeposit = swap.deposit;
       const carried = remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp);
       add(swapDeposit.account, swapDeposit.asset, swapDeposit.quantity, carried);
       settled.add(swapDeposit.id);
+      const givenEur = valueEur(operation.asset, operation.quantity, operation.timestamp);
+      const receivedEur = valueEur(swapDeposit.asset, swapDeposit.quantity, swapDeposit.timestamp);
+      const implied: ServiceSwap["implied"] = !swap.implied
+        ? undefined
+        : receivedEur === null
+          ? { side: "received", priceEur: (givenEur ?? 0) / swapDeposit.quantity }
+          : { side: "given", priceEur: receivedEur / operation.quantity };
       serviceSwaps.push({
         date: operation.timestamp,
         given: { account: operation.account, asset: operation.asset, quantity: operation.quantity, txId: operation.txId },
@@ -288,8 +327,9 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
           quantity: swapDeposit.quantity,
           txId: swapDeposit.txId,
         },
-        givenEur: valueEur(operation.asset, operation.quantity, operation.timestamp) ?? 0,
-        receivedEur: valueEur(swapDeposit.asset, swapDeposit.quantity, swapDeposit.timestamp) ?? 0,
+        givenEur: givenEur ?? receivedEur ?? 0,
+        receivedEur: receivedEur ?? givenEur ?? 0,
+        ...(implied ? { implied } : {}),
       });
       continue;
     }

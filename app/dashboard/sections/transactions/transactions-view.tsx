@@ -16,6 +16,7 @@ import {
   Columns3,
   Copy,
   Download,
+  ExternalLink,
   LoaderCircle,
   Plus,
   Search,
@@ -42,6 +43,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { type TransactionEntry, currencyFormatter } from "@/hooks/dashboard/useDashboardMetrics"
 import { EUR_STABLECOINS, USD_STABLECOINS, isFiat, normalizeAsset } from "@/lib/ledger"
 import { tradeFlows } from "@/lib/trade-flows"
+import { explorerUrl, isOnchainProvider, isSpoofedSymbol, onchainSummary, type OnchainSummary } from "@/lib/onchain"
+import { useActiveQuery } from "@/hooks/usePageActivity"
+import { api } from "@/convex/_generated/api"
 import { FiatIcon, hasFiatIcon } from "@/components/ui/fiat-icon"
 import {
   REVIEW_REASON_LABELS,
@@ -142,6 +146,9 @@ type Row = {
   txId: string | null
   network: string | null
   status: string | null
+  provider: string
+  /** Moitié d'un échange via un service (Tangem, pont…) : « BTC → USDT ». */
+  swap: string | null
 }
 
 const TRADE_LABELS: Record<string, string> = {
@@ -185,10 +192,11 @@ function valueOf(
 
 // ─── Onglets, filtres, colonnes ───────────────────────────────────────────
 
-type TabId = "all" | "taxable" | "review"
+type TabId = "all" | "onchain" | "taxable" | "review"
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "all", label: "Toutes" },
+  { id: "onchain", label: "On-chain" },
   { id: "taxable", label: "Imposables" },
   { id: "review", label: "À vérifier" },
 ]
@@ -341,6 +349,19 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   const pricesLoaded = !spotKey || spot?.key === spotKey
   const spotPrices = React.useMemo(() => spot?.prices ?? {}, [spot])
 
+  // Échanges via un service reconnus par le calcul fiscal (un document déjà
+  // enregistré) : chaque moitié, retrouvée par son hash, porte « BTC → USDT ».
+  const taxReport = useActiveQuery(api.taxReport.computeTaxReport)
+  const swapByTx = React.useMemo(() => {
+    const map = new Map<string, string>()
+    for (const swap of taxReport?.serviceSwaps ?? []) {
+      const label = `${swap.given.asset} → ${swap.received.asset}`
+      if (swap.given.txId) map.set(swap.given.txId.toLowerCase(), label)
+      if (swap.received.txId) map.set(swap.received.txId.toLowerCase(), label)
+    }
+    return map
+  }, [taxReport])
+
   const rows = React.useMemo<Row[]>(() => {
     return transactions.map((tx) => {
       const timestamp = tx.type === "trade" ? tx.executedAt : tx.timestamp
@@ -377,6 +398,8 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
           txId: null,
           network: null,
           status: null,
+          provider: tx.provider,
+          swap: null,
         }
       }
 
@@ -397,14 +420,18 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
         valueEur: value.eur,
         approximate: value.approximate,
         taxable: false,
-        reasons: reviewReasons({ type: tx.type, valueUsd: value.usd, pairKnown: true, pricesLoaded }),
+        reasons: isSpoofedSymbol(flow.currency)
+          ? ["spoofed"]
+          : reviewReasons({ type: tx.type, valueUsd: value.usd, pairKnown: true, pricesLoaded }),
         externalId: platformReference(tx.externalId),
         txId: tx.txId,
         network: tx.network,
         status: tx.status,
+        provider: tx.provider,
+        swap: tx.txId ? swapByTx.get(tx.txId.toLowerCase()) ?? null : null,
       }
     })
-  }, [transactions, rateAt, spotPrices, pricesLoaded])
+  }, [transactions, rateAt, spotPrices, pricesLoaded, swapByTx])
 
   const tokenOptions = React.useMemo(() => {
     const tokens = new Set<string>()
@@ -434,6 +461,7 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   const counts = React.useMemo(
     () => ({
       all: filtered.length,
+      onchain: filtered.filter((row) => isOnchainProvider(row.provider)).length,
       taxable: filtered.filter((row) => row.taxable).length,
       review: filtered.filter((row) => row.reasons.length > 0).length,
     }),
@@ -442,7 +470,8 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
 
   const visibleRows = React.useMemo(() => {
     const inTab =
-      tab === "taxable" ? filtered.filter((row) => row.taxable)
+      tab === "onchain" ? filtered.filter((row) => isOnchainProvider(row.provider))
+      : tab === "taxable" ? filtered.filter((row) => row.taxable)
       : tab === "review" ? filtered.filter((row) => row.reasons.length > 0)
       : filtered
     const sign = sort.dir === "asc" ? 1 : -1
@@ -542,7 +571,28 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   const { getCmcIconUrl } = useCmcTokenMap(iconSymbols)
 
   const detail = detailId ? rows.find((row) => row.id === detailId) ?? null : null
-  const hint = TAB_HINTS[tab]
+  const summary = React.useMemo(
+    () =>
+      onchainSummary(
+        filtered.map((row) => ({
+          kind: row.kind,
+          provider: row.provider,
+          asset: (row.out ?? row.in)?.currency ?? null,
+          feeUsd:
+            row.fee && row.valueUsd !== null && row.out && row.out.quantity > 0 && row.feeAsset === row.out.currency
+              ? (row.fee * row.valueUsd) / row.out.quantity
+              : null,
+          txId: row.txId,
+        })),
+      ),
+    [filtered],
+  )
+  const hint =
+    tab === "onchain" ? (
+      <OnchainHint summary={summary} swaps={taxReport?.serviceSwaps?.length ?? 0} />
+    ) : (
+      TAB_HINTS[tab]
+    )
   const hasRows = transactions.length > 0
 
   return (
@@ -1016,12 +1066,58 @@ function KindIcon({ kind, className }: { kind: Kind; className?: string }) {
   )
 }
 
+/** Bilan en tête de l'onglet « On-chain ». */
+function OnchainHint({ summary, swaps }: { summary: OnchainSummary; swaps: number }) {
+  return (
+    <span className="flex flex-col gap-2">
+      <span>
+        Opérations lues directement sur la blockchain, depuis vos wallets en auto-garde. Chaque hash ouvre
+        l&apos;explorateur du réseau : c&apos;est la preuve à garder.
+      </span>
+      <span className="flex flex-wrap gap-1.5">
+        {summary.networks.map((network) => (
+          <span key={network.provider} className="chip bg-card text-[11px] text-foreground ring-1 ring-line">
+            {network.name}
+            <span className="num font-normal text-muted-foreground">{network.count}</span>
+          </span>
+        ))}
+        {swaps > 0 && (
+          <span className="chip chip-jade text-[11px]">
+            {swaps} swap{swaps > 1 ? "s" : ""} via un service
+          </span>
+        )}
+        {summary.gasUsd > 0 && (
+          <span className="chip bg-card text-[11px] text-foreground ring-1 ring-line">
+            Frais réseau <span className="num font-normal text-muted-foreground">{currencyFormatter.format(summary.gasUsd)}</span>
+          </span>
+        )}
+        {summary.spoofed > 0 && (
+          <span className="chip bg-negative/10 text-[11px] text-negative" title="Jetons imitant un vrai symbole, envoyés par des arnaqueurs : Hashory les ignore dans ses calculs.">
+            {summary.spoofed} faux jeton{summary.spoofed > 1 ? "s" : ""} ignoré{summary.spoofed > 1 ? "s" : ""}
+          </span>
+        )}
+      </span>
+    </span>
+  )
+}
+
 function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
-  if (!row.taxable && row.reasons.length === 0) return null
+  if (!row.taxable && row.reasons.length === 0 && !row.swap) return null
+  const spoofed = row.reasons.includes("spoofed")
   return (
     <span className={cn("flex items-center gap-2 text-[11px] font-bold", !compact && "mt-0.5")}>
       {row.taxable && <span className="text-violet">Imposable</span>}
-      {row.reasons.length > 0 && (
+      {row.swap && (
+        <span className="text-jade" title="Échange via un service (swap, pont) : crypto contre crypto, en sursis d'imposition.">
+          Swap {row.swap}
+        </span>
+      )}
+      {spoofed && (
+        <span className="text-negative" title={REVIEW_REASON_LABELS.spoofed}>
+          Faux jeton
+        </span>
+      )}
+      {row.reasons.length > 0 && !spoofed && (
         <span className="inline-flex items-center gap-1 text-muted-foreground" title={row.reasons.map((r) => REVIEW_REASON_LABELS[r]).join(" · ")}>
           <CircleAlert className="size-3" aria-hidden />
           À vérifier
@@ -1224,6 +1320,21 @@ function TransactionDetail({
               {row.txId && (
                 <DetailItem label="Hash on-chain">
                   <CopyValue value={row.txId} />
+                  {explorerUrl(row.provider, row.txId) && (
+                    <a
+                      href={explorerUrl(row.provider, row.txId)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-violet hover:underline"
+                    >
+                      Voir sur l&apos;explorateur <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </DetailItem>
+              )}
+              {row.swap && (
+                <DetailItem label="Swap via un service" note="Échange crypto contre crypto, en sursis d'imposition">
+                  <span className="text-sm font-bold text-jade">{row.swap}</span>
                 </DetailItem>
               )}
               <DetailItem label="ID Hashory">
