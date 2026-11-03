@@ -10,7 +10,7 @@ export function SeasonalPageClient() {
   const [selectedIntegration, setSelectedIntegration] = useState<string>("all");
 
   // Une série par périmètre, calculée côté serveur depuis le grand livre.
-  const { snapshots, isComputing } = usePortfolioSnapshots(
+  const { snapshots, isComputing, isLoading } = usePortfolioSnapshots(
     selectedIntegration === "all" ? undefined : selectedIntegration
   );
   const { integrations } = useDashboardData();
@@ -34,7 +34,7 @@ export function SeasonalPageClient() {
         integrations={integrations}
         selectedIntegration={selectedIntegration}
         onSelectIntegration={setSelectedIntegration}
-        isLoading={isComputing && snapshots.length === 0}
+        isLoading={(isLoading || isComputing) && snapshots.length === 0}
       />
     </div>
   );

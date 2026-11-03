@@ -15,7 +15,7 @@ import { CurrencyToggle, type DisplayCurrency } from "@/components/dashboard/cur
 import { cn } from "@/lib/utils";
 
 const formatters: Record<DisplayCurrency, Intl.NumberFormat> = {
-  USD: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "USD", maximumFractionDigits: 0 }),
+  USD: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "USD", currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 }),
   EUR: new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }),
 };
 
@@ -316,6 +316,16 @@ export function PortfolioStatement({
                 </span>
                 <span className="text-sm text-muted-foreground">en poche</span>
               </div>
+              {liquidation.gain <= 0 ? (
+                // En moins-value, rien à décomposer : la barre et l'impôt à 0
+                // en rouge laissaient croire à une erreur.
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Aucun impôt : le portefeuille est en moins-value fiscale de{" "}
+                  <span className="num text-negative">{fmt.format(-liquidation.gain)}</span>, qui
+                  s&apos;imputerait sur vos plus-values de l&apos;année.
+                </p>
+              ) : (
+              <>
               <p className="mt-1 text-sm text-muted-foreground">
                 <span className="num text-foreground">{fmt.format(liquidation.proceeds)}</span> de
                 vente, moins <span className="num text-negative">{fmt.format(liquidation.tax)}</span>{" "}
@@ -352,6 +362,8 @@ export function PortfolioStatement({
                 du CGI) : {(liquidation.effectiveRate * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} %
                 de toute vente partirait en impôt aux conditions actuelles.
               </p>
+              </>
+              )}
             </div>
           </div>
         )}

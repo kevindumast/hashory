@@ -25,9 +25,9 @@ export function TransactionsPerYear({ transactions }: { transactions: Transactio
           <thead>
             <tr className="border-y border-border">
               <th className="px-5 py-2 text-left num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Année</th>
-              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Trades</th>
-              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Dépôts</th>
-              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Retraits</th>
+              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Échanges</th>
+              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Entrées</th>
+              <th className="px-3 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Sorties</th>
               <th className="px-5 py-2 text-right num text-[10px] uppercase tracking-[0.24em] text-muted-foreground font-normal">Total</th>
             </tr>
           </thead>

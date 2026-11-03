@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/dialog"
 import { Switch } from "@/components/ui/switch"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { PROVIDER_NAMES } from "@/lib/provider-names"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,22 +69,6 @@ import type { Id } from "@/convex/_generated/dataModel"
 type AccountStatus = "synced" | "error" | "unsupported" | "syncing"
 
 
-const PROVIDER_NAMES: Record<string, string> = {
-  binance: "Binance",
-  kraken: "Kraken",
-  kucoin: "KuCoin",
-  ethereum: "Ethereum",
-  bitcoin: "Bitcoin",
-  arbitrum: "Arbitrum One",
-  base: "Base",
-  bsc: "BNB Smart Chain",
-  solana: "Solana",
-  kaspa: "Kaspa",
-  tao: "Bittensor (TAO)",
-  bitstack: "Bitstack",
-  finary: "Finary",
-  strike: "Strike",
-}
 
 
 type AccountType = "All" | "API" | "File"
@@ -187,7 +172,13 @@ export function AccountsView() {
         (tx) => tx.integrationId === integration._id
       )
       const lastSync = integration.lastSyncedAt
-        ? new Date(integration.lastSyncedAt).toLocaleString("fr-FR")
+        ? new Date(integration.lastSyncedAt).toLocaleString("fr-FR", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+          })
         : "Jamais"
 
       const status: AccountStatus = (integration.syncStatus === "syncing"
@@ -659,7 +650,7 @@ export function AccountsView() {
           filteredAccounts.map((account) => (
             <Accordion type="single" collapsible key={account.id} className="bg-card rounded-lg border border-border overflow-hidden transition-colors hover:border-primary/30">
               <AccordionItem value={account.id} className="border-none">
-                <AccordionTrigger className="min-w-0 px-4 sm:px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
+                <AccordionTrigger className="min-w-0 items-center px-4 sm:px-5 py-4 hover:no-underline hover:bg-muted/40 transition-colors group [&>svg]:text-muted-foreground">
                   {/* min-w-0 : sans lui, la ligne refusait de rétrécir sous la
                       taille de son contenu et débordait de la carte sur mobile. */}
                   <div className="flex min-w-0 items-center justify-between w-full pr-2 gap-3">
@@ -673,9 +664,15 @@ export function AccountsView() {
                         {account.accountCreatedAt && (
                           <span className="text-xs text-muted-foreground hidden sm:inline">depuis le {account.accountCreatedAt}</span>
                         )}
-                        <div className="flex shrink-0 items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50">
-                          <span className="text-[11px] font-medium text-muted-foreground">{account.subAccountsCount}</span>
-                        </div>
+                        {/* Un seul sous-compte : la pastille « 1 » ne disait rien. */}
+                        {account.subAccountsCount > 1 && (
+                          <div
+                            className="flex shrink-0 items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full border border-border bg-muted/50"
+                            title={`${account.subAccountsCount} sous-comptes`}
+                          >
+                            <span className="text-[11px] font-medium text-muted-foreground">{account.subAccountsCount}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
 

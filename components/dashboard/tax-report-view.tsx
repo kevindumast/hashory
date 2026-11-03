@@ -15,7 +15,7 @@ import { useRecomputeTrigger } from "@/hooks/usePortfolioSnapshots";
 
 const usd = new Intl.NumberFormat("fr-FR", {
   style: "currency",
-  currency: "USD",
+  currency: "USD", currencyDisplay: "narrowSymbol",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 });
@@ -234,13 +234,13 @@ export function TaxReportView() {
                   </p>
                   {result?.hasOnlyStablecoinTrades && (
                     <p>
-                      Tes trades sont des échanges <strong className="text-foreground">crypto ↔ stablecoin</strong>{" "}
-                      (ex : BTCUSDT) — non taxables en France depuis la loi de finances 2019.
+                      Vos échanges sont des conversions <strong className="text-foreground">crypto ↔ stablecoin</strong>{" "}
+                      (ex : BTC → USDT), non imposables en France depuis la loi de finances 2019.
                     </p>
                   )}
                   <p className="text-xs mt-2">
-                    Une cession taxable nécessite une vente via la passerelle fiat Binance (EUR) ou
-                    un trade sur une paire EUR directe (ex : BTCEUR, ETHEUR).
+                    Seule une vente contre euros, dollars ou une autre monnaie légale (ex : BTC → EUR)
+                    constitue une cession imposable.
                   </p>
                 </div>
               ) : (

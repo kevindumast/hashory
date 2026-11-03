@@ -158,6 +158,11 @@ export type TransactionEntry =
       fee?: number;
       feeAsset?: string;
       executedAt: number;
+      /** Actifs donnés et reçus quand la plateforme les fournit : plus sûrs que le découpage du symbole. */
+      fromAsset?: string;
+      fromAmount?: number;
+      toAsset?: string;
+      toAmount?: number;
     }
   | {
       type: "deposit";
@@ -570,6 +575,10 @@ export function useDashboardMetrics(refreshToken: number) {
       fee: trade.fee,
       feeAsset: trade.feeAsset,
       executedAt: trade.executedAt,
+      fromAsset: trade.fromAsset,
+      fromAmount: trade.fromAmount,
+      toAsset: trade.toAsset,
+      toAmount: trade.toAmount,
     }));
 
     depositList.forEach((deposit) => {

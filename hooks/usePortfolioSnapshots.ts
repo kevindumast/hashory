@@ -149,6 +149,8 @@ export function useRecomputeTrigger(): boolean {
 export function usePortfolioSnapshots(scope?: string): {
   snapshots: PortfolioSnapshot[];
   isComputing: boolean;
+  /** Vrai tant que la série n'est pas arrivée : à distinguer d'une série vide. */
+  isLoading: boolean;
   lastComputedDay: number | null;
 } {
   const { user, isLoaded } = useUser();
@@ -181,6 +183,7 @@ export function usePortfolioSnapshots(scope?: string): {
   return {
     snapshots: list,
     isComputing,
+    isLoading: !Array.isArray(snapshots),
     lastComputedDay: state?.lastComputedDay ?? null,
   };
 }
