@@ -13,20 +13,41 @@ const qty = new Intl.NumberFormat("fr-FR", { maximumSignificantDigits: 6 });
 const dateLabel = (timestamp: number) =>
   new Date(timestamp).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 
-const REASON: Record<NonNullable<FlaggedFlow["reason"]> | "outflow", { label: string; hint: string }> = {
+type Reason = { label: string; hint: string; tone: "warn" | "ok" };
+
+const REASON: Record<NonNullable<FlaggedFlow["reason"]> | "outflow" | "gift" | "rounding", Reason> = {
   "untracked-deposit": {
-    label: "Dépôt",
+    label: "Reçu, origine inconnue",
     hint: "Reçu d'un compte que Hashory ne suit pas : connectez-le pour retrouver le prix d'achat.",
+    tone: "warn",
+  },
+  gift: {
+    label: "Cadeau de la plateforme",
+    hint: "Crédit offert par la plateforme (bonus, parrainage, récompense) : sans achat, son coût nul est le bon.",
+    tone: "ok",
+  },
+  rounding: {
+    label: "Écart d'arrondi",
+    hint: "Quelques centimes d'écart entre l'historique et le solde (frais, arrondis de la plateforme) : sans effet sur l'impôt.",
+    tone: "ok",
   },
   "missing-history": {
     label: "Vendu sans achat connu",
     hint: "Le compte a cédé plus qu'il ne détenait : son historique commence sans doute trop tard.",
+    tone: "warn",
   },
   outflow: {
     label: "Envoi",
     hint: "Parti vers une adresse ou un compte non suivi : connectez-le s'il est à vous.",
+    tone: "warn",
   },
 };
+
+/**
+ * Plateformes qui ne reçoivent jamais de crypto de l'extérieur : un crédit en
+ * crypto sans achat y est forcément un cadeau (Bitstack offre des sats).
+ */
+const GIFTING_PROVIDERS = new Set(["bitstack"]);
 
 /** En deçà, une opération ne pèse pas sur l'impôt : on la range à part. */
 const NEGLIGIBLE_EUR = 1;
@@ -66,6 +87,16 @@ export function FlaggedFlows({
     [integrations]
   );
   const nameOf = (account: string) => names.get(account) ?? "Compte supprimé";
+  const providers = useMemo(
+    () => new Map(integrations.map((integration) => [String(integration._id), integration.provider.toLowerCase()])),
+    [integrations]
+  );
+  const reasonOf = (item: FlaggedFlow): Reason => {
+    if (direction === "out") return REASON.outflow;
+    if (item.reason !== "missing-history" && GIFTING_PROVIDERS.has(providers.get(item.account) ?? "")) return REASON.gift;
+    if (item.reason === "missing-history" && isSmall(item)) return REASON.rounding;
+    return REASON[item.reason ?? "untracked-deposit"];
+  };
 
   const byAccount = useMemo(() => {
     const groups = new Map<string, { count: number; valueEur: number }>();
@@ -112,7 +143,7 @@ export function FlaggedFlows({
         <div className="mt-2 overflow-hidden rounded-xl border border-line">
           <ul className="max-h-96 divide-y divide-line overflow-y-auto">
             {items.map((item, i) => {
-              const reason = REASON[direction === "out" ? "outflow" : item.reason ?? "untracked-deposit"];
+              const reason = reasonOf(item);
               // Triés par valeur : les petits montants viennent en bloc, à la fin.
               const firstSmall = isSmall(item) && (i === 0 || !isSmall(items[i - 1]));
               return (
@@ -133,7 +164,13 @@ export function FlaggedFlows({
                     </p>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                       <span className="num">{dateLabel(item.date)}</span>
-                      <span title={reason.hint} className="chip bg-chart-4/10 px-1.5 py-0 text-[10px] text-chart-4">
+                      <span
+                        title={reason.hint}
+                        className={cn(
+                          "chip px-1.5 py-0 text-[10px]",
+                          reason.tone === "ok" ? "chip-jade" : "bg-chart-4/10 text-chart-4"
+                        )}
+                      >
                         {reason.label}
                       </span>
                       {item.txId && (
@@ -148,6 +185,7 @@ export function FlaggedFlows({
                         </button>
                       )}
                     </p>
+                    <p className="mt-0.5 text-[11px] leading-relaxed text-faint">{reason.hint}</p>
                   </div>
                   <span className="num shrink-0 text-[13px] font-bold text-foreground">
                     {item.valueEur !== null ? eur.format(item.valueEur) : "cours inconnu"}
