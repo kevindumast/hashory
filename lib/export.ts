@@ -141,6 +141,44 @@ export function taxSheet(year: number, events: TaxSheetEvent[]): Sheet {
   };
 }
 
+export type ForeignAccountSheetRow = {
+  name: string;
+  status: "declare" | "verify" | "exempt" | "closed" | "upcoming";
+  entity?: string;
+  country?: string;
+  openedAt: number | null;
+  closedAt?: number | null;
+  note: string;
+};
+
+const FOREIGN_STATUS: Record<ForeignAccountSheetRow["status"], string> = {
+  declare: "À déclarer",
+  verify: "À vérifier",
+  exempt: "Non concerné",
+  closed: "Clôturé avant l'année déclarée",
+  upcoming: "À déclarer l'an prochain",
+};
+
+/**
+ * Comptes à reporter sur le formulaire 3916-bis : ce qu'il faut pour le
+ * remplir, ou pour le confier à un comptable.
+ */
+export function foreignAccountsSheet(filingYear: number, accounts: ForeignAccountSheetRow[]): Sheet {
+  return {
+    filename: `hashory-3916-bis-${filingYear}.csv`,
+    columns: ["Compte", "Statut", "Entité", "Pays", "Ouverture (au plus tard)", "Clôture", "Remarque"],
+    rows: accounts.map((account) => [
+      account.name,
+      FOREIGN_STATUS[account.status],
+      account.entity,
+      account.country,
+      account.openedAt === null ? null : isoDate(account.openedAt),
+      account.closedAt ? isoDate(account.closedAt) : null,
+      account.note,
+    ]),
+  };
+}
+
 export type PortfolioSheetPosition = {
   symbol: string;
   quantity: number;

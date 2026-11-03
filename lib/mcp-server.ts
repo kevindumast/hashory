@@ -22,6 +22,9 @@ export type McpData = {
   performance(args: Args<typeof api.mcp.performance>): Promise<FunctionReturnType<typeof api.mcp.performance>>;
   transactions(args: Args<typeof api.mcp.transactions>): Promise<FunctionReturnType<typeof api.mcp.transactions>>;
   taxReport(args: Args<typeof api.mcp.taxReport>): Promise<FunctionReturnType<typeof api.mcp.taxReport>>;
+  foreignAccounts(
+    args: Args<typeof api.mcp.foreignAccounts>
+  ): Promise<FunctionReturnType<typeof api.mcp.foreignAccounts>>;
 };
 
 export type McpContext = {
@@ -212,6 +215,35 @@ export function createHashoryMcpServer(ctx: McpContext, data: McpData): McpServe
         "get_tax_report",
         () => data.taxReport({ year, includeEvents: include_events }),
         (report) => report.years.length
+      )
+  );
+
+  server.registerTool(
+    "list_foreign_accounts",
+    {
+      title: "Comptes à l'étranger (3916-bis)",
+      description:
+        "Comptes d'actifs numériques ouverts auprès de prestataires établis hors de France, à reporter sur le " +
+        "formulaire 3916-bis avec la déclaration de revenus. `status` : declare (à déclarer), verify (entité à " +
+        "vérifier), closed (clôturé avant l'année), upcoming (ouvert après, à déclarer l'an prochain), exempt " +
+        "(auto-garde ou prestataire français). `fineEur` est l'amende encourue en cas d'oubli. Les entités sont " +
+        "indicatives : celle qui tient un compte figure dans ses conditions d'utilisation.",
+      inputSchema: {
+        income_year: z
+          .number()
+          .int()
+          .min(2009)
+          .max(2100)
+          .optional()
+          .describe("Année des revenus déclarés. Par défaut, celle de la prochaine déclaration."),
+      },
+      annotations: READ_ONLY,
+    },
+    ({ income_year }) =>
+      run(
+        "list_foreign_accounts",
+        () => data.foreignAccounts({ incomeYear: income_year }),
+        (result) => result.accounts.length
       )
   );
 

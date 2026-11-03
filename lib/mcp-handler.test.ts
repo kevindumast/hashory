@@ -40,6 +40,7 @@ function fakeData(overrides: Partial<McpData> = {}): McpData {
         untrackedOutflows: { count: 0, valueEur: 0 },
       },
     }),
+    foreignAccounts: async () => ({ incomeYear: 2025, filingYear: 2026, accounts: [] }),
     ...overrides,
   };
 }
@@ -178,7 +179,7 @@ describe("handleMcpRequest : outils", () => {
     };
     assert.deepEqual(
       tools.tools.map((tool) => tool.name),
-      ["list_accounts", "get_portfolio", "get_performance", "list_transactions", "get_tax_report"]
+      ["list_accounts", "get_portfolio", "get_performance", "list_transactions", "get_tax_report", "list_foreign_accounts"]
     );
     assert.ok(tools.tools.every((tool) => tool.annotations.readOnlyHint));
   });

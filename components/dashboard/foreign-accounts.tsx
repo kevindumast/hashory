@@ -18,6 +18,9 @@ import {
   type ForeignAccountRow,
 } from "@/lib/foreign-accounts";
 import { accountName } from "@/lib/provider-names";
+import { foreignAccountsSheet } from "@/lib/export";
+import { useDownloadCsv } from "@/components/dashboard/export-preferences";
+import { Download } from "lucide-react";
 import { errorMessage } from "@/lib/toast";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -66,6 +69,7 @@ export function ForeignAccounts({ index }: { index: string }) {
   const { integrations, transactions, portfolioTokens, currentPrices } = useDashboardData();
   const { rateAt } = useFxRates();
   const { incomeYear, filingYear } = declarationPeriod();
+  const downloadCsv = useDownloadCsv();
   const [checked, setChecked] = useState<string[]>([]);
 
   useEffect(() => {
@@ -135,7 +139,24 @@ export function ForeignAccounts({ index }: { index: string }) {
   return (
     <section id="comptes-etranger" className="scroll-mt-24 space-y-4">
       <Reveal>
-        <SectionLabel index={index}>Comptes à l&apos;étranger</SectionLabel>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <SectionLabel index={index}>Comptes à l&apos;étranger</SectionLabel>
+          <Button
+            variant="outline"
+            onClick={() =>
+              downloadCsv(
+                foreignAccountsSheet(
+                  filingYear,
+                  rows.map((row) => ({ ...row, openedAt: openingDate(row) }))
+                )
+              )
+            }
+            className="rounded-full"
+          >
+            <Download />
+            Exporter la liste
+          </Button>
+        </div>
       </Reveal>
 
       <Reveal delay={40}>
