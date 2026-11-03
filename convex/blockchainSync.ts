@@ -1,4 +1,4 @@
-import { mutation } from "./_generated/server";
+import { internalMutation, mutation } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUserId } from "./auth";
 import { internal } from "./_generated/api";
@@ -89,5 +89,48 @@ export const bulkInsertTransactions = mutation({
     }
 
     return { depositsInserted, withdrawalsInserted };
+  },
+});
+
+/**
+ * Renomme l'actif des dépôts et retraits d'une intégration, pour réparer les
+ * lignes importées sous un symbole provisoire (un mint Solana tronqué, par
+ * exemple). La synchro les ignore ensuite, puisqu'elle dédoublonne par
+ * identifiant : sans cette réparation, le symbole fautif resterait.
+ *
+ * npx convex run blockchainSync:renameCoin '{"integrationId":"…","from":"BZLbGTNC","to":"IO"}'
+ */
+export const renameCoin = internalMutation({
+  args: {
+    integrationId: v.id("integrations"),
+    from: v.string(),
+    to: v.string(),
+  },
+  handler: async (ctx, { integrationId, from, to }) => {
+    const target = from.toUpperCase();
+    let deposits = 0;
+    let withdrawals = 0;
+
+    const depositRows = await ctx.db
+      .query("deposits")
+      .withIndex("by_integration", (q) => q.eq("integrationId", integrationId))
+      .collect();
+    for (const row of depositRows) {
+      if (row.coin.toUpperCase() !== target) continue;
+      await ctx.db.patch(row._id, { coin: to });
+      deposits += 1;
+    }
+
+    const withdrawalRows = await ctx.db
+      .query("withdrawals")
+      .withIndex("by_integration", (q) => q.eq("integrationId", integrationId))
+      .collect();
+    for (const row of withdrawalRows) {
+      if (row.coin.toUpperCase() !== target) continue;
+      await ctx.db.patch(row._id, { coin: to });
+      withdrawals += 1;
+    }
+
+    return { deposits, withdrawals };
   },
 });
