@@ -16,7 +16,7 @@ describe("dataProviderForSource", () => {
     assert.equal(dataProviderForSource("ethereum"), "etherscan");
     assert.equal(dataProviderForSource("arbitrum"), "etherscan");
     assert.equal(dataProviderForSource("base"), "blockscout");
-    assert.equal(dataProviderForSource("bsc"), "moralis");
+    assert.equal(dataProviderForSource("bsc"), "alchemy");
     assert.equal(dataProviderForSource("tao"), "taostats");
   });
 

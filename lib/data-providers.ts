@@ -53,12 +53,13 @@ export const DATA_PROVIDERS = [
     placeholder: "Clé d'API Blockscout (proapi_…)",
   },
   {
-    id: "moralis",
-    label: "Moralis",
-    purpose: "Historique des transactions BNB Smart Chain.",
+    id: "alchemy",
+    label: "Alchemy",
+    purpose:
+      "Transferts BNB et jetons BEP-20 sur BNB Smart Chain. Activez le réseau BNB Smart Chain sur l'app Alchemy dont vous copiez la clé.",
     serves: ["BNB Smart Chain"],
-    signupUrl: "https://admin.moralis.com",
-    placeholder: "Clé d'API Moralis",
+    signupUrl: "https://dashboard.alchemy.com",
+    placeholder: "Clé d'API Alchemy",
   },
   {
     id: "taostats",
@@ -93,7 +94,7 @@ const PROVIDER_BY_SOURCE: Record<string, DataProviderId> = {
   ethereum: "etherscan",
   arbitrum: "etherscan",
   base: "blockscout",
-  bsc: "moralis",
+  bsc: "alchemy",
   tao: "taostats",
 };
 

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { dataProviderForSource, isSupportedDataProvider } from "./data-providers";
 import {
+  alchemyRpcUrl,
   EVM_CHAINS,
   EVM_CHAIN_IDS,
   etherscanLikeBaseUrl,
@@ -50,20 +51,23 @@ describe("référentiel des chaînes EVM", () => {
     // Base et BSC répondent « Free API access is not supported for this chain ».
     assert.equal(EVM_CHAINS.arbitrum.dataProvider, "etherscan");
     assert.equal(EVM_CHAINS.base.dataProvider, "blockscout");
-    assert.equal(EVM_CHAINS.bsc.dataProvider, "moralis");
+    assert.equal(EVM_CHAINS.bsc.dataProvider, "alchemy");
   });
 
   it("construit l'URL de l'indexeur de chaque chaîne", () => {
     assert.equal(etherscanLikeBaseUrl(EVM_CHAINS.arbitrum), "https://api.etherscan.io/v2/api?chainid=42161");
     assert.equal(etherscanLikeBaseUrl(EVM_CHAINS.base), "https://api.blockscout.com/v2/api?chain_id=8453");
     assert.equal(etherscanLikeBaseUrl(EVM_CHAINS.bsc), null);
+    assert.equal(alchemyRpcUrl(EVM_CHAINS.bsc, "k3y"), "https://bnb-mainnet.g.alchemy.com/v2/k3y");
+    assert.equal(alchemyRpcUrl(EVM_CHAINS.ethereum, "k3y"), null);
   });
 
   it("isole les curseurs de chaque chaîne", () => {
     const datasets = EVM_CHAIN_IDS.flatMap((id) => [
       evmDataset(EVM_CHAINS[id], "native"),
       evmDataset(EVM_CHAINS[id], "erc20"),
-      evmDataset(EVM_CHAINS[id], "history"),
+      evmDataset(EVM_CHAINS[id], "in"),
+      evmDataset(EVM_CHAINS[id], "out"),
     ]);
     assert.equal(new Set(datasets).size, datasets.length);
   });
