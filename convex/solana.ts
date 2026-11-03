@@ -35,6 +35,93 @@ interface SyncCursor {
   lastSignature: string | null;
 }
 
+const HELIUS_RPC_URL = "https://mainnet.helius-rpc.com";
+/** Plafond de l'API DAS pour un appel getAssetBatch. */
+const ASSET_BATCH_SIZE = 1000;
+
+/**
+ * Mints courants, résolus sans appel réseau. Le wSOL reste distinct du SOL
+ * natif : ses transferts doublent souvent les mouvements natifs du même
+ * échange, les fondre ensemble compterait deux fois le même SOL.
+ */
+const KNOWN_MINTS: Record<string, string> = {
+  EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "USDC",
+  Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB: "USDT",
+  So11111111111111111111111111111111111111112: "WSOL",
+  BZLbGTNCSFfoth2GYDtwr7e4imWzpR5jqcUuGEwr646K: "IO",
+  JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN: "JUP",
+  DezXAZ8z7PnrnRJjz3wXBoRgixCa6xjnB7YaB1pPB263: "BONK",
+};
+
+/**
+ * Symboles qu'un jeton inconnu n'a pas le droit de revendiquer. N'importe qui
+ * peut créer un mint nommé « USDC » et l'envoyer à un wallet : sans ce garde,
+ * ce jeton de spam serait valorisé au cours du vrai.
+ */
+const PROTECTED_SYMBOLS = new Set([
+  ...Object.values(KNOWN_MINTS),
+  "SOL", "BTC", "ETH", "WBTC", "WETH", "DAI", "PYUSD", "USDE", "EURC", "USDS",
+]);
+
+const VALID_SYMBOL_RE = /^[A-Z0-9.]{1,15}$/;
+
+/** Repli historique : les 8 premiers caractères du mint. */
+function fallbackSymbol(mint: string): string {
+  return mint.slice(0, 8);
+}
+
+interface HeliusAsset {
+  id: string;
+  content?: { metadata?: { symbol?: string } };
+  token_info?: { symbol?: string };
+}
+
+/**
+ * Complète `cache` avec le ticker de chaque mint, lu dans les métadonnées du
+ * jeton (API DAS de Helius). Un échec réseau ne bloque pas la synchro : le
+ * mint garde alors son repli tronqué.
+ */
+async function resolveMintSymbols(apiKey: string, mints: string[], cache: Map<string, string>) {
+  const unknown = [...new Set(mints)].filter((mint) => !cache.has(mint));
+  const toFetch: string[] = [];
+  for (const mint of unknown) {
+    const known = KNOWN_MINTS[mint];
+    if (known) cache.set(mint, known);
+    else toFetch.push(mint);
+  }
+
+  for (let i = 0; i < toFetch.length; i += ASSET_BATCH_SIZE) {
+    const ids = toFetch.slice(i, i + ASSET_BATCH_SIZE);
+    let assets: Array<HeliusAsset | null> = [];
+    try {
+      const response = await fetch(`${HELIUS_RPC_URL}/?api-key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: "hashory", method: "getAssetBatch", params: { ids } }),
+      });
+      if (response.ok) {
+        const body = (await response.json()) as { result?: Array<HeliusAsset | null> };
+        assets = Array.isArray(body.result) ? body.result : [];
+      }
+    } catch {
+      // Repli tronqué pour ce lot.
+    }
+
+    const byMint = new Map<string, HeliusAsset>();
+    for (const asset of assets) {
+      if (asset?.id) byMint.set(asset.id, asset);
+    }
+
+    for (const mint of ids) {
+      const asset = byMint.get(mint);
+      const raw = asset?.token_info?.symbol || asset?.content?.metadata?.symbol || "";
+      const symbol = raw.trim().toUpperCase();
+      const usable = VALID_SYMBOL_RE.test(symbol) && !PROTECTED_SYMBOLS.has(symbol);
+      cache.set(mint, usable ? symbol : fallbackSymbol(mint));
+    }
+  }
+}
+
 export const syncSolanaWallet = action({
   args: {
     integrationId: v.id("integrations"),
@@ -81,6 +168,8 @@ export const syncSolanaWallet = action({
       let newFirstSignature: string | null = previousCursor?.lastSignature ?? null;
       let hasMore = true;
       let isFirstPage = true;
+      // Ticker de chaque mint, résolu une fois pour toute la synchro.
+      const mintSymbols = new Map<string, string>();
 
       while (hasMore) {
         let url = `${HELIUS_API_BASE}/addresses/${walletAddress}/transactions?api-key=${apiKey}&limit=${PAGE_SIZE}`;
@@ -112,6 +201,12 @@ export const syncSolanaWallet = action({
         }
 
         let reachedKnown = false;
+
+        await resolveMintSymbols(
+          apiKey,
+          txs.flatMap((tx) => (tx.tokenTransfers ?? []).map((transfer) => transfer.mint)),
+          mintSymbols,
+        );
 
         const deposits: Array<{
           depositId: string;
@@ -173,7 +268,7 @@ export const syncSolanaWallet = action({
           for (const transfer of tx.tokenTransfers) {
             const amount = transfer.tokenAmount;
             if (amount <= 0) continue;
-            const symbol = transfer.mint.slice(0, 8);
+            const symbol = mintSymbols.get(transfer.mint) ?? fallbackSymbol(transfer.mint);
 
             if (transfer.toUserAccount === walletAddress && transfer.fromUserAccount !== walletAddress) {
               deposits.push({
