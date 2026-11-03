@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import {
+  CartesianGrid,
   ComposedChart,
   Line,
   ReferenceArea,
@@ -25,26 +26,45 @@ import {
 } from "@/lib/fear-greed";
 import { Metric, MetricGrid, Notice, SectionLabel } from "./ui";
 
-/**
- * Teinte de chaque zone : froide côté peur, chaude côté avidité, rien au
- * neutre. Le vert et le rouge restent aux achats et aux ventes.
- */
-const ZONE_TINT: Record<FearGreedZone, { color: string; strength: number }> = {
-  "extreme-fear": { color: "var(--chart-3)", strength: 0.18 },
-  fear: { color: "var(--chart-3)", strength: 0.08 },
-  neutral: { color: "transparent", strength: 0 },
-  greed: { color: "var(--chart-4)", strength: 0.08 },
-  "extreme-greed": { color: "var(--chart-4)", strength: 0.18 },
+/** Couleur de chaque zone, du rouge de la peur extrême au vert de l'avidité. */
+const ZONE_COLOR: Record<FearGreedZone, string> = {
+  "extreme-fear": "var(--fg-extreme-fear)",
+  fear: "var(--fg-fear)",
+  neutral: "var(--fg-neutral)",
+  greed: "var(--fg-greed)",
+  "extreme-greed": "var(--fg-extreme-greed)",
 };
 
-/** Teinte pleine, pour la barre de répartition. */
-const ZONE_SOLID: Record<FearGreedZone, string> = {
-  "extreme-fear": "color-mix(in srgb, var(--chart-3) 85%, transparent)",
-  fear: "color-mix(in srgb, var(--chart-3) 45%, transparent)",
-  neutral: "var(--line)",
-  greed: "color-mix(in srgb, var(--chart-4) 45%, transparent)",
-  "extreme-greed": "color-mix(in srgb, var(--chart-4) 85%, transparent)",
-};
+/** Seuls les extrêmes ont un fond : c'est là que l'indice dit quelque chose. */
+const EXTREME_BANDS = [
+  { id: "extreme-greed", y1: 76, y2: 100, label: "Avidité extrême", position: "insideTopRight" },
+  { id: "extreme-fear", y1: 0, y2: 25, label: "Peur extrême", position: "insideBottomRight" },
+] as const;
+
+/**
+ * Arrêts d'un dégradé vertical qui colore la courbe selon sa zone. Le
+ * dégradé couvre la boîte de la courbe, du maximum au minimum atteints :
+ * chaque seuil y est placé en proportion, avec deux arrêts au même point
+ * pour une transition nette.
+ */
+function zoneStops(values: number[]): { offset: number; color: string }[] {
+  if (values.length === 0) return [];
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min;
+  if (span === 0) return [{ offset: 0, color: ZONE_COLOR[zoneOf(max)] }];
+
+  const stops: { offset: number; color: string }[] = [];
+  // Du haut vers le bas : avidité extrême d'abord.
+  for (const zone of [...FEAR_GREED_ZONES].reverse()) {
+    const top = Math.min(zone.max + 1, max);
+    const bottom = Math.max(zone.min, min);
+    if (top < bottom) continue;
+    stops.push({ offset: (max - top) / span, color: ZONE_COLOR[zone.id] });
+    stops.push({ offset: (max - bottom) / span, color: ZONE_COLOR[zone.id] });
+  }
+  return stops;
+}
 
 const usd = (value: number) =>
   value.toLocaleString("fr-FR", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -107,7 +127,7 @@ function ZoneBar({ label, timing }: { label: string; timing: SideTiming }) {
           timing.shareByZone[zone.id] > 0 ? (
             <div
               key={zone.id}
-              style={{ width: `${timing.shareByZone[zone.id] * 100}%`, background: ZONE_SOLID[zone.id] }}
+              style={{ width: `${timing.shareByZone[zone.id] * 100}%`, background: ZONE_COLOR[zone.id] }}
               title={`${zone.label} : ${share(timing.shareByZone[zone.id])}`}
             />
           ) : null
@@ -116,7 +136,7 @@ function ZoneBar({ label, timing }: { label: string; timing: SideTiming }) {
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
         {FEAR_GREED_ZONES.filter((zone) => timing.shareByZone[zone.id] > 0).map((zone) => (
           <span key={zone.id} className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full" style={{ background: ZONE_SOLID[zone.id] }} />
+            <span className="h-2 w-2 rounded-full" style={{ background: ZONE_COLOR[zone.id] }} />
             {zone.label} <span className="num text-foreground">{share(timing.shareByZone[zone.id])}</span>
           </span>
         ))}
@@ -146,6 +166,7 @@ export function MarketMoodSection({ range }: { range: { fromDay: number; toDay: 
     () => new Map(mood.index.map((point) => [point.dayUtc, point.value])),
     [mood.index]
   );
+  const stops = useMemo(() => zoneStops(mood.index.map((point) => point.value)), [mood.index]);
 
   const profile = mood.profile;
   const reading = profile ? verdict(profile) : null;
@@ -234,10 +255,10 @@ export function MarketMoodSection({ range }: { range: { fromDay: number; toDay: 
                 </p>
                 <div className="flex items-center gap-4 text-[11px] text-muted-foreground" aria-hidden>
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-positive" /> Achat
+                    <span className="h-2 w-2 rounded-full bg-violet" /> Achat
                   </span>
                   <span className="flex items-center gap-1.5">
-                    <span className="h-2 w-2 rounded-full bg-negative" /> Vente
+                    <span className="h-2 w-2 rounded-full bg-foreground" /> Vente
                   </span>
                 </div>
               </div>
@@ -247,21 +268,36 @@ export function MarketMoodSection({ range }: { range: { fromDay: number; toDay: 
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={mood.index} margin={{ left: 4, right: 8, top: 4, bottom: 4 }}>
-                    {FEAR_GREED_ZONES.map((zone, position) => {
-                      const tint = ZONE_TINT[zone.id];
-                      const upper = FEAR_GREED_ZONES[position + 1]?.min ?? 100;
-                      return (
-                        <ReferenceArea
-                          key={zone.id}
-                          y1={zone.min}
-                          y2={upper}
-                          fill={tint.color}
-                          fillOpacity={tint.strength}
-                          strokeOpacity={0}
-                          ifOverflow="hidden"
-                        />
-                      );
-                    })}
+                    <defs>
+                      <linearGradient id="fear-greed-line" x1="0" y1="0" x2="0" y2="1">
+                        {stops.map((stop, position) => (
+                          <stop key={position} offset={stop.offset} stopColor={stop.color} />
+                        ))}
+                      </linearGradient>
+                    </defs>
+                    {EXTREME_BANDS.map((band) => (
+                      <ReferenceArea
+                        key={band.id}
+                        y1={band.y1}
+                        y2={band.y2}
+                        fill={ZONE_COLOR[band.id]}
+                        fillOpacity={0.1}
+                        strokeOpacity={0}
+                        ifOverflow="hidden"
+                        label={{
+                          value: band.label,
+                          position: band.position,
+                          fontSize: 10,
+                          fill: "var(--muted-foreground)",
+                        }}
+                      />
+                    ))}
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="var(--border)"
+                      strokeOpacity={0.6}
+                      strokeDasharray="2 3"
+                    />
                     <XAxis
                       dataKey="dayUtc"
                       type="number"
@@ -298,14 +334,18 @@ export function MarketMoodSection({ range }: { range: { fromDay: number; toDay: 
                         return (
                           <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-sm">
                             <p className="text-muted-foreground">{dayLabel(dayUtc)}</p>
-                            <p className="num mt-1 font-semibold text-foreground">
+                            <p className="num mt-1 flex items-center gap-1.5 font-semibold text-foreground">
+                              <span
+                                className="h-2 w-2 rounded-full"
+                                style={{ background: ZONE_COLOR[zoneOf(value)] }}
+                              />
                               {value} · {zoneLabel(zoneOf(value))}
                             </p>
                             {decision && decision.boughtUsd > 0 && (
-                              <p className="num mt-1 text-positive">Achat {usd(decision.boughtUsd)}</p>
+                              <p className="num mt-1 text-violet">Achat {usd(decision.boughtUsd)}</p>
                             )}
                             {decision && decision.soldUsd > 0 && (
-                              <p className="num mt-1 text-negative">Vente {usd(decision.soldUsd)}</p>
+                              <p className="num mt-1 text-foreground">Vente {usd(decision.soldUsd)}</p>
                             )}
                           </div>
                         );
@@ -314,24 +354,27 @@ export function MarketMoodSection({ range }: { range: { fromDay: number; toDay: 
                     <Line
                       type="monotone"
                       dataKey="value"
-                      stroke="var(--muted-foreground)"
-                      strokeOpacity={0.7}
-                      strokeWidth={1.25}
+                      stroke="url(#fear-greed-line)"
+                      strokeWidth={1.5}
                       dot={false}
                       isAnimationActive={false}
                     />
                     <Scatter
                       data={buys}
                       dataKey="value"
-                      fill="var(--positive)"
-                      fillOpacity={0.75}
+                      fill="var(--violet)"
+                      fillOpacity={0.85}
+                      stroke="var(--card)"
+                      strokeWidth={1}
                       isAnimationActive={false}
                     />
                     <Scatter
                       data={sells}
                       dataKey="value"
-                      fill="var(--negative)"
-                      fillOpacity={0.75}
+                      fill="var(--foreground)"
+                      fillOpacity={0.85}
+                      stroke="var(--card)"
+                      strokeWidth={1}
                       isAnimationActive={false}
                     />
                   </ComposedChart>
