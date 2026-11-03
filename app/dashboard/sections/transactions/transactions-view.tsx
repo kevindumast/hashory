@@ -1021,7 +1021,28 @@ function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
   )
 }
 
+// Devises fiat : pas d'icône CMC, on dessine le signe monétaire sur une pastille colorée.
+const FIAT_ICONS: Record<string, { glyph: string; bg: string }> = {
+  EUR: { glyph: "€", bg: "#003399" },
+  USD: { glyph: "$", bg: "#2E7D32" },
+  GBP: { glyph: "£", bg: "#5B2C83" },
+  CHF: { glyph: "₣", bg: "#D52B1E" },
+  JPY: { glyph: "¥", bg: "#BC002D" },
+}
+
 function TokenAvatar({ symbol, url, size = 28 }: { symbol: string; url: string | null | undefined; size?: number }) {
+  const fiat = FIAT_ICONS[symbol.toUpperCase()]
+  if (fiat) {
+    return (
+      <span
+        aria-hidden
+        style={{ width: size, height: size, backgroundColor: fiat.bg, fontSize: Math.round(size * 0.55) }}
+        className="flex shrink-0 items-center justify-center rounded-full font-bold leading-none text-white"
+      >
+        {fiat.glyph}
+      </span>
+    )
+  }
   if (url) {
     return <Image src={url} alt="" width={size} height={size} className="shrink-0 rounded-full object-cover" />
   }
