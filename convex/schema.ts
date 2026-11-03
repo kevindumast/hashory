@@ -239,7 +239,7 @@ export default defineSchema({
     symbol: v.string(),
     dayUtc: v.number(),
     closeUsd: v.number(),
-    source: v.union(v.literal("binance"), v.literal("coingecko"), v.literal("manual")),
+    source: v.union(v.literal("binance"), v.literal("kucoin"), v.literal("coingecko"), v.literal("manual")),
     updatedAt: v.number(),
   }).index("by_symbol_day", ["symbol", "dayUtc"]),
   /**
