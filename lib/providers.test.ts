@@ -36,6 +36,9 @@ describe("référentiel des sources", () => {
   it("déclare synchronisable tout sauf les imports de fichiers", () => {
     assert.equal(isSyncable("kraken"), true);
     assert.equal(isSyncable("ethereum"), true);
+    assert.equal(isSyncable("arbitrum"), true);
+    assert.equal(isSyncable("base"), true);
+    assert.equal(isSyncable("bsc"), true);
     assert.equal(isSyncable("bitstack"), false);
     assert.equal(isSyncable("inconnu"), false);
   });

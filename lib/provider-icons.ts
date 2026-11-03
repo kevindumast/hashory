@@ -14,6 +14,13 @@
 const FINARY_ICON =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAcCAMAAABF0y+mAAAARVBMVEUXEBQWDxQIAw4NBBQgES4pHio1KCo5LCk0JyYUCCMIBRECAAQnHx8EAgcVEBdTQjRtV0MAAAGWeFXxwIb5xor9yo3OpHNMvRV9AAAADXRSTlMCSLHc////37H//+joC0Us+AAAANpJREFUeAF1z1G2gyAMRdGAamt8ARF1/kN93AjRfnDs3143VULOD2NtKs3z5+uoNiyj2QhDn9uWZcTPlnPle4cMobZ1vJjWs00deYZqNq36pZURzKatPxI1cDvR5mEiEWUWjhsebRoLhQAEpz0f1rkEjZJq2s/8dEnDBJvfdkRuWMLwuZmjBMbDwKJxs2IS1hridNw1IxFRRNd9+EpN+MHryOjckjy1/zzVyvBl6cb6tnlPyaRUlyz4oHeGvWjt20q+j55cHx3R0LOBStJB0obuDjm//srqHZX+AbJ1JjCgp8LDAAAAAElFTkSuQmCC";
 
+/**
+ * Marque de Base, un carré bleu : la chaîne n'a pas de jeton, donc pas de
+ * fiche CoinMarketCap où trouver un logo.
+ */
+const BASE_ICON =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230000FF'/%3E%3C/svg%3E";
+
 const CMC_EXCHANGE = "https://s2.coinmarketcap.com/static/img/exchanges/64x64";
 const CMC_COIN = "https://s2.coinmarketcap.com/static/img/coins/64x64";
 
@@ -24,6 +31,8 @@ export const PROVIDER_ICONS: Record<string, string> = {
   bitcoin: `${CMC_COIN}/1.png`,
   ethereum: `${CMC_COIN}/1027.png`,
   arbitrum: `${CMC_COIN}/11841.png`,
+  base: BASE_ICON,
+  bsc: `${CMC_COIN}/1839.png`,
   solana: `${CMC_COIN}/5426.png`,
   kaspa: `${CMC_COIN}/20396.png`,
   tao: `${CMC_COIN}/22974.png`,

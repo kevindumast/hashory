@@ -285,6 +285,48 @@ const providerConfigs: ProviderConfig[] = [
     ],
   },
   {
+    value: "arbitrum",
+    label: "Arbitrum One",
+    description: "Connexion par adresse publique, lue via Etherscan.",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Arbitrum",
+        placeholder: "0x...",
+        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "base",
+    label: "Base",
+    description: "Connexion par adresse publique, lue via Blockscout.",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse Base",
+        placeholder: "0x...",
+        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
+    value: "bsc",
+    label: "BNB Smart Chain",
+    description: "Connexion par adresse publique, lue via Moralis.",
+    category: "blockchain",
+    fields: [
+      {
+        name: "address" as const,
+        label: "Adresse BNB Smart Chain",
+        placeholder: "0x...",
+        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
+      },
+    ],
+  },
+  {
     value: "solana",
     label: "Solana",
     description: "Connexion par adresse publique Solana.",
