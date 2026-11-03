@@ -147,8 +147,11 @@ type Row = {
   network: string | null
   status: string | null
   provider: string
-  /** Moitié d'un échange via un service (Tangem, pont…) : « BTC → USDT ». */
+  /** Échange via un service (Tangem, pont…) : « BTC → USDT ». */
   swap: string | null
+  swapKey?: string
+  /** Swap regroupé : la réception, sur l'autre wallet. */
+  swapReceipt?: { txId: string | null; provider: string; account: string }
 }
 
 const TRADE_LABELS: Record<string, string> = {
@@ -274,6 +277,7 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   const { rateAt } = useFxRates()
 
   const [tab, setTab] = React.useState<TabId>("all")
+  const [swapsOnly, setSwapsOnly] = React.useState(false)
   const [search, setSearch] = React.useState("")
   const [kindFilter, setKindFilter] = React.useState<Kind | "all">("all")
   const [tokenFilter, setTokenFilter] = React.useState(initialSymbol ? initialSymbol.toUpperCase() : "all")
@@ -353,16 +357,16 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   // enregistré) : chaque moitié, retrouvée par son hash, porte « BTC → USDT ».
   const taxReport = useActiveQuery(api.taxReport.computeTaxReport)
   const swapByTx = React.useMemo(() => {
-    const map = new Map<string, string>()
-    for (const swap of taxReport?.serviceSwaps ?? []) {
-      const label = `${swap.given.asset} → ${swap.received.asset}`
-      if (swap.given.txId) map.set(swap.given.txId.toLowerCase(), label)
-      if (swap.received.txId) map.set(swap.received.txId.toLowerCase(), label)
-    }
+    const map = new Map<string, { label: string; key: string }>()
+    ;(taxReport?.serviceSwaps ?? []).forEach((swap, index) => {
+      const value = { label: `${swap.given.asset} → ${swap.received.asset}`, key: `swap-${index}` }
+      if (swap.given.txId) map.set(swap.given.txId.toLowerCase(), value)
+      if (swap.received.txId) map.set(swap.received.txId.toLowerCase(), value)
+    })
     return map
   }, [taxReport])
 
-  const rows = React.useMemo<Row[]>(() => {
+  const rawRows = React.useMemo<Row[]>(() => {
     return transactions.map((tx) => {
       const timestamp = tx.type === "trade" ? tx.executedAt : tx.timestamp
       // Taux du jour de l'opération, issu de l'historique BCE.
@@ -428,10 +432,13 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
         network: tx.network,
         status: tx.status,
         provider: tx.provider,
-        swap: tx.txId ? swapByTx.get(tx.txId.toLowerCase()) ?? null : null,
+        swap: tx.txId ? swapByTx.get(tx.txId.toLowerCase())?.label ?? null : null,
+        swapKey: tx.txId ? swapByTx.get(tx.txId.toLowerCase())?.key : undefined,
       }
     })
   }, [transactions, rateAt, spotPrices, pricesLoaded, swapByTx])
+
+  const rows = React.useMemo<Row[]>(() => mergeSwapHalves(rawRows), [rawRows])
 
   const tokenOptions = React.useMemo(() => {
     const tokens = new Set<string>()
@@ -470,7 +477,8 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
 
   const visibleRows = React.useMemo(() => {
     const inTab =
-      tab === "onchain" ? filtered.filter((row) => isOnchainProvider(row.provider))
+      tab === "onchain"
+        ? filtered.filter((row) => isOnchainProvider(row.provider) && (!swapsOnly || row.swap))
       : tab === "taxable" ? filtered.filter((row) => row.taxable)
       : tab === "review" ? filtered.filter((row) => row.reasons.length > 0)
       : filtered
@@ -483,7 +491,7 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
       }
       return sign * (a.timestamp - b.timestamp)
     })
-  }, [filtered, tab, sort])
+  }, [filtered, tab, sort, swapsOnly])
 
   const activeFilters = [kindFilter !== "all", tokenFilter !== "all", accountFilter !== "all", search.trim() !== ""].filter(Boolean).length
 
@@ -589,7 +597,12 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
   )
   const hint =
     tab === "onchain" ? (
-      <OnchainHint summary={summary} swaps={taxReport?.serviceSwaps?.length ?? 0} />
+      <OnchainHint
+        summary={summary}
+        swaps={taxReport?.serviceSwaps?.length ?? 0}
+        swapsOnly={swapsOnly}
+        onToggleSwaps={() => setSwapsOnly((value) => !value)}
+      />
     ) : (
       TAB_HINTS[tab]
     )
@@ -1066,8 +1079,53 @@ function KindIcon({ kind, className }: { kind: Kind; className?: string }) {
   )
 }
 
+/**
+ * Un swap via un service apparaît d'abord en deux lignes : la sortie d'un
+ * wallet, l'entrée sur un autre. On les réunit en une seule, comme un
+ * échange : ce qui est parti à gauche, ce qui est arrivé à droite.
+ */
+function mergeSwapHalves(rows: Row[]): Row[] {
+  const halves = new Map<string, { out?: Row; in?: Row }>()
+  for (const row of rows) {
+    if (!row.swapKey) continue
+    const pair = halves.get(row.swapKey) ?? {}
+    if (row.kind === "withdrawal") pair.out = row
+    else if (row.kind === "deposit") pair.in = row
+    halves.set(row.swapKey, pair)
+  }
+  const absorbed = new Set<string>()
+  const merged = new Map<string, Row>()
+  for (const { out, in: receipt } of halves.values()) {
+    if (!out || !receipt) continue
+    absorbed.add(receipt.id)
+    merged.set(out.id, {
+      ...out,
+      kind: "trade",
+      label: "Swap via un service",
+      in: receipt.in,
+      account: out.account === receipt.account ? out.account : `${out.account} → ${receipt.account}`,
+      valueUsd: out.valueUsd ?? receipt.valueUsd,
+      valueEur: out.valueEur ?? receipt.valueEur,
+      approximate: out.valueUsd !== null ? out.approximate : receipt.approximate,
+      reasons: [],
+      swapReceipt: { txId: receipt.txId, provider: receipt.provider, account: receipt.account },
+    })
+  }
+  return rows.filter((row) => !absorbed.has(row.id)).map((row) => merged.get(row.id) ?? row)
+}
+
 /** Bilan en tête de l'onglet « On-chain ». */
-function OnchainHint({ summary, swaps }: { summary: OnchainSummary; swaps: number }) {
+function OnchainHint({
+  summary,
+  swaps,
+  swapsOnly,
+  onToggleSwaps,
+}: {
+  summary: OnchainSummary
+  swaps: number
+  swapsOnly: boolean
+  onToggleSwaps: () => void
+}) {
   return (
     <span className="flex flex-col gap-2">
       <span>
@@ -1082,9 +1140,15 @@ function OnchainHint({ summary, swaps }: { summary: OnchainSummary; swaps: numbe
           </span>
         ))}
         {swaps > 0 && (
-          <span className="chip chip-jade text-[11px]">
+          <button
+            type="button"
+            onClick={onToggleSwaps}
+            aria-pressed={swapsOnly}
+            className={cn("chip text-[11px] transition-colors", swapsOnly ? "bg-jade text-white" : "chip-jade hover:brightness-95")}
+          >
             {swaps} swap{swaps > 1 ? "s" : ""} via un service
-          </span>
+            {swapsOnly ? <X className="size-3" /> : <span className="font-normal">· afficher</span>}
+          </button>
         )}
         {summary.gasUsd > 0 && (
           <span className="chip bg-card text-[11px] text-foreground ring-1 ring-line">
@@ -1109,7 +1173,7 @@ function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
       {row.taxable && <span className="text-violet">Imposable</span>}
       {row.swap && (
         <span className="text-jade" title="Échange via un service (swap, pont) : crypto contre crypto, en sursis d'imposition.">
-          Swap {row.swap}
+          {row.swapReceipt ? "Sursis d'imposition" : `Swap ${row.swap}`}
         </span>
       )}
       {spoofed && (
@@ -1335,6 +1399,21 @@ function TransactionDetail({
               {row.swap && (
                 <DetailItem label="Swap via un service" note="Échange crypto contre crypto, en sursis d'imposition">
                   <span className="text-sm font-bold text-jade">{row.swap}</span>
+                </DetailItem>
+              )}
+              {row.swapReceipt?.txId && (
+                <DetailItem label={`Hash de réception · ${row.swapReceipt.account}`}>
+                  <CopyValue value={row.swapReceipt.txId} />
+                  {explorerUrl(row.swapReceipt.provider, row.swapReceipt.txId) && (
+                    <a
+                      href={explorerUrl(row.swapReceipt.provider, row.swapReceipt.txId)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-violet hover:underline"
+                    >
+                      Voir sur l&apos;explorateur <ExternalLink className="size-3" />
+                    </a>
+                  )}
                 </DetailItem>
               )}
               <DetailItem label="ID Hashory">
