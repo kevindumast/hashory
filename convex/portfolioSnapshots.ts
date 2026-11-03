@@ -27,8 +27,9 @@ import {
  * 6 — positions par compte, en dollars et en euros historiques.
  * 7 — rapport fiscal enregistré avec les séries.
  * 8 — détail des opérations derrière les avertissements fiscaux.
+ * 9 — frais Bitcoin comptés une fois, échanges via un service, faux jetons écartés.
  */
-const ENGINE_VERSION = 8;
+const ENGINE_VERSION = 9;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";

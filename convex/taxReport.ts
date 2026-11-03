@@ -6,9 +6,11 @@ import { ANNUAL_EXEMPTION_EUR, PFU_RATE } from "../lib/tax";
 import {
   computeCessionChain,
   flaggedItems,
+  MAX_FLAGGED_ITEMS,
   summarizeByYear,
   type Cession,
   type FlaggedFlow,
+  type ServiceSwap,
 } from "../lib/tax-chain";
 import { buildLedger, isFiat, type Operation } from "../lib/ledger";
 import {
@@ -72,9 +74,11 @@ export type TaxReportResult = {
   unknownCostInflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
   /** Jetons partis vers un compte non suivi : cessions possibles non vues. */
   untrackedOutflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
+  /** Échanges via un service tiers reconnus. Absent des rapports enregistrés avant leur ajout. */
+  serviceSwaps?: ServiceSwap[];
 };
 
-export type { FlaggedFlow };
+export type { FlaggedFlow, ServiceSwap };
 
 const DAY_MS = 86_400_000;
 /** Au-delà, un cours est trop ancien pour valoriser une ligne. */
@@ -117,6 +121,7 @@ function emptyReport(): TaxReportResult {
     hasMissingFxRates: true,
     unknownCostInflows: { count: 0, valueEur: 0 },
     untrackedOutflows: { count: 0, valueEur: 0 },
+    serviceSwaps: [],
   };
 }
 
@@ -244,6 +249,7 @@ export async function buildTaxReport(
       valueEur: total(outflows),
       items: flaggedItems(outflows),
     },
+    serviceSwaps: chain.serviceSwaps.slice(-MAX_FLAGGED_ITEMS),
   };
 }
 

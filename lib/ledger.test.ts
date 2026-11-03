@@ -228,6 +228,17 @@ describe("frais de retrait", () => {
     }) as TransferOperation[];
     assert.equal(op.fee, 0.0002);
   });
+
+  it("ne compte pas deux fois les frais d'un wallet Bitcoin, enregistrés dans le montant", () => {
+    // Retrait réel : 0,00277011 BTC débités, dont 0,00000115 de frais ; Binance a reçu 0,00276896.
+    const [op] = buildLedger({
+      ...empty,
+      providers: { w: "bitcoin" },
+      withdrawals: [{ id: "w", account: "w", asset: "BTC", amount: 0.00277011, fee: 0.00000115, timestamp: 1 }],
+    }) as TransferOperation[];
+    assert.ok(Math.abs(op.quantity - 0.00276896) < 1e-12);
+    assert.ok(Math.abs(op.quantity + op.fee - 0.00277011) < 1e-12);
+  });
 });
 
 describe("transferts internes", () => {

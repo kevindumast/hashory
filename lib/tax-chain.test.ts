@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { buildLedger, type LedgerInput, type LedgerTradeInput } from "./ledger";
-import { MAX_FLAGGED_ITEMS, computeCessionChain, flaggedItems, summarizeByYear } from "./tax-chain";
+import { MAX_FLAGGED_ITEMS, computeCessionChain, flaggedItems, isSpoofedSymbol, summarizeByYear } from "./tax-chain";
 import { ANNUAL_EXEMPTION_EUR, PFU_RATE } from "./tax";
 import { createPriceBook, type PriceSeries } from "./valuation";
 import { krakenInput } from "./test-fixtures";
@@ -221,6 +221,56 @@ describe("transferts", () => {
     assert.equal(chain.cessions.length, 1);
     close(chain.cessions[0].gainLossEur, 40_000);
     assert.equal(chain.unknownCostInflows[0].reason, "untracked-deposit");
+  });
+
+  it("reconnaît un échange via un service : un actif part, un autre arrive, même valeur", () => {
+    // 0,25 BTC (20 000 $) envoyés à un service de swap, 1 ETH (20 000 $) reçu 30 min plus tard.
+    const chain = chainOf(
+      {
+        ...empty,
+        trades: [buy("b", "BTC", 1, 10_000, day(0))],
+        withdrawals: [{ id: "w", account: "exchange", asset: "BTC", amount: 0.25, fee: 0, timestamp: day(5), txId: "btc-tx" }],
+        deposits: [{ id: "d", account: "eth-wallet", asset: "ETH", amount: 0.98, timestamp: day(5) + 1_800_000, txId: "eth-tx" }],
+      },
+      prices
+    );
+    assert.equal(chain.unknownCostInflows.length, 0);
+    assert.equal(chain.untrackedOutflows.length, 0);
+    assert.equal(chain.serviceSwaps.length, 1);
+    assert.equal(chain.serviceSwaps[0].given.txId, "btc-tx");
+    assert.equal(chain.serviceSwaps[0].received.asset, "ETH");
+    // Sursis : le prix total d'acquisition ne bouge pas.
+    close(chain.acquisitionCostEur, 10_000);
+  });
+
+  it("n'apparie pas un envoi et une réception trop éloignés ou de valeurs différentes", () => {
+    const base = {
+      ...empty,
+      trades: [buy("b", "BTC", 1, 10_000, day(0))],
+      withdrawals: [{ id: "w", account: "exchange", asset: "BTC", amount: 0.25, fee: 0, timestamp: day(5) }],
+    };
+    const late = chainOf(
+      { ...base, deposits: [{ id: "d", account: "wallet", asset: "ETH", amount: 1, timestamp: day(5) + 3 * 3_600_000 }] },
+      prices
+    );
+    assert.equal(late.serviceSwaps.length, 0);
+    const cheap = chainOf(
+      { ...base, deposits: [{ id: "d", account: "wallet", asset: "ETH", amount: 0.5, timestamp: day(5) + 600_000 }] },
+      prices
+    );
+    assert.equal(cheap.serviceSwaps.length, 0);
+    assert.equal(cheap.untrackedOutflows.length, 1);
+  });
+
+  it("ignore les faux jetons d'empoisonnement d'adresse", () => {
+    assert.equal(isSpoofedSymbol("ꓴꓢꓓС"), true);
+    assert.equal(isSpoofedSymbol("USDC"), false);
+    const chain = chainOf(
+      { ...empty, withdrawals: [{ id: "w", account: "arb", asset: "ꓴꓢꓓС", amount: 25, fee: 0, timestamp: day(1) }] },
+      prices
+    );
+    assert.equal(chain.untrackedOutflows.length, 0);
+    assert.equal(chain.unknownCostInflows.length, 0);
   });
 
   it("classe le détail des avertissements par valeur et le tronque", () => {

@@ -498,14 +498,17 @@ export function buildLedger(input: LedgerInput): Operation[] {
   for (const withdrawal of input.withdrawals) {
     if (!isSettled(withdrawal.status, providers[withdrawal.account], "withdrawal")) continue;
     if (!(withdrawal.amount > 0)) continue;
+    const fee = withdrawalFee(withdrawal, providers[withdrawal.account]);
     operations.push({
       kind: "withdrawal",
       id: withdrawal.id,
       account: withdrawal.account,
       timestamp: withdrawal.timestamp,
       asset: normalizeAsset(withdrawal.asset),
-      quantity: withdrawal.amount,
-      fee: withdrawalFee(withdrawal, providers[withdrawal.account]),
+      // Le wallet Bitcoin enregistre ce qui a quitté l'adresse, frais compris :
+      // ce qui est arrivé à destination, c'est ce montant moins les frais.
+      quantity: providers[withdrawal.account] === "bitcoin" ? withdrawal.amount - fee : withdrawal.amount,
+      fee,
       txId: withdrawal.txId,
     });
   }

@@ -28,7 +28,7 @@
  * nul et signalé : c'est le choix prudent, qui ne minore jamais l'impôt.
  */
 
-import { isFiat, type Operation } from "./ledger";
+import { isFiat, type Operation, type TransferOperation } from "./ledger";
 import type { PriceBook } from "./valuation";
 import { isBelowAnnualExemption } from "./tax";
 
@@ -112,8 +112,79 @@ export function flaggedItems(list: FlaggedFlow[]): FlaggedFlow[] {
     }));
 }
 
+/**
+ * Échange passé par un service tiers (swap instantané, pont entre réseaux) :
+ * un actif part d'un compte suivi, un autre arrive peu après, pour une valeur
+ * voisine. Fiscalement, un échange crypto contre crypto, en sursis.
+ */
+export type ServiceSwap = {
+  date: number;
+  given: { account: string; asset: string; quantity: number; txId?: string };
+  received: { account: string; asset: string; quantity: number; txId?: string };
+  givenEur: number;
+  receivedEur: number;
+};
+
+/** Délai maximal entre l'envoi et la réception d'un échange via un service. */
+export const SWAP_WINDOW_MS = 2 * 3_600_000;
+/** Ce que le service peut retenir : la réception vaut au moins 80 % de l'envoi… */
+const SWAP_MIN_RATIO = 0.8;
+/** … et pas plus que l'envoi, à l'écart des cours près. */
+const SWAP_MAX_RATIO = 1.05;
+
+/**
+ * Symbole imitant un vrai jeton avec des caractères d'autres alphabets
+ * (« ꓴꓢꓓС » pour USDC) : un faux jeton d'empoisonnement d'adresse, que le
+ * wallet n'a jamais vraiment envoyé ni reçu.
+ */
+export function isSpoofedSymbol(asset: string): boolean {
+  return /[^\x20-\x7E]/.test(asset);
+}
+
+/**
+ * Apparie les envois et réceptions restés sans contrepartie qui forment un
+ * échange via un service : actifs différents, réception dans les deux heures,
+ * valeur comprise entre 80 % et 105 % de l'envoi. Rend, par retrait, le
+ * dépôt qui lui répond.
+ */
+function matchServiceSwaps(
+  operations: Operation[],
+  valueEur: (asset: string, quantity: number, timestamp: number) => number | null
+): Map<string, TransferOperation> {
+  const open = (kind: "deposit" | "withdrawal") =>
+    operations.filter(
+      (op): op is TransferOperation =>
+        op.kind === kind && !op.counterpart && !isFiat(op.asset) && !isSpoofedSymbol(op.asset)
+    );
+  const deposits = open("deposit");
+  const used = new Set<string>();
+  const pairs = new Map<string, TransferOperation>();
+
+  for (const withdrawal of open("withdrawal").sort((a, b) => a.timestamp - b.timestamp)) {
+    const sent = valueEur(withdrawal.asset, withdrawal.quantity, withdrawal.timestamp);
+    if (sent === null || sent <= 0) continue;
+    const match = deposits
+      .filter((deposit) => {
+        if (used.has(deposit.id) || deposit.asset === withdrawal.asset) return false;
+        const delay = deposit.timestamp - withdrawal.timestamp;
+        // Strictement après : à horodatage égal, le livre range le dépôt en premier.
+        if (delay <= 0 || delay > SWAP_WINDOW_MS) return false;
+        const received = valueEur(deposit.asset, deposit.quantity, deposit.timestamp);
+        return received !== null && received >= sent * SWAP_MIN_RATIO && received <= sent * SWAP_MAX_RATIO;
+      })
+      .sort((a, b) => a.timestamp - b.timestamp)[0];
+    if (match) {
+      used.add(match.id);
+      pairs.set(withdrawal.id, match);
+    }
+  }
+  return pairs;
+}
+
 export type CessionChain = {
   cessions: Cession[];
+  /** Échanges via un service tiers reconnus : le coût a suivi les jetons. */
+  serviceSwaps: ServiceSwap[];
   /** Prix total d'acquisition restant, en euros. */
   acquisitionCostEur: number;
   /** Vrai si une valeur globale a dû être complétée au coût, faute de cours. */
@@ -193,9 +264,35 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
 
   const byId = new Map(ordered.map((operation) => [operation.id, operation]));
   const settled = new Set<string>();
+  const swaps = matchServiceSwaps(ordered, valueEur);
+  const serviceSwaps: ServiceSwap[] = [];
 
   for (const operation of ordered) {
     if (settled.has(operation.id)) continue;
+
+    // Faux jeton d'empoisonnement d'adresse : rien n'a bougé.
+    if (operation.kind !== "exchange" && isSpoofedSymbol(operation.asset)) continue;
+
+    // Échange via un service : le coût des jetons envoyés passe aux jetons reçus.
+    const swapDeposit = operation.kind === "withdrawal" ? swaps.get(operation.id) : undefined;
+    if (operation.kind === "withdrawal" && swapDeposit) {
+      const carried = remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp);
+      add(swapDeposit.account, swapDeposit.asset, swapDeposit.quantity, carried);
+      settled.add(swapDeposit.id);
+      serviceSwaps.push({
+        date: operation.timestamp,
+        given: { account: operation.account, asset: operation.asset, quantity: operation.quantity, txId: operation.txId },
+        received: {
+          account: swapDeposit.account,
+          asset: swapDeposit.asset,
+          quantity: swapDeposit.quantity,
+          txId: swapDeposit.txId,
+        },
+        givenEur: valueEur(operation.asset, operation.quantity, operation.timestamp) ?? 0,
+        receivedEur: valueEur(swapDeposit.asset, swapDeposit.quantity, swapDeposit.timestamp) ?? 0,
+      });
+      continue;
+    }
 
     if (operation.kind === "exchange") {
       const { account, given, received, fee, timestamp } = operation;
@@ -340,6 +437,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
 
   return {
     cessions,
+    serviceSwaps,
     acquisitionCostEur,
     hasIncompleteValuation,
     unknownCostInflows,

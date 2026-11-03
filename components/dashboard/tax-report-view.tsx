@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, Copy, Download } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
@@ -13,7 +13,7 @@ import { Metric, MetricGrid, Notice, SectionLabel } from "@/app/dashboard/perfor
 import { TaxSimulator } from "@/components/dashboard/tax-simulator";
 import { ForeignAccounts } from "@/components/dashboard/foreign-accounts";
 import { YearEndOptimizer } from "@/components/dashboard/year-end-optimizer";
-import { FlaggedFlows } from "@/components/dashboard/flagged-flows";
+import { FlaggedFlows, ServiceSwaps } from "@/components/dashboard/flagged-flows";
 import { cn } from "@/lib/utils";
 import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
 import { taxSheet } from "@/lib/export";
@@ -278,6 +278,7 @@ function Reliability({ result }: { result: TaxReportResult }) {
     },
   ];
   const issues = checks.filter((check) => !check.ok).length;
+  const swaps = result.serviceSwaps ?? [];
 
   return (
     <div className="float-card overflow-hidden">
@@ -310,6 +311,21 @@ function Reliability({ result }: { result: TaxReportResult }) {
             </div>
           </li>
         ))}
+        {swaps.length > 0 && (
+          <li className="flex items-start gap-3 px-5 py-3.5">
+            <ArrowLeftRight className="mt-0.5 size-4 shrink-0 text-violet" aria-label="Information" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-foreground">Échanges via un service tiers</p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {swaps.length} envoi{swaps.length > 1 ? "s" : ""} suivi{swaps.length > 1 ? "s" : ""} de la réception d&apos;un
+                autre actif dans les deux heures, pour une valeur voisine : un swap ou un pont, donc un échange crypto
+                contre crypto, en sursis d&apos;imposition. Le prix d&apos;acquisition a suivi les jetons. Gardez les deux
+                hash comme justificatif.
+              </p>
+              <ServiceSwaps swaps={swaps} />
+            </div>
+          </li>
+        )}
       </ul>
     </div>
   );
