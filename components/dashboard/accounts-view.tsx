@@ -566,6 +566,8 @@ export function AccountsView() {
         </Button>
       </div>
 
+      {!isLoading && <TransactionsPerYear transactions={transactions} />}
+
       {/* Filters & Search */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
         {/* Chips */}
@@ -919,8 +921,6 @@ export function AccountsView() {
           ))
         )}
       </div>
-
-      {!isLoading && <TransactionsPerYear transactions={transactions} />}
 
       <ConnectProviderDialog open={isConnectOpen} onOpenChange={(open) => {
         setIsConnectOpen(open)
