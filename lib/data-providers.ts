@@ -39,10 +39,26 @@ export const DATA_PROVIDERS = [
   {
     id: "etherscan",
     label: "Etherscan",
-    purpose: "Transactions et transferts de jetons Ethereum.",
-    serves: ["Ethereum"],
+    purpose: "Transactions et transferts de jetons Ethereum et Arbitrum.",
+    serves: ["Ethereum", "Arbitrum One"],
     signupUrl: "https://etherscan.io/myapikey",
     placeholder: "Clé d'API Etherscan",
+  },
+  {
+    id: "blockscout",
+    label: "Blockscout",
+    purpose: "Transactions et transferts de jetons Base.",
+    serves: ["Base"],
+    signupUrl: "https://dev.blockscout.com",
+    placeholder: "Clé d'API Blockscout (proapi_…)",
+  },
+  {
+    id: "moralis",
+    label: "Moralis",
+    purpose: "Historique des transactions BNB Smart Chain.",
+    serves: ["BNB Smart Chain"],
+    signupUrl: "https://admin.moralis.com",
+    placeholder: "Clé d'API Moralis",
   },
   {
     id: "taostats",
@@ -75,6 +91,9 @@ export function dataProviderLabel(id: string): string {
 const PROVIDER_BY_SOURCE: Record<string, DataProviderId> = {
   solana: "helius",
   ethereum: "etherscan",
+  arbitrum: "etherscan",
+  base: "blockscout",
+  bsc: "moralis",
   tao: "taostats",
 };
 

@@ -75,6 +75,8 @@ const PROVIDER_NAMES: Record<string, string> = {
   ethereum: "Ethereum",
   bitcoin: "Bitcoin",
   arbitrum: "Arbitrum One",
+  base: "Base",
+  bsc: "BNB Smart Chain",
   solana: "Solana",
   kaspa: "Kaspa",
   tao: "Bittensor (TAO)",
@@ -136,6 +138,7 @@ export function AccountsView() {
   const syncSpotTrades = useAction(api.binance.syncSpotTradesOnly)
   const syncKaspaWallet = useAction(api.kaspa.syncKaspaWallet)
   const syncEthereumWallet = useAction(api.ethereum.syncEthereumWallet)
+  const syncEvmWallet = useAction(api.evm.syncEvmWallet)
   const syncSolanaWallet = useAction(api.solana.syncSolanaWallet)
   const syncBitcoinWallet = useAction(api.bitcoin.syncBitcoinWallet)
   const syncTaoWallet = useAction(api.tao.syncTaoWallet)
@@ -273,6 +276,8 @@ export function AccountsView() {
           await syncKaspaWallet({ integrationId: accountId })
         } else if (providerKey === "ethereum") {
           await syncEthereumWallet({ integrationId: accountId })
+        } else if (providerKey === "arbitrum" || providerKey === "base" || providerKey === "bsc") {
+          await syncEvmWallet({ integrationId: accountId })
         } else if (providerKey === "solana") {
           await syncSolanaWallet({ integrationId: accountId })
         } else if (providerKey === "bitcoin") {
@@ -311,7 +316,7 @@ export function AccountsView() {
     // Wait a brief moment before refreshing
     await new Promise((resolve) => setTimeout(resolve, 1000))
     handleRefresh()
-  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
+  }, [handleRefresh, resetAllCursors, syncAccount, syncKucoin, syncKraken, syncKaspaWallet, syncEthereumWallet, syncEvmWallet, syncSolanaWallet, syncBitcoinWallet, syncTaoWallet])
 
   const handleSyncFiatOnly = React.useCallback(async (accountId: Id<"integrations">) => {
     if (!isConvexConfigured) {

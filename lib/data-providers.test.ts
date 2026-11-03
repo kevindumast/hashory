@@ -14,6 +14,9 @@ describe("dataProviderForSource", () => {
   it("associe chaque wallet lu par un tiers à son fournisseur", () => {
     assert.equal(dataProviderForSource("solana"), "helius");
     assert.equal(dataProviderForSource("ethereum"), "etherscan");
+    assert.equal(dataProviderForSource("arbitrum"), "etherscan");
+    assert.equal(dataProviderForSource("base"), "blockscout");
+    assert.equal(dataProviderForSource("bsc"), "moralis");
     assert.equal(dataProviderForSource("tao"), "taostats");
   });
 
@@ -24,7 +27,7 @@ describe("dataProviderForSource", () => {
   });
 
   it("ne pointe que vers des sources et des fournisseurs connus", () => {
-    for (const source of ["solana", "ethereum", "tao"]) {
+    for (const source of ["solana", "ethereum", "arbitrum", "base", "bsc", "tao"]) {
       assert.ok(SUPPORTED_PROVIDERS.includes(source), source);
       assert.ok(isSupportedDataProvider(dataProviderForSource(source)!), source);
     }

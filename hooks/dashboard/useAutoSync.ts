@@ -66,6 +66,7 @@ export function useAutoSync() {
   const syncKraken = useAction(api.kraken.syncAccount);
   const syncKaspa = useAction(api.kaspa.syncKaspaWallet);
   const syncEthereum = useAction(api.ethereum.syncEthereumWallet);
+  const syncEvm = useAction(api.evm.syncEvmWallet);
   const syncSolana = useAction(api.solana.syncSolanaWallet);
   const syncBitcoin = useAction(api.bitcoin.syncBitcoinWallet);
   const syncTao = useAction(api.tao.syncTaoWallet);
@@ -88,6 +89,10 @@ export function useAutoSync() {
           return syncKaspa(argument);
         case "ethereum":
           return syncEthereum(argument);
+        case "arbitrum":
+        case "base":
+        case "bsc":
+          return syncEvm(argument);
         case "solana":
           return syncSolana(argument);
         case "bitcoin":
@@ -98,7 +103,7 @@ export function useAutoSync() {
           return null;
       }
     },
-    [syncBinance, syncKucoin, syncKraken, syncKaspa, syncEthereum, syncSolana, syncBitcoin, syncTao]
+    [syncBinance, syncKucoin, syncKraken, syncKaspa, syncEthereum, syncEvm, syncSolana, syncBitcoin, syncTao]
   );
 
   useEffect(() => {

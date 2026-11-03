@@ -47,7 +47,7 @@ const capabilities = [
     tone: "violet",
     title: "Exchanges et wallets unifiés",
     description:
-      "Binance, Kraken et KuCoin par API, vos adresses Bitcoin, Ethereum, Solana, Kaspa et Bittensor par clé publique. Une seule interface pour l'ensemble.",
+      "Binance, Kraken et KuCoin par API, vos adresses Bitcoin, Ethereum, Arbitrum, Base, BNB Smart Chain, Solana, Kaspa et Bittensor par clé publique. Une seule interface pour l'ensemble.",
   },
   {
     tag: "Performance",
@@ -160,7 +160,7 @@ const faqItems = [
   {
     question: "Quelles plateformes sont réellement supportées ?",
     answer:
-      "Aujourd'hui : Binance, Kraken et KuCoin via API, et les wallets Bitcoin, Ethereum, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack, Finary et Strike sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
+      "Aujourd'hui : Binance, Kraken et KuCoin via API, et les wallets Bitcoin, Ethereum, Arbitrum, Base, BNB Smart Chain, Solana, Kaspa et Bittensor via adresse publique. Les exports Bitstack, Finary et Strike sont importables en CSV. Les autres exchanges sont intégrés au fil des demandes de la communauté.",
   },
   {
     question: "La déclaration fiscale couvre-t-elle mon cas ?",
@@ -170,7 +170,7 @@ const faqItems = [
   {
     question: "Pourquoi fournir mes propres clés d'API ?",
     answer:
-      "Pour lire l'historique d'un wallet Solana, Ethereum ou Bittensor, Hashory interroge un service spécialisé (Helius, Etherscan, TaoStats). Chacun y utilise sa propre clé : c'est votre crédit qui est consommé, personne d'autre n'y touche, et vous gardez le contrôle — vous voyez l'usage chez le fournisseur et révoquez la clé quand vous voulez. Les offres gratuites suffisent largement pour un portefeuille personnel.",
+      "Pour lire l'historique d'un wallet Solana, Ethereum, Arbitrum, Base, BNB Smart Chain ou Bittensor, Hashory interroge un service spécialisé (Helius, Etherscan, Blockscout, Moralis, TaoStats). Chacun y utilise sa propre clé : c'est votre crédit qui est consommé, personne d'autre n'y touche, et vous gardez le contrôle — vous voyez l'usage chez le fournisseur et révoquez la clé quand vous voulez. Les offres gratuites suffisent largement pour un portefeuille personnel.",
   },
   {
     question: "Hashory est-il vraiment open source ?",
