@@ -28,8 +28,9 @@ import {
  * 7 — rapport fiscal enregistré avec les séries.
  * 8 — détail des opérations derrière les avertissements fiscaux.
  * 9 — frais Bitcoin comptés une fois, échanges via un service, faux jetons écartés.
+ * 10 — swaps vers un jeton sans cours : prix déduit de l'échange.
  */
-const ENGINE_VERSION = 9;
+const ENGINE_VERSION = 10;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";

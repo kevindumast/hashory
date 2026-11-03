@@ -231,6 +231,12 @@ export function ServiceSwaps({ swaps }: { swaps: ServiceSwap[] }) {
                 <span className="num">{dateLabel(swap.date)}</span> · envoyé{" "}
                 <span className="num">{eur.format(swap.givenEur)}</span>, reçu{" "}
                 <span className="num">{eur.format(swap.receivedEur)}</span>
+                {swap.implied && (
+                  <>
+                    {" "}· prix de {swap.implied.side === "received" ? swap.received.asset : swap.given.asset} déduit de
+                    l&apos;échange : <span className="num">{eur.format(swap.implied.priceEur)}</span>
+                  </>
+                )}
               </p>
             </li>
           ))}

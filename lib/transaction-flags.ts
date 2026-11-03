@@ -22,9 +22,10 @@ export function isTaxableDisposal(out: FlowSide | undefined, received: FlowSide 
   return !isFiat(out.currency) && isFiat(received.currency);
 }
 
-export type ReviewReason = "unvalued" | "unknown-pair" | "dust";
+export type ReviewReason = "unvalued" | "unknown-pair" | "dust" | "spoofed";
 
 export const REVIEW_REASON_LABELS: Record<ReviewReason, string> = {
+  spoofed: "Faux jeton imitant un vrai symbole (empoisonnement d'adresse) : ignoré dans les calculs",
   unvalued: "Valorisation introuvable pour cet actif",
   "unknown-pair": "Paire de cotation non reconnue",
   dust: "Montant infime reçu : souvent un envoi indésirable",
