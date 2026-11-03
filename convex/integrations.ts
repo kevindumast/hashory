@@ -68,6 +68,7 @@ export const list = query({
         syncStartedAt: integration.syncStartedAt ?? integration.updatedAt,
         syncJobs,
         accountCreatedAt: integration.accountCreatedAt ?? null,
+        closedAt: integration.closedAt ?? null,
         // Absent = actif : le champ n'existe pas sur les comptes antérieurs.
         syncEnabled: integration.syncEnabled ?? true,
         source: integration.source ?? null,
@@ -641,6 +642,33 @@ export const setSyncEnabled = mutation({
 
     await ctx.db.patch(integrationId, { syncEnabled: enabled, updatedAt: Date.now() });
     return { syncEnabled: enabled };
+  },
+});
+
+/**
+ * Date de clôture d'un compte chez la plateforme ; null la retire.
+ *
+ * Comme le nom, ce n'est pas une donnée de portefeuille : `updatedAt` reste
+ * intact pour ne pas relancer de recalcul.
+ */
+export const setClosedAt = mutation({
+  args: {
+    integrationId: v.id("integrations"),
+    closedAt: v.union(v.number(), v.null()),
+  },
+  handler: async (ctx, { integrationId, closedAt }) => {
+    const clerkUserId = await requireUserId(ctx);
+
+    const integration = await ctx.db.get(integrationId);
+    if (!integration || integration.clerkUserId !== clerkUserId) {
+      throw new Error("Intégration introuvable.");
+    }
+    if (closedAt !== null && (!Number.isFinite(closedAt) || closedAt > Date.now() + 86_400_000)) {
+      throw new Error("Date de clôture invalide.");
+    }
+
+    await ctx.db.patch(integrationId, { closedAt: closedAt ?? undefined });
+    return { closedAt };
   },
 });
 

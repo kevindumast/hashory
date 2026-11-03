@@ -108,6 +108,12 @@ export default defineSchema({
     syncJobIds: v.optional(v.array(v.string())),
     accountCreatedAt: v.optional(v.number()),
     /**
+     * Clôture du compte chez la plateforme, saisie par l'utilisateur. Le
+     * formulaire 3916-bis la demande, et un compte clôturé avant l'année
+     * déclarée n'est plus à déclarer.
+     */
+    closedAt: v.optional(v.number()),
+    /**
      * Synchronisation automatique. Absent ou vrai = active : les comptes
      * existants ne changent pas de comportement. Mise à faux pour un compte
      * dormant, dont on veut garder l'historique sans plus l'interroger.
