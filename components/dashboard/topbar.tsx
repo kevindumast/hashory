@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { useEffect, useState } from "react";
-import { AlertCircle, Bell, CheckCircle2, MessageSquareWarning, PanelLeft, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
+import { AlertCircle, Bell, CheckCircle2, FileSpreadsheet, MessageSquareWarning, PanelLeft, RefreshCw, Search, Sparkles, Sun, Moon } from "lucide-react";
 import { ClerkLoaded, ClerkLoading, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,6 +19,7 @@ import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
 import { ClaudeConnectorGuide } from "@/components/dashboard/claude-connector-guide";
 import { PrivacyToggle } from "@/components/dashboard/privacy-mode";
+import { ExportPreferencesPanel } from "@/components/dashboard/export-preferences";
 import { cn } from "@/lib/utils";
 import { formatRelative } from "@/lib/format-relative";
 import { usePathname } from "next/navigation";
@@ -273,6 +274,15 @@ export function DashboardTopbar({
                   <div className="mt-6">
                     <ClaudeConnectorGuide compact />
                   </div>
+                </div>
+              </UserButton.UserProfilePage>
+              <UserButton.UserProfilePage label="Exports" url="exports" labelIcon={<FileSpreadsheet className="size-4" />}>
+                <div className="pb-4">
+                  <h1 className="title text-2xl text-foreground">Exports</h1>
+                  <p className="mt-2 mb-6 text-sm text-muted-foreground">
+                    Format des fichiers CSV téléchargés depuis Hashory.
+                  </p>
+                  <ExportPreferencesPanel />
                 </div>
               </UserButton.UserProfilePage>
             </UserButton>

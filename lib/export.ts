@@ -4,10 +4,11 @@
  * La mise en forme est séparée du téléchargement : ces fonctions sont pures,
  * donc testables, et le composant ne fait qu'écrire le fichier obtenu.
  *
- * Le format visé est le CSV lisible par un tableur français : séparateur
- * point-virgule, virgule décimale, marque d'ordre des octets pour qu'Excel
- * reconnaisse l'UTF-8. Un export fiscal finit chez un comptable ; il doit
- * s'ouvrir sans manipulation.
+ * Le format visé par défaut est le CSV lisible par un tableur français :
+ * séparateur point-virgule, virgule décimale, marque d'ordre des octets pour
+ * qu'Excel reconnaisse l'UTF-8. Un export fiscal finit chez un comptable ; il
+ * doit s'ouvrir sans manipulation. Le séparateur décimal se règle dans le
+ * profil, pour un tableur configuré avec le point.
  */
 
 export type CellValue = string | number | null | undefined;
@@ -22,6 +23,20 @@ export type Sheet = {
 /** Séparateur attendu par les tableurs en configuration française. */
 const SEPARATOR = ";";
 
+export type DecimalSeparator = "," | ".";
+
+/** Virgule par défaut : c'est ce qu'attend un tableur configuré en France. */
+export const DEFAULT_DECIMAL_SEPARATOR: DecimalSeparator = ",";
+
+export function isDecimalSeparator(value: unknown): value is DecimalSeparator {
+  return value === "," || value === ".";
+}
+
+export type CsvOptions = {
+  separator?: string;
+  decimal?: DecimalSeparator;
+};
+
 /**
  * Échappe une valeur pour le CSV.
  *
@@ -29,18 +44,20 @@ const SEPARATOR = ";";
  * retour à la ligne décale toutes les colonnes suivantes — et un fichier
  * fiscal silencieusement décalé est pire qu'un fichier absent.
  */
-export function escapeCsvValue(value: CellValue, separator = SEPARATOR): string {
+export function escapeCsvValue(
+  value: CellValue,
+  { separator = SEPARATOR, decimal = DEFAULT_DECIMAL_SEPARATOR }: CsvOptions = {}
+): string {
   if (value === null || value === undefined) return "";
 
-  // Les nombres passent en notation française : la virgule décimale est ce
-  // qu'attend un tableur configuré en France. Jamais de notation
-  // scientifique : 0,00000041 BTC s'écrirait « 4.1e-7 », illisible pour un
-  // tableur.
+  // Les nombres prennent le séparateur décimal choisi, virgule par défaut.
+  // Jamais de notation scientifique : 0,00000041 BTC s'écrirait « 4.1e-7 »,
+  // illisible pour un tableur.
   const raw =
     typeof value === "number"
       ? value
           .toLocaleString("en-US", { useGrouping: false, maximumFractionDigits: 20 })
-          .replace(".", ",")
+          .replace(".", decimal)
       : String(value);
 
   const needsQuoting =
@@ -51,11 +68,13 @@ export function escapeCsvValue(value: CellValue, separator = SEPARATOR): string 
 }
 
 /** Sérialise une feuille en CSV, en-tête compris. */
-export function serializeCsv(sheet: Sheet, separator = SEPARATOR): string {
-  const lines = [sheet.columns.map((column) => escapeCsvValue(column, separator)).join(separator)];
+export function serializeCsv(sheet: Sheet, options: CsvOptions = {}): string {
+  const separator = options.separator ?? SEPARATOR;
+  const escape = (value: CellValue) => escapeCsvValue(value, { ...options, separator });
+  const lines = [sheet.columns.map(escape).join(separator)];
 
   for (const row of sheet.rows) {
-    lines.push(row.map((cell) => escapeCsvValue(cell, separator)).join(separator));
+    lines.push(row.map(escape).join(separator));
   }
 
   return lines.join("\r\n");
