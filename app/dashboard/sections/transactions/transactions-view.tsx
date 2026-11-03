@@ -4,7 +4,7 @@ import * as React from "react"
 import Image from "next/image"
 import { ArrowRight, ArrowLeftRight, Download, Filter, Plus, Eye, LoaderCircle, ArrowUpDown, Search, X } from "lucide-react"
 import { transactionsSheet } from "@/lib/export"
-import { downloadCsv } from "@/lib/download"
+import { useDownloadCsv } from "@/components/dashboard/export-preferences"
 import { cn } from "@/lib/utils"
 import { useCmcTokenMap } from "@/hooks/useCmcTokenMap"
 import { Button } from "@/components/ui/button"
@@ -72,6 +72,7 @@ export function TransactionsView({
   onSymbolFilterChange,
   availableSymbols = [],
 }: TransactionsViewProps) {
+  const downloadCsv = useDownloadCsv();
   const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = React.useState(1);
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false);
@@ -346,8 +347,8 @@ export function TransactionsView({
       id: tx.id,
     }));
 
-    // CSV au format des tableurs français (« ; », virgule décimale), comme
-    // les autres exports.
+    // CSV au format des tableurs français (« ; », virgule décimale par
+    // défaut, point si le profil le demande), comme les autres exports.
     downloadCsv(transactionsSheet(rows, Date.now()));
   };
 

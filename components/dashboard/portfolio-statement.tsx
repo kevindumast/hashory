@@ -7,7 +7,7 @@ import { isConvexConfigured } from "@/convex/client";
 import { Reveal } from "@/components/motion";
 import { PFU_RATE, taxOnSale } from "@/lib/tax";
 import { portfolioSheet } from "@/lib/export";
-import { downloadCsv } from "@/lib/download";
+import { useDownloadCsv } from "@/components/dashboard/export-preferences";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PortfolioToken } from "@/hooks/dashboard/useDashboardMetrics";
@@ -121,6 +121,7 @@ export function PortfolioStatement({
   onCurrencyChange,
   eurPerUsd,
 }: PortfolioStatementProps) {
+  const downloadCsv = useDownloadCsv();
   const report = useActiveQuery(api.taxReport.computeTaxReport, isConvexConfigured ? {} : "skip");
 
   // Sans taux du jour, on reste en dollars plutôt que d'afficher un faux montant.

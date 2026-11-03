@@ -22,6 +22,12 @@ describe("échappement CSV", () => {
     assert.equal(escapeCsvValue(-0.5), "-0,5");
   });
 
+  it("utilise le point décimal sur demande", () => {
+    // Tableur configuré avec le point : réglage du profil.
+    assert.equal(escapeCsvValue(1234.56, { decimal: "." }), "1234.56");
+    assert.equal(escapeCsvValue(0.00000041, { decimal: "." }), "0.00000041");
+  });
+
   it("protège une valeur contenant le séparateur", () => {
     // Sans guillemets, cette seule cellule décalerait toutes les suivantes.
     assert.equal(escapeCsvValue("Binance;Compte 2"), '"Binance;Compte 2"');
@@ -70,6 +76,15 @@ describe("sérialisation", () => {
     const lines = serializeCsv(sheet).split("\r\n");
     // Deux colonnes attendues : le point-virgule interne est neutralisé.
     assert.equal(lines[1], '"Kraken; ancien compte";100');
+  });
+
+  it("applique le séparateur décimal choisi à toutes les cellules", () => {
+    const sheet: Sheet = {
+      filename: "test.csv",
+      columns: ["Actif", "Quantité", "Prix"],
+      rows: [["BTC", 1.5, 64000.25]],
+    };
+    assert.equal(serializeCsv(sheet, { decimal: "." }), "Actif;Quantité;Prix\r\nBTC;1.5;64000.25");
   });
 
   it("gère une feuille sans ligne", () => {

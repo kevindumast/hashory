@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
 import { taxSheet } from "@/lib/export";
-import { downloadCsv } from "@/lib/download";
+import { useDownloadCsv } from "@/components/dashboard/export-preferences";
 import { useRecomputeTrigger } from "@/hooks/usePortfolioSnapshots";
 
 const usd = new Intl.NumberFormat("fr-FR", {
@@ -143,6 +143,7 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 export function TaxReportView() {
+  const downloadCsv = useDownloadCsv();
   const result = useActiveQuery(api.taxReport.computeTaxReport) as TaxReportResult | undefined;
   // Le rapport est enregistré par le recalcul : on le relance à l'ouverture,
   // pour qu'une synchronisation récente soit prise en compte.
