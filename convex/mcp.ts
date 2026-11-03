@@ -2,7 +2,7 @@ import { mutation, query, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { optionalUserId, requireUserId } from "./auth";
 import { loadLedgerInput } from "./ledgerData";
-import { loadTaxReport } from "./taxReport";
+import { loadTaxReport, type TaxReportResult } from "./taxReport";
 import { ALL_SCOPE } from "./portfolioSnapshots";
 import { buildLedger } from "../lib/ledger";
 import { declarationPeriod, foreignAccounts as listForeignAccounts, openingDate } from "../lib/foreign-accounts";
@@ -392,6 +392,17 @@ export const taxReport = query({
           : {}),
       }));
 
+    // Le détail des avertissements, avec le nom du compte plutôt que son identifiant.
+    const names = await accountNames(ctx, clerkId);
+    const warning = ({ items, ...totals }: TaxReportResult["unknownCostInflows"]) => ({
+      ...totals,
+      items: (items ?? []).map(({ date, account, ...item }) => ({
+        date: new Date(date).toISOString().slice(0, 10),
+        account: names[account] ?? account,
+        ...item,
+      })),
+    });
+
     return {
       availableYears: report.availableYears,
       years,
@@ -399,8 +410,8 @@ export const taxReport = query({
       warnings: {
         hasIncompleteValuation: report.hasIncompleteValuation,
         hasMissingFxRates: report.hasMissingFxRates,
-        unknownCostInflows: report.unknownCostInflows,
-        untrackedOutflows: report.untrackedOutflows,
+        unknownCostInflows: warning(report.unknownCostInflows),
+        untrackedOutflows: warning(report.untrackedOutflows),
       },
     };
   },

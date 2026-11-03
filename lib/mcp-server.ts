@@ -203,7 +203,10 @@ export function createHashoryMcpServer(ctx: McpContext, data: McpData): McpServe
       description:
         "Plus-values de cession d'actifs numériques calculées selon l'article 150 VH bis du CGI (formulaire 2086), " +
         "par année : prix de cession, prix d'acquisition imputé, plus-value nette et impôt estimé au PFU. " +
-        "Indicatif : ce n'est pas un conseil fiscal. Les avertissements signalent les données incomplètes.",
+        "Indicatif : ce n'est pas un conseil fiscal. Les avertissements signalent les données incomplètes et " +
+        "listent les opérations concernées (les plus grosses d'abord) : entrées de jetons au coût inconnu " +
+        "(`reason` : untracked-deposit, dépôt venu d'un compte non suivi ; missing-history, vente sans achat " +
+        "connu) et envois vers un compte non suivi.",
       inputSchema: {
         year: z.number().int().min(2009).max(2100).optional().describe("Année fiscale. Toutes par défaut."),
         include_events: z.boolean().optional().describe("Ajoute le détail cession par cession."),

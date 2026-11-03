@@ -26,8 +26,9 @@ import {
  * 5 — soldes par compte pour le dashboard.
  * 6 — positions par compte, en dollars et en euros historiques.
  * 7 — rapport fiscal enregistré avec les séries.
+ * 8 — détail des opérations derrière les avertissements fiscaux.
  */
-const ENGINE_VERSION = 7;
+const ENGINE_VERSION = 8;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";
