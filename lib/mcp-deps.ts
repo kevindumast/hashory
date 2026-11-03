@@ -42,6 +42,7 @@ export function createMcpDeps(): McpDeps {
         performance: (args) => convex.query(api.mcp.performance, { ...caller, ...args }),
         transactions: (args) => convex.query(api.mcp.transactions, { ...caller, ...args }),
         taxReport: (args) => convex.query(api.mcp.taxReport, { ...caller, ...args }),
+        foreignAccounts: (args) => convex.query(api.mcp.foreignAccounts, { ...caller, ...args }),
       };
     },
   };

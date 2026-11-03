@@ -20,6 +20,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_performance: "Performance",
   list_transactions: "Transactions",
   get_tax_report: "Fiscalité",
+  list_foreign_accounts: "Comptes à l'étranger",
 };
 
 const dateTime = new Intl.DateTimeFormat("fr-FR", {

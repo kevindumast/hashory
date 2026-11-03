@@ -12,6 +12,7 @@ import { DashboardSkeleton } from "@/components/dashboard/dashboard-skeleton";
 import { Metric, MetricGrid, Notice, SectionLabel } from "@/app/dashboard/performance/ui";
 import { TaxSimulator } from "@/components/dashboard/tax-simulator";
 import { ForeignAccounts } from "@/components/dashboard/foreign-accounts";
+import { YearEndOptimizer } from "@/components/dashboard/year-end-optimizer";
 import { cn } from "@/lib/utils";
 import type { TaxableEvent, TaxReportResult } from "@/convex/taxReport";
 import { taxSheet } from "@/lib/export";
@@ -422,6 +423,8 @@ export function TaxReportView() {
           <Reliability result={result} />
         </Reveal>
       </section>
+
+      <YearEndOptimizer index={next()} result={result} />
 
       <TaxSimulator index={next()} />
 

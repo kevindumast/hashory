@@ -5,6 +5,8 @@ import { loadLedgerInput } from "./ledgerData";
 import { loadTaxReport } from "./taxReport";
 import { ALL_SCOPE } from "./portfolioSnapshots";
 import { buildLedger } from "../lib/ledger";
+import { declarationPeriod, foreignAccounts as listForeignAccounts, openingDate } from "../lib/foreign-accounts";
+import { accountName } from "../lib/provider-names";
 import { createPriceBook, isCashLike, startOfUtcDay, type PriceSeries } from "../lib/valuation";
 import {
   ACTIVITY_LIMIT,
@@ -164,6 +166,52 @@ export const accounts = query({
       syncEnabled: integration.syncEnabled ?? true,
       lastSyncedAt: integration.lastSyncedAt ? new Date(integration.lastSyncedAt).toISOString() : null,
     }));
+  },
+});
+
+/**
+ * Comptes à reporter sur le formulaire 3916-bis. Ne lit que la table des
+ * comptes : la date d'ouverture est celle communiquée par la plateforme,
+ * sans la borne de la première opération que calcule le tableau de bord.
+ */
+export const foreignAccounts = query({
+  args: { ...serverArgs, incomeYear: v.optional(v.number()) },
+  handler: async (ctx, { secret, clerkId, incomeYear }) => {
+    assertServer(secret);
+    const integrations = await ctx.db
+      .query("integrations")
+      .withIndex("by_user", (q) => q.eq("clerkUserId", clerkId))
+      .collect();
+    const period = declarationPeriod();
+    const year = incomeYear ?? period.incomeYear;
+    const isoDay = (timestamp: number | null | undefined) =>
+      timestamp ? new Date(timestamp).toISOString().slice(0, 10) : null;
+
+    const rows = listForeignAccounts(
+      integrations.map((integration) => ({
+        provider: integration.provider,
+        name: accountName({ provider: integration.provider, displayName: integration.displayName }),
+        ids: [String(integration._id)],
+        openedAt: integration.accountCreatedAt ?? null,
+        closedAt: integration.closedAt ?? null,
+      })),
+      year
+    );
+
+    return {
+      incomeYear: year,
+      filingYear: year + 1,
+      accounts: rows.map((row) => ({
+        name: row.name,
+        status: row.status,
+        entity: row.entity ?? null,
+        country: row.country ?? null,
+        openedAt: isoDay(openingDate(row)),
+        closedAt: isoDay(row.closedAt),
+        fineEur: row.fineEur,
+        note: row.note,
+      })),
+    };
   },
 });
 
