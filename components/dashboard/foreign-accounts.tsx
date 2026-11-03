@@ -1,29 +1,44 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
 import { Reveal } from "@/components/motion";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
+import { SectionLabel } from "@/app/dashboard/performance/ui";
 import { useFxRates } from "@/hooks/useFxRates";
-import { FINE_PER_ACCOUNT_EUR, foreignAccounts, type ForeignAccountRow } from "@/lib/foreign-accounts";
+import {
+  FINE_PER_ACCOUNT_EUR,
+  declarationPeriod,
+  foreignAccounts,
+  openingDate,
+  type ForeignAccountRow,
+} from "@/lib/foreign-accounts";
 import { accountName } from "@/lib/provider-names";
+import { errorMessage } from "@/lib/toast";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 const eur = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
 const dateLabel = (timestamp: number) =>
   new Date(timestamp).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 
-const STATUS_LABELS: Record<ForeignAccountRow["status"], string> = {
-  declare: "À déclarer",
-  verify: "À vérifier",
-  exempt: "Non concerné",
+const STATUS: Record<ForeignAccountRow["status"], { label: string; className: string }> = {
+  declare: { label: "À déclarer", className: "bg-negative/10 text-negative" },
+  verify: { label: "À vérifier", className: "bg-chart-4/10 text-chart-4" },
+  upcoming: { label: "Pas encore", className: "bg-surface text-muted-foreground" },
+  closed: { label: "Clôturé", className: "bg-surface text-muted-foreground" },
+  exempt: { label: "Non concerné", className: "bg-surface text-muted-foreground" },
 };
 
-const storageKey = (year: number) => `hashory:3916-bis:${year}`;
+const storageKey = (filingYear: number) => `hashory:3916-bis:${filingYear}`;
 
-function readChecked(year: number): string[] {
+function readChecked(filingYear: number): string[] {
   try {
-    const raw = window.localStorage.getItem(storageKey(year));
+    const raw = window.localStorage.getItem(storageKey(filingYear));
     const parsed: unknown = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [];
   } catch {
@@ -31,21 +46,31 @@ function readChecked(year: number): string[] {
   }
 }
 
+/** « 2025-03-14 » ↔ minuit local, ce qu'attend un champ de date. */
+const toInputDate = (timestamp: number) => {
+  const d = new Date(timestamp);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const fromInputDate = (value: string) => {
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d).getTime();
+};
+
 /**
  * Comptes à reporter sur le formulaire 3916-bis, avec ce qu'il faut pour le
- * remplir : entité, pays, date d'ouverture. Une case par compte, retenue
- * dans ce navigateur, sert d'aide-mémoire le jour de la déclaration.
+ * remplir : entité, pays, dates d'ouverture et de clôture. La clôture est
+ * enregistrée sur le compte ; la case « Déclaré » n'est qu'un aide-mémoire,
+ * retenu dans ce navigateur.
  */
-export function ForeignAccounts() {
+export function ForeignAccounts({ index }: { index: string }) {
   const { integrations, transactions, portfolioTokens, currentPrices } = useDashboardData();
   const { rateAt } = useFxRates();
-  // On déclare au printemps les comptes détenus l'année précédente.
-  const declarationYear = new Date().getFullYear();
+  const { incomeYear, filingYear } = declarationPeriod();
   const [checked, setChecked] = useState<string[]>([]);
 
   useEffect(() => {
-    setChecked(readChecked(declarationYear));
-  }, [declarationYear]);
+    setChecked(readChecked(filingYear));
+  }, [filingYear]);
 
   const rows = useMemo(() => {
     const eurPerUsd = rateAt(Date.now())?.eurPerUsd ?? null;
@@ -74,19 +99,23 @@ export function ForeignAccounts() {
         return {
           provider: integration.provider,
           name: accountName(integration),
+          ids: [id],
           openedAt: integration.accountCreatedAt ?? null,
           firstActivityAt: firstActivity.get(id) ?? null,
+          closedAt: integration.closedAt ?? null,
           valueEur: usd !== undefined && eurPerUsd ? usd * eurPerUsd : null,
         };
-      })
+      }),
+      incomeYear
     );
-  }, [integrations, transactions, portfolioTokens, currentPrices, rateAt]);
+  }, [integrations, transactions, portfolioTokens, currentPrices, rateAt, incomeYear]);
 
   if (rows.length === 0) return null;
 
-  const toDeclare = rows.filter((row) => row.status !== "exempt");
+  const concerned = rows.filter((row) => row.status === "declare" || row.status === "verify");
+  const later = rows.filter((row) => row.status === "closed" || row.status === "upcoming");
   const exempt = rows.filter((row) => row.status === "exempt");
-  const pending = toDeclare.filter((row) => !checked.includes(row.provider));
+  const pending = concerned.filter((row) => !checked.includes(row.provider));
   const maxFine = pending.reduce((sum, row) => sum + (row.fineEur ?? 0), 0);
   const pendingDeclare = pending.filter((row) => row.status === "declare").length;
   const pendingVerify = pending.length - pendingDeclare;
@@ -95,7 +124,7 @@ export function ForeignAccounts() {
     setChecked((current) => {
       const next = value ? [...new Set([...current, provider])] : current.filter((p) => p !== provider);
       try {
-        window.localStorage.setItem(storageKey(declarationYear), JSON.stringify(next));
+        window.localStorage.setItem(storageKey(filingYear), JSON.stringify(next));
       } catch {
         // Stockage indisponible : la case vaut pour la session.
       }
@@ -104,36 +133,31 @@ export function ForeignAccounts() {
   };
 
   return (
-    <section className="space-y-6">
+    <section id="comptes-etranger" className="scroll-mt-24 space-y-4">
       <Reveal>
-        <div className="flex items-baseline gap-4 border-b border-border/60 pb-4">
-          <span className="num text-xs text-primary">→</span>
-          <span className="num text-xs uppercase tracking-[0.28em] text-muted-foreground">
-            Comptes à l&apos;étranger · formulaire 3916-bis
-          </span>
-        </div>
+        <SectionLabel index={index}>Comptes à l&apos;étranger</SectionLabel>
       </Reveal>
 
-      <Reveal delay={60}>
+      <Reveal delay={40}>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
           Indépendamment de l&apos;impôt, chaque compte ouvert chez une plateforme établie hors de France se
-          déclare tous les ans avec vos revenus, même inactif ou vide. L&apos;oubli coûte{" "}
-          <span className="num text-foreground">{eur.format(FINE_PER_ACCOUNT_EUR)}</span> par compte. Vos
-          portefeuilles en auto-garde n&apos;y sont pas soumis.
+          déclare sur le formulaire <span className="font-bold text-foreground">3916-bis</span>, même inactif ou
+          vide. L&apos;oubli coûte <span className="num text-foreground">{eur.format(FINE_PER_ACCOUNT_EUR)}</span>{" "}
+          par compte. Liste établie pour la déclaration {filingYear}, sur les revenus {incomeYear}.
         </p>
       </Reveal>
 
-      {toDeclare.length > 0 && (
-        <Reveal delay={90}>
+      {concerned.length > 0 ? (
+        <Reveal delay={80}>
           <div className="float-card overflow-hidden">
             <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line px-5 py-4">
               <p className="text-sm text-foreground">
                 {pending.length === 0 ? (
-                  <span className="font-bold text-jade">Tous vos comptes sont cochés pour {declarationYear}.</span>
+                  <span className="font-bold text-jade">Tous vos comptes sont cochés pour {filingYear}.</span>
                 ) : (
                   <>
-                    Déclaration {declarationYear} :{" "}
-                    <span className="num font-bold">{pendingDeclare}</span> compte{pendingDeclare > 1 ? "s" : ""} à déclarer
+                    <span className="num font-bold">{pendingDeclare}</span> compte{pendingDeclare > 1 ? "s" : ""} à
+                    déclarer
                     {pendingVerify > 0 && (
                       <>
                         , <span className="num font-bold">{pendingVerify}</span> à vérifier
@@ -150,7 +174,7 @@ export function ForeignAccounts() {
               )}
             </div>
             <ul className="divide-y divide-line">
-              {toDeclare.map((row) => (
+              {concerned.map((row) => (
                 <AccountRow
                   key={row.provider}
                   row={row}
@@ -161,37 +185,52 @@ export function ForeignAccounts() {
             </ul>
           </div>
         </Reveal>
-      )}
-
-      {exempt.length > 0 && (
-        <Reveal delay={120}>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            <span className="font-bold text-foreground">Non concernés :</span>{" "}
-            {exempt.map((row) => row.name).join(", ")} — auto-garde ou prestataire établi en France.
+      ) : (
+        <Reveal delay={80}>
+          <p className="rounded-2xl bg-surface px-4 py-3 text-sm text-muted-foreground">
+            Aucun compte à reporter pour la déclaration {filingYear}.
           </p>
         </Reveal>
       )}
 
+      {later.length > 0 && (
+        <Reveal delay={100}>
+          <div className="float-card overflow-hidden">
+            <p className="border-b border-line px-5 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+              Plus ou pas encore à déclarer
+            </p>
+            <ul className="divide-y divide-line">
+              {later.map((row) => (
+                <AccountRow key={row.provider} row={row} />
+              ))}
+            </ul>
+          </div>
+        </Reveal>
+      )}
+
+      {exempt.length > 0 && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-bold text-foreground">Non concernés :</span> {exempt.map((row) => row.name).join(", ")}{" "}
+          — auto-garde ou prestataire établi en France.
+        </p>
+      )}
+
       <p className="text-[11px] leading-relaxed text-faint">
         Entités indicatives : celle qui tient votre compte dépend de sa date d&apos;ouverture et figure dans vos
-        conditions d&apos;utilisation. Le formulaire demande aussi l&apos;adresse de l&apos;entité et la date
-        d&apos;ouverture, ou de clôture, du compte. Ce n&apos;est pas un conseil fiscal.
+        conditions d&apos;utilisation. Le formulaire demande aussi son adresse. Ce n&apos;est pas un conseil fiscal.
       </p>
     </section>
   );
 }
 
-/**
- * Date d'ouverture à reporter. Une date communiquée par la plateforme mais
- * postérieure à la première opération connue n'est pas l'ouverture du
- * compte : la première opération est alors la meilleure borne disponible.
- */
 function openingLabel(row: ForeignAccountRow): string {
   const opened = row.openedAt ?? null;
   const first = row.firstActivityAt ?? null;
+  const best = openingDate(row);
+  if (best === null) return "Date d'ouverture inconnue.";
+  // Une date d'ouverture postérieure à la première opération n'en est pas une.
   if (opened !== null && (first === null || opened <= first)) return `Ouvert le ${dateLabel(opened)}.`;
-  if (first !== null) return `Ouvert au plus tard le ${dateLabel(first)}, date de la première opération connue.`;
-  return "Date d'ouverture inconnue.";
+  return `Ouvert au plus tard le ${dateLabel(best)}, date de la première opération connue.`;
 }
 
 function AccountRow({
@@ -200,22 +239,17 @@ function AccountRow({
   onToggle,
 }: {
   row: ForeignAccountRow;
-  declared: boolean;
-  onToggle: (value: boolean) => void;
+  declared?: boolean;
+  onToggle?: (value: boolean) => void;
 }) {
   const id = `3916-${row.provider}`;
   return (
-    <li className={cn("flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between", declared && "opacity-60")}>
+    <li className={cn("flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between", declared && "opacity-60")}>
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-foreground">{row.name}</span>
-          <span
-            className={cn(
-              "chip text-[10px] font-bold uppercase tracking-[0.12em]",
-              row.status === "declare" ? "bg-negative/10 text-negative" : "bg-chart-4/10 text-chart-4"
-            )}
-          >
-            {STATUS_LABELS[row.status]}
+          <span className={cn("chip text-[10px] font-bold uppercase tracking-[0.12em]", STATUS[row.status].className)}>
+            {STATUS[row.status].label}
           </span>
         </div>
         {(row.entity || row.country) && (
@@ -228,11 +262,101 @@ function AccountRow({
         <p className="text-xs text-muted-foreground">
           {openingLabel(row)} {row.note}
         </p>
+        <ClosingDate row={row} />
       </div>
-      <label htmlFor={id} className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-        <Checkbox id={id} checked={declared} onCheckedChange={(value) => onToggle(value === true)} />
-        Déclaré
-      </label>
+      {onToggle && (
+        <label htmlFor={id} className="flex shrink-0 cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+          <Checkbox id={id} checked={declared} onCheckedChange={(value) => onToggle(value === true)} />
+          Déclaré
+        </label>
+      )}
     </li>
+  );
+}
+
+/** Date de clôture : affichée, saisie ou retirée, pour toutes les connexions du compte. */
+function ClosingDate({ row }: { row: ForeignAccountRow }) {
+  const setClosedAt = useMutation(api.integrations.setClosedAt);
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(row.closedAt ? toInputDate(row.closedAt) : "");
+  const [saving, setSaving] = useState(false);
+  const minDate = openingDate(row);
+
+  const save = async (closedAt: number | null) => {
+    setSaving(true);
+    try {
+      await Promise.all(
+        row.ids.map((integrationId) => setClosedAt({ integrationId: integrationId as Id<"integrations">, closedAt }))
+      );
+      setEditing(false);
+      toast.success(closedAt === null ? "Clôture retirée" : "Date de clôture enregistrée");
+    } catch (error) {
+      toast.error(errorMessage(error, "Impossible d'enregistrer la date."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <form
+        className="flex flex-wrap items-center gap-2 pt-1"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (value) void save(fromInputDate(value));
+        }}
+      >
+        <label htmlFor={`close-${row.provider}`} className="text-xs text-muted-foreground">
+          Clôturé le
+        </label>
+        <input
+          id={`close-${row.provider}`}
+          type="date"
+          value={value}
+          min={minDate ? toInputDate(minDate) : undefined}
+          max={toInputDate(Date.now())}
+          onChange={(event) => setValue(event.target.value)}
+          className="num h-8 rounded-full border border-border bg-card px-3 text-xs text-foreground outline-none focus:border-primary"
+        />
+        <Button type="submit" size="sm" disabled={!value || saving} className="h-8 rounded-full px-3 text-xs">
+          Enregistrer
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setEditing(false)}
+          className="h-8 rounded-full px-3 text-xs text-muted-foreground"
+        >
+          Annuler
+        </Button>
+      </form>
+    );
+  }
+
+  return (
+    <p className="pt-1 text-xs">
+      {row.closedAt ? (
+        <>
+          <span className="text-foreground">Clôturé le {dateLabel(row.closedAt)}.</span>{" "}
+          <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-bold text-violet hover:underline">
+            Modifier
+          </button>
+          <span className="text-faint"> · </span>
+          <button
+            type="button"
+            onClick={() => void save(null)}
+            disabled={saving}
+            className="cursor-pointer text-muted-foreground hover:text-foreground hover:underline"
+          >
+            Retirer
+          </button>
+        </>
+      ) : (
+        <button type="button" onClick={() => setEditing(true)} className="cursor-pointer font-bold text-violet hover:underline">
+          Compte clôturé ? Indiquer la date
+        </button>
+      )}
+    </p>
   );
 }

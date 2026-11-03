@@ -22,6 +22,8 @@ export type IntegrationRecord = {
   /** Étapes planifiées encore suivies — vide hors synchronisation. */
   syncJobs?: SyncJob[];
   accountCreatedAt?: number | null;
+  /** Clôture du compte chez la plateforme, saisie par l'utilisateur. */
+  closedAt?: number | null;
   /** Synchronisation automatique active. Vrai par défaut. */
   syncEnabled: boolean;
   /** « file » : compte d'une plateforme à API suivi par ses seuls exports. */
