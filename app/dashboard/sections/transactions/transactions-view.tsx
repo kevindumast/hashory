@@ -1172,8 +1172,8 @@ function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
     <span className={cn("flex items-center gap-2 text-[11px] font-bold", !compact && "mt-0.5")}>
       {row.taxable && <span className="text-violet">Imposable</span>}
       {row.swap && (
-        <span className="text-jade" title="Échange via un service (swap, pont) : crypto contre crypto, en sursis d'imposition.">
-          {row.swapReceipt ? "Sursis d'imposition" : `Swap ${row.swap}`}
+        <span className="text-jade" title="Échange via un service (swap, pont) : crypto contre crypto, non imposable : rien à déclarer.">
+          {row.swapReceipt ? "Crypto → crypto" : `Swap ${row.swap}`}
         </span>
       )}
       {spoofed && (
@@ -1397,7 +1397,7 @@ function TransactionDetail({
                 </DetailItem>
               )}
               {row.swap && (
-                <DetailItem label="Swap via un service" note="Échange crypto contre crypto, en sursis d'imposition">
+                <DetailItem label="Swap via un service" note="Échange crypto contre crypto : non imposable">
                   <span className="text-sm font-bold text-jade">{row.swap}</span>
                 </DetailItem>
               )}

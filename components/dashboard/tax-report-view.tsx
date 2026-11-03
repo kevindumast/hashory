@@ -319,7 +319,7 @@ function Reliability({ result }: { result: TaxReportResult }) {
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {swaps.length} envoi{swaps.length > 1 ? "s" : ""} suivi{swaps.length > 1 ? "s" : ""} de la réception d&apos;un
                 autre actif dans les deux heures, pour une valeur voisine : un swap ou un pont, donc un échange crypto
-                contre crypto, en sursis d&apos;imposition. Le prix d&apos;acquisition a suivi les jetons. Gardez les deux
+                contre crypto, non imposable et rien à déclarer. Le prix d&apos;acquisition a suivi les jetons. Gardez les deux
                 hash comme justificatif.
               </p>
               <ServiceSwaps swaps={swaps} />

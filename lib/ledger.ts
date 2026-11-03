@@ -49,6 +49,13 @@ const ASSET_ALIASES: Record<string, string> = {
   ZEUR: "EUR",
   ZUSD: "USD",
   ZGBP: "GBP",
+  // Solana : avant la résolution des tickers, un jeton était rangé sous les
+  // huit premiers caractères de son mint. Ces lignes restent en base.
+  BZLBGTNC: "IO",
+  EPJFWDD5: "USDC",
+  ES9VMFRZ: "USDT",
+  JUPYIWRY: "JUP",
+  DEZXAZ8Z: "BONK",
 };
 
 export function normalizeAsset(asset: string): string {
