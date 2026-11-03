@@ -5,7 +5,7 @@ import { optionalUserId } from "./auth";
 
 const DAY_MS = 86_400_000;
 
-// CoinGecko fallback ids for symbols Binance doesn't have a USDT pair for.
+// CoinGecko fallback ids, used when neither Binance nor KuCoin has a USDT pair.
 const GECKO_IDS: Record<string, string> = {
   KAS: "kaspa",
   BTC: "bitcoin",
@@ -106,7 +106,7 @@ export const getLatestDay = internalQuery({
 export const insertBatch = internalMutation({
   args: {
     symbol: v.string(),
-    source: v.union(v.literal("binance"), v.literal("coingecko"), v.literal("manual")),
+    source: v.union(v.literal("binance"), v.literal("kucoin"), v.literal("coingecko"), v.literal("manual")),
     points: v.array(v.object({ dayUtc: v.number(), closeUsd: v.number() })),
   },
   handler: async (ctx, { symbol, source, points }) => {
@@ -181,6 +181,45 @@ async function fetchBinanceDaily(
   return out;
 }
 
+/**
+ * KuCoin cote des actifs absents de Binance (KAS, notamment), avec tout
+ * l'historique et sans clé. Les bougies arrivent de la plus récente à la plus
+ * ancienne, 1 500 au plus par appel : on avance donc par fenêtres.
+ */
+async function fetchKucoinDaily(
+  symbol: string,
+  startMs: number,
+  endMs: number
+): Promise<{ dayUtc: number; closeUsd: number }[]> {
+  const WINDOW_MS = 1_500 * DAY_MS;
+  const byDay = new Map<number, number>();
+  const pair = `${symbol}-USDT`;
+
+  for (let from = startMs; from <= endMs; from += WINDOW_MS) {
+    const to = Math.min(from + WINDOW_MS - 1, endMs + DAY_MS - 1);
+    const url = `https://api.kucoin.com/api/v1/market/candles?type=1day&symbol=${pair}&startAt=${Math.floor(from / 1000)}&endAt=${Math.floor(to / 1000)}`;
+    const res = await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`KuCoin candles ${pair} failed: ${res.status}`);
+    const body = (await res.json()) as { code?: string; data?: string[][] };
+    // Paire inconnue : KuCoin répond 200 avec un code d'erreur.
+    if (body.code !== "200000" || !Array.isArray(body.data)) return [];
+
+    for (const candle of body.data) {
+      const close = Number(candle[2]);
+      if (!Number.isFinite(close) || close <= 0) continue;
+      byDay.set(startOfUtcDay(Number(candle[0]) * 1000), close);
+    }
+  }
+
+  return Array.from(byDay.entries())
+    .filter(([dayUtc]) => dayUtc >= startMs && dayUtc <= endMs)
+    .sort(([a], [b]) => a - b)
+    .map(([dayUtc, closeUsd]) => ({ dayUtc, closeUsd }));
+}
+
 async function fetchCoingeckoDaily(
   symbol: string,
   startMs: number,
@@ -189,7 +228,9 @@ async function fetchCoingeckoDaily(
   const id = GECKO_IDS[symbol.toUpperCase()];
   if (!id) return [];
 
-  const fromSec = Math.floor(startMs / 1000);
+  // L'API publique refuse (401) toute plage qui remonte à plus de 365 jours :
+  // on se contente de la dernière année plutôt que de ne rien obtenir.
+  const fromSec = Math.floor(Math.max(startMs, endMs - 364 * DAY_MS) / 1000);
   const toSec = Math.floor(endMs / 1000);
   const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart/range?vs_currency=usd&from=${fromSec}&to=${toSec}`;
 
@@ -243,14 +284,24 @@ export const backfillSymbol = internalAction({
 
     // 1. Try Binance first
     let points: { dayUtc: number; closeUsd: number }[] = [];
-    let source: "binance" | "coingecko" = "binance";
+    let source: "binance" | "kucoin" | "coingecko" = "binance";
     try {
       points = await fetchBinanceDaily(upper, startDay, endDay);
     } catch (err) {
       console.warn(`[priceHistory] Binance failed for ${upper}:`, err);
     }
 
-    // 2. Fallback CoinGecko
+    // 2. KuCoin, pour les actifs que Binance ne cote pas
+    if (points.length === 0) {
+      try {
+        points = await fetchKucoinDaily(upper, startDay, endDay);
+        source = "kucoin";
+      } catch (err) {
+        console.warn(`[priceHistory] KuCoin failed for ${upper}:`, err);
+      }
+    }
+
+    // 3. CoinGecko en dernier recours
     if (points.length === 0) {
       try {
         points = await fetchCoingeckoDaily(upper, startDay, endDay);
