@@ -62,6 +62,8 @@ export const listByUser = query({
       updateTime?: number;
       fee: number;
       txId?: string;
+      counterparty?: string;
+      protocol?: string;
       withdrawId: string;
     }> = [];
 
@@ -84,6 +86,8 @@ export const listByUser = query({
           updateTime: withdrawal.updateTime ?? undefined,
           fee: storedWithdrawalFee(withdrawal),
           txId: withdrawal.txId ?? undefined,
+          counterparty: withdrawal.counterparty,
+          protocol: withdrawal.protocol || undefined,
           withdrawId: withdrawal.withdrawId,
         });
       }
@@ -109,6 +113,8 @@ export const listByUser = query({
         updateTime: record.updateTime ?? null,
         fee: record.fee,
         txId: record.txId ?? null,
+        counterparty: record.counterparty ?? null,
+        protocol: record.protocol ?? null,
         withdrawId: record.withdrawId,
       };
     });

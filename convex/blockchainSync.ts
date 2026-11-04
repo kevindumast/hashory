@@ -1,4 +1,5 @@
-import { internalMutation, mutation } from "./_generated/server";
+import { internalMutation, internalQuery, mutation } from "./_generated/server";
+import { swapLikeHashes } from "../lib/evm-transfers";
 import { v } from "convex/values";
 import { requireUserId } from "./auth";
 import { internal } from "./_generated/api";
@@ -11,6 +12,8 @@ const depositInput = v.object({
   status: v.string(),
   insertTime: v.number(),
   txId: v.string(),
+  counterparty: v.optional(v.string()),
+  protocol: v.optional(v.string()),
 });
 
 const withdrawalInput = v.object({
@@ -22,6 +25,8 @@ const withdrawalInput = v.object({
   applyTime: v.number(),
   txId: v.string(),
   fee: v.number(),
+  counterparty: v.optional(v.string()),
+  protocol: v.optional(v.string()),
 });
 
 export const bulkInsertTransactions = mutation({
@@ -50,7 +55,12 @@ export const bulkInsertTransactions = mutation({
           q.eq("integrationId", args.integrationId).eq("depositId", d.depositId)
         )
         .first();
-      if (existing) continue;
+      if (existing) {
+        // Ligne enregistrée avant la lecture de l'adresse d'en face : on complète.
+        const patch = enrichment(existing, d);
+        if (patch) await ctx.db.patch(existing._id, patch);
+        continue;
+      }
       await ctx.db.insert("deposits", {
         integrationId: args.integrationId,
         depositId: d.depositId,
@@ -60,6 +70,8 @@ export const bulkInsertTransactions = mutation({
         status: d.status,
         insertTime: d.insertTime,
         txId: d.txId,
+        ...(d.counterparty ? { counterparty: d.counterparty } : {}),
+        ...(d.protocol !== undefined ? { protocol: d.protocol } : {}),
         createdAt: now,
       });
       depositsInserted += 1;
@@ -72,7 +84,11 @@ export const bulkInsertTransactions = mutation({
           q.eq("integrationId", args.integrationId).eq("withdrawId", w.withdrawId)
         )
         .first();
-      if (existing) continue;
+      if (existing) {
+        const patch = enrichment(existing, w);
+        if (patch) await ctx.db.patch(existing._id, patch);
+        continue;
+      }
       await ctx.db.insert("withdrawals", {
         integrationId: args.integrationId,
         withdrawId: w.withdrawId,
@@ -83,6 +99,8 @@ export const bulkInsertTransactions = mutation({
         applyTime: w.applyTime,
         txId: w.txId,
         fee: w.fee,
+        ...(w.counterparty ? { counterparty: w.counterparty } : {}),
+        ...(w.protocol !== undefined ? { protocol: w.protocol } : {}),
         createdAt: now,
       });
       withdrawalsInserted += 1;
@@ -132,5 +150,62 @@ export const renameCoin = internalMutation({
     }
 
     return { deposits, withdrawals };
+  },
+});
+
+/** Champs à compléter sur une ligne déjà enregistrée, ou null. */
+function enrichment(
+  existing: { counterparty?: string; protocol?: string },
+  incoming: { counterparty?: string; protocol?: string }
+): { counterparty?: string; protocol?: string } | null {
+  const patch: { counterparty?: string; protocol?: string } = {};
+  if (!existing.counterparty && incoming.counterparty) patch.counterparty = incoming.counterparty;
+  if (!existing.protocol && incoming.protocol) patch.protocol = incoming.protocol;
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
+/**
+ * Hash des transactions d'un wallet qui ressemblent à un swap et dont le
+ * DEX n'a pas encore été cherché. La synchronisation les traite par lots :
+ * l'historique déjà importé se complète ainsi au fil des synchronisations.
+ */
+export const swapHashesToIdentify = internalQuery({
+  args: { integrationId: v.id("integrations"), limit: v.number() },
+  handler: async (ctx, { integrationId, limit }) => {
+    const [deposits, withdrawals] = await Promise.all([
+      ctx.db.query("deposits").withIndex("by_integration", (q) => q.eq("integrationId", integrationId)).collect(),
+      ctx.db.query("withdrawals").withIndex("by_integration", (q) => q.eq("integrationId", integrationId)).collect(),
+    ]);
+    return swapLikeHashes(deposits, withdrawals).slice(0, limit);
+  },
+});
+
+/**
+ * Enregistre le DEX de transactions : toutes les lignes du hash le portent.
+ * Une chaîne vide note « cherché, non reconnu », pour ne pas redemander.
+ */
+export const setSwapProtocols = internalMutation({
+  args: {
+    integrationId: v.id("integrations"),
+    items: v.array(v.object({ txId: v.string(), protocol: v.string(), contract: v.optional(v.string()) })),
+  },
+  handler: async (ctx, { integrationId, items }) => {
+    if (items.length === 0) return;
+    const byHash = new Map(items.map((item) => [item.txId.toLowerCase(), item]));
+    for (const table of ["deposits", "withdrawals"] as const) {
+      const rows = await ctx.db
+        .query(table)
+        .withIndex("by_integration", (q) => q.eq("integrationId", integrationId))
+        .collect();
+      for (const row of rows) {
+        const item = row.txId ? byHash.get(row.txId.toLowerCase()) : undefined;
+        if (!item || row.protocol) continue;
+        await ctx.db.patch(row._id, {
+          protocol: item.protocol,
+          // Le contrat appelé, sur un envoi : c'est l'adresse à montrer.
+          ...(table === "withdrawals" && item.contract && !row.counterparty ? { counterparty: item.contract } : {}),
+        });
+      }
+    }
   },
 });

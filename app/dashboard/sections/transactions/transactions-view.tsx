@@ -44,6 +44,7 @@ import { type TransactionEntry, currencyFormatter } from "@/hooks/dashboard/useD
 import { EUR_STABLECOINS, USD_STABLECOINS, isFiat, normalizeAsset } from "@/lib/ledger"
 import { tradeFlows } from "@/lib/trade-flows"
 import { explorerUrl, isOnchainProvider, isSpoofedSymbol, onchainSummary, type OnchainSummary } from "@/lib/onchain"
+import { addressExplorerUrl } from "@/lib/dex"
 import { useActiveQuery } from "@/hooks/usePageActivity"
 import { api } from "@/convex/_generated/api"
 import { FiatIcon, hasFiatIcon } from "@/components/ui/fiat-icon"
@@ -152,6 +153,10 @@ type Row = {
   swapKey?: string
   /** Swap regroupé : la réception, sur l'autre wallet. */
   swapReceipt?: { txId: string | null; provider: string; account: string }
+  /** Swap sur un DEX, dans une seule transaction : le DEX, ou "" s'il n'est pas reconnu. */
+  dex?: string
+  /** Adresse d'en face lue sur la chaîne (émetteur, ou contrat appelé). */
+  counterparty?: string | null
 }
 
 const TRADE_LABELS: Record<string, string> = {
@@ -366,6 +371,27 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
     return map
   }, [taxReport])
 
+  // Swaps sur un DEX : sous un même hash et sur un même wallet, une sortie
+  // et une entrée d'actifs différents. Le DEX vient de la synchronisation.
+  const dexByTx = React.useMemo(() => {
+    const groups = new Map<string, { ins: Set<string>; outs: Set<string>; protocol: string }>()
+    for (const tx of transactions) {
+      if (tx.type === "trade" || !tx.txId || !isOnchainProvider(tx.provider)) continue
+      const key = `${tx.integrationId}|${tx.txId.toLowerCase()}`
+      const group = groups.get(key) ?? { ins: new Set(), outs: new Set(), protocol: "" }
+      ;(tx.type === "deposit" ? group.ins : group.outs).add(normalizeAsset(tx.baseAsset))
+      if (tx.protocol) group.protocol = tx.protocol
+      groups.set(key, group)
+    }
+    const map = new Map<string, string>()
+    for (const [key, group] of groups) {
+      if (group.ins.size === 0 || group.outs.size === 0) continue
+      if ([...group.ins].every((asset) => group.outs.has(asset))) continue
+      map.set(key, group.protocol)
+    }
+    return map
+  }, [transactions])
+
   const rawRows = React.useMemo<Row[]>(() => {
     return transactions.map((tx) => {
       const timestamp = tx.type === "trade" ? tx.executedAt : tx.timestamp
@@ -433,10 +459,16 @@ export function TransactionsView({ transactions, isLoading, initialSymbol }: Tra
         status: tx.status,
         provider: tx.provider,
         swap: tx.txId ? swapByTx.get(tx.txId.toLowerCase())?.label ?? null : null,
-        swapKey: tx.txId ? swapByTx.get(tx.txId.toLowerCase())?.key : undefined,
+        swapKey: tx.txId
+          ? (dexByTx.has(`${tx.integrationId}|${tx.txId.toLowerCase()}`)
+              ? `dex-${tx.integrationId}-${tx.txId.toLowerCase()}`
+              : swapByTx.get(tx.txId.toLowerCase())?.key)
+          : undefined,
+        dex: tx.txId ? dexByTx.get(`${tx.integrationId}|${tx.txId.toLowerCase()}`) : undefined,
+        counterparty: tx.counterparty ?? null,
       }
     })
-  }, [transactions, rateAt, spotPrices, pricesLoaded, swapByTx])
+  }, [transactions, rateAt, spotPrices, pricesLoaded, swapByTx, dexByTx])
 
   const rows = React.useMemo<Row[]>(() => mergeSwapHalves(rawRows), [rawRows])
 
@@ -1089,8 +1121,11 @@ function mergeSwapHalves(rows: Row[]): Row[] {
   for (const row of rows) {
     if (!row.swapKey) continue
     const pair = halves.get(row.swapKey) ?? {}
-    if (row.kind === "withdrawal") pair.out = row
-    else if (row.kind === "deposit") pair.in = row
+    // Plusieurs jambes (rente Solana, frais) : la plus grosse porte l'échange.
+    const larger = (current: Row | undefined) =>
+      !current || (row.valueUsd ?? 0) > (current.valueUsd ?? 0) ? row : current
+    if (row.kind === "withdrawal") pair.out = larger(pair.out)
+    else if (row.kind === "deposit") pair.in = larger(pair.in)
     halves.set(row.swapKey, pair)
   }
   const absorbed = new Set<string>()
@@ -1101,14 +1136,18 @@ function mergeSwapHalves(rows: Row[]): Row[] {
     merged.set(out.id, {
       ...out,
       kind: "trade",
-      label: "Swap via un service",
+      label: out.dex !== undefined ? (out.dex ? `Swap · ${out.dex}` : "Swap sur un DEX") : "Swap via un service",
+      swap: out.dex !== undefined ? `${out.out?.currency ?? "?"} → ${receipt.in?.currency ?? "?"}` : out.swap,
       in: receipt.in,
       account: out.account === receipt.account ? out.account : `${out.account} → ${receipt.account}`,
       valueUsd: out.valueUsd ?? receipt.valueUsd,
       valueEur: out.valueEur ?? receipt.valueEur,
       approximate: out.valueUsd !== null ? out.approximate : receipt.approximate,
       reasons: [],
-      swapReceipt: { txId: receipt.txId, provider: receipt.provider, account: receipt.account },
+      swapReceipt:
+        receipt.txId && out.txId && receipt.txId.toLowerCase() === out.txId.toLowerCase()
+          ? undefined
+          : { txId: receipt.txId, provider: receipt.provider, account: receipt.account },
     })
   }
   return rows.filter((row) => !absorbed.has(row.id)).map((row) => merged.get(row.id) ?? row)
@@ -1173,7 +1212,7 @@ function RowFlags({ row, compact }: { row: Row; compact?: boolean }) {
       {row.taxable && <span className="text-violet">Imposable</span>}
       {row.swap && (
         <span className="text-jade" title="Échange via un service (swap, pont) : crypto contre crypto, non imposable : rien à déclarer.">
-          {row.swapReceipt ? "Crypto → crypto" : `Swap ${row.swap}`}
+          {row.dex !== undefined ? (row.dex || "DEX") : row.swapReceipt ? "Crypto → crypto" : `Swap ${row.swap}`}
         </span>
       )}
       {spoofed && (
@@ -1397,8 +1436,38 @@ function TransactionDetail({
                 </DetailItem>
               )}
               {row.swap && (
-                <DetailItem label="Swap via un service" note="Échange crypto contre crypto : non imposable">
+                <DetailItem
+                  label={row.dex !== undefined ? "Swap sur un DEX" : "Swap via un service"}
+                  note="Échange crypto contre crypto : non imposable"
+                >
                   <span className="text-sm font-bold text-jade">{row.swap}</span>
+                  {row.dex !== undefined && (
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {row.dex ? (
+                        <>DEX utilisé : <span className="font-bold text-foreground">{row.dex}</span></>
+                      ) : (
+                        "DEX non reconnu : le contrat appelé est indiqué ci-dessous."
+                      )}
+                    </span>
+                  )}
+                </DetailItem>
+              )}
+              {row.counterparty && (
+                <DetailItem
+                  label={row.kind === "deposit" ? "Adresse émettrice" : row.dex !== undefined ? "Contrat appelé" : "Adresse destinataire"}
+                  note="Remontez à l'origine des fonds sur l'explorateur"
+                >
+                  <CopyValue value={row.counterparty} />
+                  {addressExplorerUrl(row.provider, row.counterparty) && (
+                    <a
+                      href={addressExplorerUrl(row.provider, row.counterparty)!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-violet hover:underline"
+                    >
+                      Voir l&apos;adresse <ExternalLink className="size-3" />
+                    </a>
+                  )}
                 </DetailItem>
               )}
               {row.swapReceipt?.txId && (

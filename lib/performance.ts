@@ -608,3 +608,117 @@ export function correlationMatrix(returnsByKey: Record<string, number[]>): Corre
     observations,
   };
 }
+
+/* ─── Risque extrême et distribution ───────────────────────────── */
+
+export type TailRisk = {
+  /** Perte journalière dépassée un jour sur vingt (VaR historique 95 %), en proportion positive. */
+  var95: number;
+  /** Perte moyenne les jours au-delà de la VaR (Expected Shortfall 95 %). */
+  cvar95: number;
+  /** VaR 99 % : un jour sur cent. */
+  var99: number;
+  /** Part des jours en hausse. */
+  hitRate: number;
+  bestDay: { dayUtc: number; value: number } | null;
+  worstDay: { dayUtc: number; value: number } | null;
+  /** Asymétrie : négative, les grosses baisses sont plus fréquentes que les grosses hausses. */
+  skewness: number;
+  /** Aplatissement en excès : au-dessus de 0, des extrêmes plus fréquents qu'une loi normale. */
+  excessKurtosis: number;
+  /** Gain moyen des jours de hausse rapporté à la perte moyenne des jours de baisse. */
+  gainLossRatio: number;
+  /** Somme des gains sur somme des pertes, en valeur absolue (profit factor). */
+  profitFactor: number;
+  /** Plus longue série de jours de baisse consécutifs. */
+  longestLosingStreak: number;
+};
+
+/** Quantile empirique par interpolation linéaire, sur une liste triée. */
+function quantile(sorted: number[], probability: number): number {
+  if (sorted.length === 0) return 0;
+  const position = (sorted.length - 1) * probability;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * (position - lower);
+}
+
+/**
+ * Risque de queue des rendements quotidiens, méthode historique : sans
+ * hypothèse de loi normale, que les cryptos ne suivent pas. VaR et CVaR sont
+ * des pertes, donc positives.
+ */
+export function tailRisk(returns: PeriodReturn[]): TailRisk {
+  const values = returns.map((entry) => entry.value);
+  const sorted = [...values].sort((a, b) => a - b);
+  const var95 = Math.max(0, -quantile(sorted, 0.05));
+  const var99 = Math.max(0, -quantile(sorted, 0.01));
+  const tail = sorted.filter((value) => value <= -var95);
+  const cvar95 = tail.length > 0 ? Math.max(0, -mean(tail)) : var95;
+
+  const average = mean(values);
+  const deviation = standardDeviation(values);
+  let m3 = 0;
+  let m4 = 0;
+  for (const value of values) {
+    const z = deviation > 0 ? (value - average) / deviation : 0;
+    m3 += z ** 3;
+    m4 += z ** 4;
+  }
+  const n = values.length;
+  const gains = values.filter((value) => value > 0);
+  const losses = values.filter((value) => value < 0);
+  const sumGains = gains.reduce((sum, value) => sum + value, 0);
+  const sumLosses = -losses.reduce((sum, value) => sum + value, 0);
+
+  let streak = 0;
+  let longest = 0;
+  for (const value of values) {
+    streak = value < 0 ? streak + 1 : 0;
+    longest = Math.max(longest, streak);
+  }
+
+  let best: PeriodReturn | null = null;
+  let worst: PeriodReturn | null = null;
+  for (const entry of returns) {
+    if (!best || entry.value > best.value) best = entry;
+    if (!worst || entry.value < worst.value) worst = entry;
+  }
+
+  return {
+    var95,
+    cvar95,
+    var99,
+    hitRate: n > 0 ? gains.length / n : 0,
+    bestDay: best,
+    worstDay: worst,
+    skewness: n > 2 ? m3 / n : 0,
+    excessKurtosis: n > 3 ? m4 / n - 3 : 0,
+    gainLossRatio: gains.length > 0 && losses.length > 0 ? sumGains / gains.length / (sumLosses / losses.length) : 0,
+    profitFactor: sumLosses > 0 ? sumGains / sumLosses : 0,
+    longestLosingStreak: longest,
+  };
+}
+
+/** Indice d'ulcère : profondeur et durée des baisses réunies (racine de la moyenne des pertes au carré). */
+export function ulcerIndex(series: Array<{ value: number }>): number {
+  if (series.length === 0) return 0;
+  let peak = series[0].value;
+  let sum = 0;
+  for (const point of series) {
+    peak = Math.max(peak, point.value);
+    const drawdown = peak > 0 ? point.value / peak - 1 : 0;
+    sum += drawdown * drawdown;
+  }
+  return Math.sqrt(sum / series.length);
+}
+
+/** Volatilité annualisée glissante, pour voir le risque évoluer. */
+export function rollingVolatility(returns: PeriodReturn[], window = 30): Array<{ dayUtc: number; value: number }> {
+  const result: Array<{ dayUtc: number; value: number }> = [];
+  for (let index = window - 1; index < returns.length; index += 1) {
+    const slice = returns.slice(index - window + 1, index + 1).map((entry) => entry.value);
+    result.push({ dayUtc: returns[index].dayUtc, value: volatility(slice) });
+  }
+  return result;
+}

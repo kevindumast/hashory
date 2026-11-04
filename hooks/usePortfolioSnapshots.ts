@@ -189,3 +189,12 @@ export function usePortfolioSnapshots(scope?: string): {
 }
 
 export const PORTFOLIO_SNAPSHOT_DAY_MS = DAY_MS;
+
+/**
+ * Relance le recalcul à la demande, après un changement que la page ne voit
+ * pas passer par les comptes (un pointage manuel, par exemple).
+ */
+export function useRequestRecompute(): () => void {
+  const recompute = useAction(api.portfolioSnapshots.recomputeForUser);
+  return useCallback(() => runRecompute(() => recompute({})), [recompute]);
+}

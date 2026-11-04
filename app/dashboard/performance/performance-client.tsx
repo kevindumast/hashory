@@ -95,7 +95,16 @@ export function PerformanceClient() {
     stablecoinWeight,
     topAssetShock,
     attribution,
+    tail,
+    martin,
+    totalValueUsd,
   } = analytics;
+  const usdCompact = new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "USD",
+    currencyDisplay: "narrowSymbol",
+    maximumFractionDigits: 0,
+  });
 
   const hasSeries = indexSeries.length >= 2;
   const topVenue = venueConcentration.weights[0];
@@ -359,6 +368,70 @@ export function PerformanceClient() {
                   ? "Référence indisponible."
                   : `Corrélation à Bitcoin : ${ratio(correlationToBenchmark)}.`
               }
+            />
+          </MetricGrid>
+        </Reveal>
+
+        <Reveal delay={60}>
+          <p className="mb-2 mt-2 text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+            Risque extrême · méthode historique, sans hypothèse de loi normale
+          </p>
+          <MetricGrid>
+            <Metric
+              label="VaR 95 % · 1 jour"
+              value={`−${percent(tail.var95, 1).replace("+", "")}`}
+              tone="negative"
+              hint={`Un jour sur vingt, vous perdez plus de ${usdCompact.format(tail.var95 * totalValueUsd)} sur la valeur actuelle.`}
+            />
+            <Metric
+              label="CVaR 95 %"
+              value={`−${percent(tail.cvar95, 1).replace("+", "")}`}
+              tone="negative"
+              hint={`Perte moyenne ces jours-là : ${usdCompact.format(tail.cvar95 * totalValueUsd)}. VaR 99 % : −${percent(tail.var99, 1).replace("+", "")}.`}
+            />
+            <Metric
+              label="Jours gagnants"
+              value={percent(tail.hitRate, 0).replace("+", "")}
+              hint={`Gain moyen / perte moyenne : ${ratio(tail.gainLossRatio)}. Profit factor : ${ratio(tail.profitFactor)}.`}
+            />
+            <Metric
+              label="Pire et meilleur jour"
+              value={`${tail.worstDay ? percent(tail.worstDay.value, 1) : "—"} / ${tail.bestDay ? percent(tail.bestDay.value, 1) : "—"}`}
+              hint={
+                tail.worstDay
+                  ? `Pire séance le ${dateLabel(tail.worstDay.dayUtc)} ; ${tail.longestLosingStreak} jours de baisse d'affilée au plus.`
+                  : undefined
+              }
+            />
+            <Metric
+              label="Asymétrie"
+              value={ratio(tail.skewness)}
+              tone={tail.skewness < -0.5 ? "negative" : "neutral"}
+              hint={
+                tail.skewness < 0
+                  ? "Négative : les grosses baisses l'emportent sur les grosses hausses."
+                  : "Positive : les grosses hausses l'emportent sur les grosses baisses."
+              }
+            />
+            <Metric
+              label="Queues épaisses"
+              value={ratio(tail.excessKurtosis)}
+              hint={
+                tail.excessKurtosis > 1
+                  ? "Aplatissement en excès : les séances extrêmes sont bien plus fréquentes qu'une loi normale ne le dit."
+                  : "Proche d'une loi normale : peu de séances extrêmes."
+              }
+            />
+            <Metric
+              label="Martin (ulcère)"
+              value={ratio(martin)}
+              hint="Rendement annualisé rapporté à la profondeur et à la durée des baisses."
+            />
+            <Metric
+              label="VaR 95 % · 30 jours"
+              value={`−${percent(Math.min(1, tail.var95 * Math.sqrt(30)), 0).replace("+", "")}`}
+              tone="negative"
+              hint="Projection par la racine du temps : un ordre de grandeur, pas une promesse."
             />
           </MetricGrid>
         </Reveal>

@@ -14,6 +14,8 @@
  * par les fonctions Convex que par l'interface de réglages.
  */
 
+import { EVM_CHAINS, EVM_CHAIN_IDS } from "./evm-chains";
+
 export type DataProviderDefinition = {
   id: string;
   label: string;
@@ -90,11 +92,8 @@ export function dataProviderLabel(id: string): string {
 
 /** Fournisseur dont dépend la synchronisation d'une source donnée. */
 const PROVIDER_BY_SOURCE: Record<string, DataProviderId> = {
+  ...Object.fromEntries(EVM_CHAIN_IDS.map((id) => [id, EVM_CHAINS[id].dataProvider])),
   solana: "helius",
-  ethereum: "etherscan",
-  arbitrum: "etherscan",
-  base: "blockscout",
-  bsc: "alchemy",
   tao: "taostats",
 };
 

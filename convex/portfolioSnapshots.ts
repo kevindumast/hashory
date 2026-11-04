@@ -30,7 +30,7 @@ import {
  * 9 — frais Bitcoin comptés une fois, échanges via un service, faux jetons écartés.
  * 10 — swaps vers un jeton sans cours : prix déduit de l'échange.
  */
-const ENGINE_VERSION = 10;
+const ENGINE_VERSION = 11;
 
 /** Périmètre du portefeuille entier. */
 export const ALL_SCOPE = "all";
@@ -413,7 +413,7 @@ export const recomputeForUser = action({
         });
       }
       return findInSeries(prices, asset, day);
-    });
+    }, input.justifications ?? []);
     await ctx.runMutation(internal.taxReport.storeTaxReport, { clerkId, report: JSON.stringify(report) });
 
     // Achats et ventes par jour, pour les confronter à l'indice Fear & Greed.

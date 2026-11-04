@@ -18,6 +18,8 @@ export type WalletDeposit = {
   status: string;
   insertTime: number;
   txId: string;
+  /** Adresse émettrice : c'est elle qui dit d'où viennent les fonds. */
+  counterparty?: string;
 };
 
 export type WalletWithdrawal = {
@@ -29,6 +31,8 @@ export type WalletWithdrawal = {
   applyTime: number;
   txId: string;
   fee: number;
+  /** Adresse destinataire. */
+  counterparty?: string;
 };
 
 export type ParsedTransfers = {
@@ -143,6 +147,7 @@ export function parseNativeTxs(
         status: "CONFIRMED",
         insertTime: timeStamp,
         txId: tx.hash,
+        counterparty: from,
       });
     } else if (from === self) {
       const gasFee = Number(BigInt(tx.gasUsed) * BigInt(tx.gasPrice)) / 1e18;
@@ -155,11 +160,66 @@ export function parseNativeTxs(
         applyTime: timeStamp,
         txId: tx.hash,
         fee: gasFee,
+        ...(to ? { counterparty: to } : {}),
       });
     }
   }
 
   return { deposits, withdrawals, maxBlock };
+}
+
+export interface EtherscanInternalTx {
+  blockNumber: string;
+  timeStamp: string;
+  hash: string;
+  from: string;
+  to: string | null;
+  value: string;
+  isError: string;
+  traceId?: string;
+}
+
+/**
+ * Transferts natifs internes (txlistinternal) reçus par l'adresse : l'ETH
+ * qu'un routeur renvoie à la fin d'un swap jeton → ETH. Sans eux, ce swap
+ * n'avait qu'une jambe — un envoi de jetons sans rien en retour.
+ */
+export function parseInternalTxs(
+  txs: readonly EtherscanInternalTx[],
+  address: string,
+  chain: EvmChain
+): ParsedTransfers {
+  const self = address.toLowerCase();
+  const tag = nativeTag(chain);
+  const deposits: WalletDeposit[] = [];
+  let maxBlock = 0;
+  const seen = new Map<string, number>();
+
+  for (const tx of txs) {
+    const blockNumber = parseInt(tx.blockNumber, 10);
+    if (blockNumber > maxBlock) maxBlock = blockNumber;
+    if (tx.isError === "1") continue;
+    const value = BigInt(tx.value || "0");
+    if (value === BigInt(0)) continue;
+    const from = tx.from.toLowerCase();
+    const to = (tx.to ?? "").toLowerCase();
+    if (to !== self || from === self) continue;
+    // Plusieurs traces sous un même hash : un rang les distingue.
+    const rank = seen.get(tx.hash) ?? 0;
+    seen.set(tx.hash, rank + 1);
+    deposits.push({
+      depositId: `${tx.hash}-${tag}-int-${tx.traceId || rank}-in`,
+      coin: chain.nativeSymbol,
+      amount: Number(value) / 1e18,
+      network: chain.id,
+      status: "CONFIRMED",
+      insertTime: parseInt(tx.timeStamp, 10) * 1000,
+      txId: tx.hash,
+      counterparty: from,
+    });
+  }
+
+  return { deposits, withdrawals: [], maxBlock };
 }
 
 /** Transferts de jetons (tokentx). Un jeton sans décimales (NFT) est ignoré. */
@@ -199,6 +259,7 @@ export function parseTokenTxs(
         status: "CONFIRMED",
         insertTime: timeStamp,
         txId: tx.hash,
+        counterparty: from,
       });
     } else if (from === self) {
       withdrawals.push({
@@ -210,6 +271,7 @@ export function parseTokenTxs(
         applyTime: timeStamp,
         txId: tx.hash,
         fee: 0,
+        ...(to ? { counterparty: to } : {}),
       });
     }
   }
@@ -335,6 +397,7 @@ export function parseAlchemyTransfers(
         status: "CONFIRMED",
         insertTime: timeStamp,
         txId: transfer.hash,
+        counterparty: from,
       });
     } else if (from === self) {
       const withdrawId = `${base}-out`;
@@ -349,9 +412,40 @@ export function parseAlchemyTransfers(
         applyTime: timeStamp,
         txId: transfer.hash,
         fee: isNative ? (lookups.fees.get(transfer.hash) ?? 0) : 0,
+        ...(to ? { counterparty: to } : {}),
       });
     }
   }
 
   return { deposits, withdrawals, maxBlock };
+}
+
+// ─── Swaps : quel contrat a été appelé ───────────────────────────────────
+
+/**
+ * Transactions d'un wallet qui ressemblent à un swap : sous un même hash,
+ * au moins une entrée et une sortie d'actifs différents. C'est le contrat
+ * appelé par ces transactions qui nomme le DEX.
+ */
+export function swapLikeHashes(
+  deposits: readonly { txId?: string; coin: string; protocol?: string }[],
+  withdrawals: readonly { txId?: string; coin: string; protocol?: string }[]
+): string[] {
+  const ins = new Map<string, Set<string>>();
+  const pending = new Set<string>();
+  for (const deposit of deposits) {
+    if (!deposit.txId) continue;
+    const key = deposit.txId.toLowerCase();
+    ins.set(key, (ins.get(key) ?? new Set()).add(deposit.coin.toUpperCase()));
+    if (deposit.protocol === undefined) pending.add(key);
+  }
+  const result = new Set<string>();
+  for (const withdrawal of withdrawals) {
+    if (!withdrawal.txId) continue;
+    const key = withdrawal.txId.toLowerCase();
+    const received = ins.get(key);
+    if (!received || withdrawal.protocol !== undefined && !pending.has(key)) continue;
+    if ([...received].some((coin) => coin !== withdrawal.coin.toUpperCase())) result.add(withdrawal.txId);
+  }
+  return [...result];
 }

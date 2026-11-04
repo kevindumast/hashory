@@ -4,6 +4,8 @@
  * synchronisation, par un « Bad Request » de l'API qui ne disait rien.
  */
 
+import { EVM_CHAIN_IDS } from "./evm-chains";
+
 const BASE58 = "1-9A-HJ-NP-Za-km-z";
 
 /** Une adresse 0x… est la même sur toutes les chaînes EVM. */
@@ -14,10 +16,7 @@ const PATTERNS: Record<string, { pattern: RegExp; example: string }> = {
     pattern: new RegExp(`^(bc1[02-9ac-hj-np-z]{11,71}|[13][${BASE58}]{25,34})$`),
     example: "bc1q…, 1… ou 3…",
   },
-  ethereum: EVM_ADDRESS,
-  arbitrum: EVM_ADDRESS,
-  base: EVM_ADDRESS,
-  bsc: EVM_ADDRESS,
+  ...Object.fromEntries(EVM_CHAIN_IDS.map((id) => [id, EVM_ADDRESS])),
   solana: { pattern: new RegExp(`^[${BASE58}]{32,44}$`), example: "32 à 44 caractères base58" },
   kaspa: { pattern: /^kaspa:[a-z0-9]{61,63}$/, example: "kaspa:q…" },
   tao: { pattern: new RegExp(`^5[${BASE58}]{46,47}$`), example: "5… (SS58)" },

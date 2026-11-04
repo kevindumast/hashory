@@ -2,6 +2,7 @@ import { internalQuery, type QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import type { Id } from "./_generated/dataModel";
 import type { LedgerInput } from "../lib/ledger";
+import type { FlowJustification } from "../lib/justification";
 import { storedWithdrawalFee } from "./withdrawals";
 
 /**
@@ -28,7 +29,24 @@ export async function loadLedgerInput(
     withdrawals: [],
     fiat: [],
     providers: {},
+    justifications: [],
   };
+
+  const justifications = await ctx.db
+    .query("flowJustifications")
+    .withIndex("by_user", (q) => q.eq("clerkId", clerkId))
+    .collect();
+  for (const row of justifications) {
+    input.justifications!.push({
+      operationId: row.operationId,
+      direction: row.direction,
+      category: row.category as FlowJustification["category"],
+      ...(row.costEur !== undefined ? { costEur: row.costEur } : {}),
+      ...(row.linkedOperationId ? { linkedOperationId: row.linkedOperationId } : {}),
+      ...(row.note ? { note: row.note } : {}),
+      updatedAt: row.updatedAt,
+    });
+  }
 
   for (const integration of integrations) {
     const account = String(integration._id);
@@ -100,6 +118,8 @@ export async function loadLedgerInput(
         status: deposit.status,
         timestamp: deposit.insertTime,
         txId: deposit.txId,
+        ...(deposit.counterparty ? { counterparty: deposit.counterparty } : {}),
+        ...(deposit.protocol ? { protocol: deposit.protocol } : {}),
       });
     }
     for (const withdrawal of withdrawals) {
@@ -112,6 +132,8 @@ export async function loadLedgerInput(
         status: withdrawal.status,
         timestamp: withdrawal.applyTime,
         txId: withdrawal.txId,
+        ...(withdrawal.counterparty ? { counterparty: withdrawal.counterparty } : {}),
+        ...(withdrawal.protocol ? { protocol: withdrawal.protocol } : {}),
       });
     }
     for (const record of fiat) {

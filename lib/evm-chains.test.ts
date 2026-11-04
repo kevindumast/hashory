@@ -14,6 +14,8 @@ import {
 import { PROVIDER_ICONS } from "./provider-icons";
 import { WALLET_PROVIDERS, providerLabel } from "./providers";
 import { walletAddressError } from "./wallet-address";
+import { explorerUrl, isOnchainProvider } from "./onchain";
+import { isBlockchainAccount } from "./foreign-accounts";
 
 const ADDRESS = "0xE62cD3e7b0Afe4D43b03435C737072E77cbF1FB4";
 
@@ -31,8 +33,8 @@ describe("Ethereum — non-régression des curseurs et de l'API", () => {
 });
 
 describe("référentiel des chaînes EVM", () => {
-  it("déclare Ethereum, Arbitrum, Base et BNB Smart Chain", () => {
-    assert.deepEqual([...EVM_CHAIN_IDS].sort(), ["arbitrum", "base", "bsc", "ethereum"]);
+  it("déclare Ethereum, Arbitrum, Base, BNB Smart Chain, Polygon, OP, Avalanche et Linea", () => {
+    assert.deepEqual([...EVM_CHAIN_IDS].sort(), ["arbitrum", "avalanche", "base", "bsc", "ethereum", "linea", "optimism", "polygon"]);
   });
 
   it("porte les identifiants EIP-155 et jetons natifs attendus", () => {
@@ -43,6 +45,10 @@ describe("référentiel des chaînes EVM", () => {
         ["arbitrum", 42161, "ETH"],
         ["base", 8453, "ETH"],
         ["bsc", 56, "BNB"],
+        ["polygon", 137, "POL"],
+        ["optimism", 10, "ETH"],
+        ["avalanche", 43114, "AVAX"],
+        ["linea", 59144, "ETH"],
       ]
     );
   });
@@ -89,6 +95,12 @@ describe("chaque chaîne EVM est branchée partout", () => {
       assert.ok(WALLET_PROVIDERS.has(id));
       assert.notEqual(providerLabel(id), id);
       assert.ok(PROVIDER_ICONS[id]);
+    });
+
+    it(`${id} : reconnue comme réseau on-chain, avec son explorateur`, () => {
+      assert.ok(isOnchainProvider(id));
+      assert.ok(explorerUrl(id, "0x" + "a".repeat(64))?.startsWith(chain.explorer));
+      assert.ok(isBlockchainAccount(id));
     });
 
     it(`${id} : réclame la clé de son indexeur`, () => {

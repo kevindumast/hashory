@@ -1,6 +1,6 @@
 import {
-  Activity, ArrowLeftRight, CalendarDays, FileText, History, KeyRound, LayoutDashboard,
-  Sparkles, Wallet, type LucideIcon,
+  Activity, ArrowLeftRight, CalendarDays, FileText, Gauge, History, KeyRound, LayoutDashboard,
+  ShieldCheck, Sparkles, Wallet, type LucideIcon,
 } from "lucide-react"
 
 export type NavItem = {
@@ -24,6 +24,7 @@ export const navSections: NavSection[] = [
       { href: "/dashboard", label: "Synthèse", icon: LayoutDashboard },
       { href: "/dashboard/accounts", label: "Mes comptes", shortLabel: "Comptes", icon: Wallet },
       { href: "/dashboard/performance", label: "Performance", shortLabel: "Analyse", icon: Activity },
+      { href: "/dashboard/360", label: "Vue 360", icon: Gauge },
       { href: "/dashboard/seasonal", label: "Saisonnalité", icon: CalendarDays },
       { href: "/dashboard/recap", label: "Rétrospective", icon: History },
     ],
@@ -33,6 +34,7 @@ export const navSections: NavSection[] = [
     links: [
       { href: "/dashboard/tax-report", label: "Déclaration fiscale", shortLabel: "Fiscalité", icon: FileText },
       { href: "/dashboard/transactions", label: "Transactions", icon: ArrowLeftRight },
+      { href: "/dashboard/audit", label: "Dossier de contrôle", shortLabel: "Contrôle", icon: ShieldCheck },
     ],
   },
   {

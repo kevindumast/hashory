@@ -32,6 +32,7 @@ import type * as fearGreed from "../fearGreed.js";
 import type * as feedback from "../feedback.js";
 import type * as fiatTransactions from "../fiatTransactions.js";
 import type * as finary from "../finary.js";
+import type * as flowJustifications from "../flowJustifications.js";
 import type * as fxRates from "../fxRates.js";
 import type * as integrations from "../integrations.js";
 import type * as kaspa from "../kaspa.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   feedback: typeof feedback;
   fiatTransactions: typeof fiatTransactions;
   finary: typeof finary;
+  flowJustifications: typeof flowJustifications;
   fxRates: typeof fxRates;
   integrations: typeof integrations;
   kaspa: typeof kaspa;

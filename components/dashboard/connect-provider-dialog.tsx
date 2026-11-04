@@ -7,7 +7,7 @@ import Link from "next/link";
 import { dataProviderForSource, dataProviderLabel } from "@/lib/data-providers";
 import { parseStrikeCsv, type StrikeImport } from "@/lib/strike";
 import { KucoinImportPanel } from "@/components/dashboard/kucoin-import-dialog";
-import { Check, LoaderCircle, Eye, EyeOff, ShieldCheck, Upload, FileText } from "lucide-react";
+import { ArrowLeft, Check, LoaderCircle, Eye, EyeOff, Search, ShieldCheck, Upload, FileText } from "lucide-react";
 import Image from "next/image";
 import {
   Dialog,
@@ -18,7 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -29,6 +28,7 @@ import { providerIcon } from "@/lib/provider-icons";
 import { errorMessage, toast } from "@/lib/toast";
 import { decodeCsvText } from "@/lib/csv-text";
 import { walletAddressError } from "@/lib/wallet-address";
+import { EVM_CHAINS, EVM_CHAIN_IDS, isEvmChain } from "@/lib/evm-chains";
 
 // ─── CSV parsers ───────────────────────────────────────────────────────────
 
@@ -191,10 +191,6 @@ type ConnectProviderDialogProps = {
 
 type ProviderCategory = "platform" | "blockchain";
 
-const CATEGORY_LABELS: Record<ProviderCategory, string> = {
-  platform: "Plateforme",
-  blockchain: "Blockchain",
-};
 
 type ProviderConfig = {
   value: ProviderId;
@@ -284,48 +280,24 @@ const providerConfigs: ProviderConfig[] = [
       },
     ],
   },
-  {
-    value: "arbitrum",
-    label: "Arbitrum One",
-    description: "Connexion par adresse publique, lue via Etherscan.",
-    category: "blockchain",
-    fields: [
-      {
-        name: "address" as const,
-        label: "Adresse Arbitrum",
-        placeholder: "0x...",
-        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
-      },
-    ],
-  },
-  {
-    value: "base",
-    label: "Base",
-    description: "Connexion par adresse publique, lue via Blockscout.",
-    category: "blockchain",
-    fields: [
-      {
-        name: "address" as const,
-        label: "Adresse Base",
-        placeholder: "0x...",
-        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
-      },
-    ],
-  },
-  {
-    value: "bsc",
-    label: "BNB Smart Chain",
-    description: "Connexion par adresse publique, lue via Alchemy.",
-    category: "blockchain",
-    fields: [
-      {
-        name: "address" as const,
-        label: "Adresse BNB Smart Chain",
-        placeholder: "0x...",
-        helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
-      },
-    ],
-  },
+  // Les autres chaînes EVM viennent du référentiel : en ajouter une là-bas
+  // suffit à la proposer ici.
+  ...EVM_CHAIN_IDS.filter((id) => id !== "ethereum").map(
+    (id): ProviderConfig => ({
+      value: id,
+      label: EVM_CHAINS[id].label,
+      description: `Connexion par adresse publique, lue via ${dataProviderLabel(EVM_CHAINS[id].dataProvider)}.`,
+      category: "blockchain",
+      fields: [
+        {
+          name: "address",
+          label: `Adresse ${EVM_CHAINS[id].label}`,
+          placeholder: "0x...",
+          helper: "La même adresse 0x… qu'Ethereum — aucune clé privée requise.",
+        },
+      ],
+    })
+  ),
   {
     value: "solana",
     label: "Solana",
@@ -422,6 +394,132 @@ const providerConfigs: ProviderConfig[] = [
   },
 ];
 
+type PickerFilter = "all" | "api" | "blockchain" | "file";
+
+const PICKER_FILTERS: { id: PickerFilter; label: string }[] = [
+  { id: "all", label: "Tout" },
+  { id: "api", label: "Plateformes" },
+  { id: "blockchain", label: "Blockchains" },
+  { id: "file", label: "Import de fichier" },
+];
+
+/** Nature d'une source, telle qu'on la montre : clé d'API, adresse publique ou fichier. */
+function sourceKind(config: ProviderConfig): Exclude<PickerFilter, "all"> {
+  if (config.category === "blockchain") return "blockchain";
+  return config.fileImport ? "file" : "api";
+}
+
+const KIND_CHIP: Record<Exclude<PickerFilter, "all">, { label: string; className: string }> = {
+  api: { label: "Clé API", className: "chip-violet" },
+  blockchain: { label: "Adresse", className: "chip-jade" },
+  file: { label: "Fichier", className: "bg-surface text-muted-foreground" },
+};
+
+/** Sans accents ni casse : « éthéreum » trouve Ethereum. */
+const fold = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function ProviderAvatar({ id, size = 32 }: { id: string; size?: number }) {
+  const icon = providerIcon(id);
+  return (
+    <span
+      className="relative flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-line bg-surface"
+      style={{ width: size, height: size }}
+    >
+      {icon ? (
+        <Image src={icon} alt="" fill sizes={`${size}px`} className="object-cover" />
+      ) : (
+        <FileText className="size-3.5 text-muted-foreground" />
+      )}
+    </span>
+  );
+}
+
+/**
+ * Choix de la source : une recherche, des filtres par nature et une grille.
+ * Pensé pour une liste qui s'allonge : on tape trois lettres plutôt que de
+ * dérouler un menu de vingt plateformes.
+ */
+function ProviderPicker({ onPick, connected }: { onPick: (config: ProviderConfig) => void; connected: Set<string> }) {
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<PickerFilter>("all");
+  const visible = providerConfigs
+    .filter((config) => filter === "all" || sourceKind(config) === filter)
+    .filter((config) => {
+      const needle = fold(query.trim());
+      if (!needle) return true;
+      const chain = isEvmChain(config.value) ? `${EVM_CHAINS[config.value].nativeSymbol} evm 0x` : "";
+      return fold(`${config.label} ${config.value} ${config.description} ${chain}`).includes(needle);
+    })
+    .sort((a, b) => a.label.localeCompare(b.label, "fr"));
+
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          autoFocus
+          placeholder="Rechercher une plateforme ou une blockchain…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="h-10 rounded-full pl-9 text-sm"
+          aria-label="Rechercher une source"
+        />
+      </div>
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Nature de la source">
+        {PICKER_FILTERS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            aria-pressed={filter === option.id}
+            onClick={() => setFilter(option.id)}
+            className={cn(
+              "rounded-full px-3 py-1 text-[11px] font-bold transition-colors",
+              filter === option.id ? "bg-foreground text-background" : "bg-surface text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {option.label}
+            <span className="num ml-1 font-normal opacity-70">
+              {option.id === "all" ? providerConfigs.length : providerConfigs.filter((config) => sourceKind(config) === option.id).length}
+            </span>
+          </button>
+        ))}
+      </div>
+      {visible.length === 0 ? (
+        <p className="rounded-2xl bg-surface px-4 py-6 text-center text-sm text-muted-foreground">
+          Aucune source ne correspond. Elle n&apos;est peut-être pas encore prise en charge : dites-le-nous depuis le
+          bouton « Bug ou idée ».
+        </p>
+      ) : (
+        <ul className="grid max-h-[52dvh] grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          {visible.map((config) => {
+            const kind = KIND_CHIP[sourceKind(config)];
+            return (
+              <li key={config.value}>
+                <button
+                  type="button"
+                  disabled={config.disabled}
+                  onClick={() => onPick(config)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-line bg-card px-3 py-2.5 text-left transition-colors hover:border-violet/40 hover:bg-surface disabled:opacity-50"
+                >
+                  <ProviderAvatar id={config.value} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-bold text-foreground">{config.label}</span>
+                      {connected.has(config.value) && <Check className="size-3.5 shrink-0 text-jade" aria-label="Déjà connecté" />}
+                    </span>
+                    <span className="block truncate text-[11px] text-muted-foreground">{config.description}</span>
+                  </span>
+                  <span className={cn("chip shrink-0 px-1.5 py-0 text-[10px]", kind.className)}>{kind.label}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ConnectProviderDialog(props: ConnectProviderDialogProps) {
   if (!isConvexConfigured) {
     return <ConnectProviderDialogPlaceholder {...props} />;
@@ -430,8 +528,12 @@ export function ConnectProviderDialog(props: ConnectProviderDialogProps) {
 }
 
 function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialogProps) {
-  const [categoryTab, setCategoryTab] = useState<ProviderCategory>(providerConfigs[0].category);
+  const [step, setStep] = useState<"pick" | "form">("pick");
   const [provider, setProvider] = useState<ProviderConfig>(providerConfigs[0]);
+  /** Autres chaînes EVM où ajouter la même adresse. */
+  const [alsoChains, setAlsoChains] = useState<string[]>([]);
+  const integrationsList = useActiveQuery(api.integrations.list, open ? {} : "skip");
+  const connected = new Set<string>((integrationsList ?? []).map((integration: { provider: string }) => integration.provider));
   const [apiKey, setApiKey] = useState("");
   const [apiSecret, setApiSecret] = useState("");
   const [passphrase, setPassphrase] = useState("");
@@ -482,7 +584,8 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
       setError(null);
       setCompleted(false);
       setProvider(providerConfigs[0]);
-      setCategoryTab(providerConfigs[0].category);
+      setStep("pick");
+      setAlsoChains([]);
       setCsvFileName(null);
       setCsvParsed(null);
       setFinaryParsed(null);
@@ -635,8 +738,22 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         readOnly,
         displayName: label ? label.trim() : undefined,
       });
+      // La même adresse 0x… sur les autres chaînes EVM cochées.
+      const extra = usesAddress && isEvmChain(provider.value) ? alsoChains.filter((id) => id !== provider.value) : [];
+      for (const chainId of extra) {
+        await upsertIntegration({
+          provider: chainId,
+          apiKey: finalApiKey,
+          readOnly,
+          displayName: label ? `${label.trim()} · ${EVM_CHAINS[chainId as keyof typeof EVM_CHAINS].label}` : undefined,
+        });
+      }
       setCompleted(true);
-      toast.success(`${provider.label} connecté, la synchronisation peut démarrer`);
+      toast.success(
+        extra.length > 0
+          ? `Adresse connectée sur ${extra.length + 1} chaînes, la synchronisation peut démarrer`
+          : `${provider.label} connecté, la synchronisation peut démarrer`
+      );
       setTimeout(() => {
         onOpenChange(false);
       }, 900);
@@ -652,14 +769,53 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] max-w-md gap-4 overflow-y-auto">
-        <DialogHeader className="space-y-1">
-          <DialogTitle className="title text-2xl leading-tight">Connecter une plateforme</DialogTitle>
-          <DialogDescription className="text-xs">
-            {kucoinFiles
-              ? "Déposez vos exports : l'historique est importé sans clé ni synchronisation."
-              : "Saisissez les identifiants pour activer la synchronisation."}
-          </DialogDescription>
+      <DialogContent className={cn("max-h-[90dvh] gap-4 overflow-y-auto", step === "pick" ? "sm:max-w-2xl" : "max-w-md")}>
+        {step === "pick" ? (
+          <>
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="title text-2xl leading-tight">Ajouter un compte</DialogTitle>
+              <DialogDescription className="text-xs">
+                Une plateforme par clé d&apos;API en lecture seule, un wallet par son adresse publique, ou un historique
+                par fichier d&apos;export.
+              </DialogDescription>
+            </DialogHeader>
+            <ProviderPicker
+              connected={connected}
+              onPick={(config) => {
+                setProvider(config);
+                setShowSecret(false);
+                setAddress("");
+                setError(null);
+                setAlsoChains([]);
+                setStep("form");
+              }}
+            />
+          </>
+        ) : (
+        <>
+        <DialogHeader className="space-y-2">
+          <button
+            type="button"
+            onClick={() => {
+              setStep("pick");
+              setError(null);
+            }}
+            className="inline-flex w-fit items-center gap-1 text-xs font-bold text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" />
+            Changer de source
+          </button>
+          <div className="flex items-center gap-3">
+            <ProviderAvatar id={provider.value} size={40} />
+            <div className="min-w-0">
+              <DialogTitle className="title text-2xl leading-tight">{provider.label}</DialogTitle>
+              <DialogDescription className="text-xs">
+                {kucoinFiles
+                  ? "Déposez vos exports : l'historique est importé sans clé ni synchronisation."
+                  : provider.description}
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
         {/* Rassurance sécurité */}
@@ -674,96 +830,6 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3.5">
-          <div className="space-y-1.5">
-            <Label className="text-sm">Type de connexion</Label>
-            <div className="grid grid-cols-2 border border-border/60">
-              {(Object.keys(CATEGORY_LABELS) as ProviderCategory[]).map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => {
-                    if (category === categoryTab) return;
-                    setCategoryTab(category);
-                    const first = providerConfigs.find((config) => config.category === category);
-                    if (first) {
-                      setProvider(first);
-                      setShowSecret(false);
-                      setAddress("");
-                      setError(null);
-                    }
-                  }}
-                  className={cn(
-                    "num h-9 cursor-pointer text-[11px] uppercase tracking-[0.16em] transition-colors",
-                    categoryTab === category
-                      ? "bg-muted/40 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/20 hover:text-foreground"
-                  )}
-                >
-                  {CATEGORY_LABELS[category]}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="provider" className="text-sm">
-              {categoryTab === "platform" ? "Plateforme" : "Blockchain"}
-            </Label>
-            <Select
-              value={provider.value}
-              onValueChange={(value) => {
-                const next = providerConfigs.find((config) => config.value === value);
-                if (next) {
-                  setProvider(next);
-                  setShowSecret(false);
-                  // Une adresse saisie pour une chaîne ne vaut pas pour une autre.
-                  setAddress("");
-                  setError(null);
-                }
-              }}
-            >
-              <SelectTrigger id="provider" className="h-10">
-                <SelectValue placeholder="Choisir un provider">
-                  <div className="flex items-center gap-2.5">
-                    <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
-                      {providerIcon(provider.value) ? (
-                        <Image src={providerIcon(provider.value)} alt="" fill sizes="24px" className="object-cover" />
-                      ) : (
-                        <FileText className="size-3.5 text-muted-foreground" />
-                      )}
-                    </div>
-                    <span className="text-sm">{provider.label}</span>
-                  </div>
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {providerConfigs
-                  .filter((config) => config.category === categoryTab)
-                  .map((config) => (
-                    <SelectItem key={config.value} value={config.value} disabled={config.disabled}>
-                      <div className="flex items-center gap-2.5">
-                        <div className="size-6 rounded-full overflow-hidden bg-muted border border-border shrink-0 relative flex items-center justify-center">
-                          {providerIcon(config.value) ? (
-                            <Image
-                              src={providerIcon(config.value)}
-                              alt=""
-                              fill
-                              sizes="24px"
-                              className="object-cover"
-                            />
-                          ) : (
-                            <FileText className="size-3.5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <span className="text-sm">{config.label}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground leading-tight">{provider.description}</p>
-          </div>
-
           {provider.value === "kucoin" && (
             <div className="space-y-1.5">
               <Label className="text-sm">Source des données</Label>
@@ -964,6 +1030,40 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
             />
           )}
 
+          {isEvmChain(provider.value) && !completed && (
+            <div className="space-y-1.5">
+              <Label className="text-sm">
+                Suivre aussi cette adresse sur <span className="font-normal text-muted-foreground">(optionnel)</span>
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {EVM_CHAIN_IDS.filter((id) => id !== provider.value).map((id) => {
+                  const active = alsoChains.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() =>
+                        setAlsoChains((list) => (active ? list.filter((value) => value !== id) : [...list, id]))
+                      }
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors",
+                        active ? "border-jade bg-jade/10 text-jade" : "border-line text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <ProviderAvatar id={id} size={16} />
+                      {EVM_CHAINS[id].label}
+                      {connected.has(id) && <Check className="size-3" aria-label="Déjà connectée" />}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] leading-tight text-muted-foreground">
+                Une adresse 0x… est la même sur toutes les chaînes EVM : cochez celles où vous l&apos;avez utilisée.
+              </p>
+            </div>
+          )}
+
           {missingKey ? (
             <div className="rounded-xl bg-violet-soft px-4 py-3 text-xs leading-relaxed text-foreground">
               Ce wallet est lu via {dataProviderLabel(missingKey)}, avec{" "}
@@ -1026,6 +1126,8 @@ function ConnectProviderDialogInner({ open, onOpenChange }: ConnectProviderDialo
           </DialogFooter>
           )}
         </form>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

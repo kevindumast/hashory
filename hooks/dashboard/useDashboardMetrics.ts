@@ -102,6 +102,8 @@ export type DepositRecord = {
   txId: string | null;
   /** Commission prélevée sur l'entrée, dans la devise du dépôt. */
   fee?: number | null;
+  counterparty?: string | null;
+  protocol?: string | null;
 };
 
 export type WithdrawalRecord = {
@@ -120,6 +122,8 @@ export type WithdrawalRecord = {
   updateTime: number | null;
   fee: number;
   txId: string | null;
+  counterparty?: string | null;
+  protocol?: string | null;
 };
 
 export type BalanceRecord = {
@@ -178,6 +182,9 @@ export type TransactionEntry =
       timestamp: number;
       txId: string | null;
       fee?: number | null;
+      /** Adresse émettrice et DEX, pour une opération lue sur la blockchain. */
+      counterparty?: string | null;
+      protocol?: string | null;
       direction: "IN";
     }
   | {
@@ -194,6 +201,8 @@ export type TransactionEntry =
       timestamp: number;
       txId: string | null;
       fee: number;
+      counterparty?: string | null;
+      protocol?: string | null;
       direction: "OUT";
     };
 
@@ -596,6 +605,8 @@ export function useDashboardMetrics(refreshToken: number) {
         timestamp: deposit.insertTime,
         txId: deposit.txId,
         fee: deposit.fee,
+        counterparty: deposit.counterparty ?? null,
+        protocol: deposit.protocol ?? null,
         direction: "IN",
       });
     });
@@ -615,6 +626,8 @@ export function useDashboardMetrics(refreshToken: number) {
         timestamp: withdrawal.applyTime,
         txId: withdrawal.txId,
         fee: withdrawal.fee,
+        counterparty: withdrawal.counterparty ?? null,
+        protocol: withdrawal.protocol ?? null,
         direction: "OUT",
       });
     });

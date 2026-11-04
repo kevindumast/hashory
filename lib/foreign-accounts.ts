@@ -12,6 +12,8 @@
  * confronter aux conditions d'utilisation de chaque compte.
  */
 
+import { EVM_CHAIN_IDS } from "./evm-chains";
+
 export const FINE_PER_ACCOUNT_EUR = 750;
 export const FINE_LARGE_ACCOUNT_EUR = 1_500;
 export const LARGE_ACCOUNT_THRESHOLD_EUR = 50_000;
@@ -45,7 +47,12 @@ const SELF_CUSTODY: PlatformEntity = {
 };
 
 /** Réseaux suivis par adresse publique : jamais un compte chez un prestataire. */
-const BLOCKCHAINS = new Set(["bitcoin", "ethereum", "solana", "kaspa", "tao", "arbitrum", "base", "bsc"]);
+const BLOCKCHAINS = new Set<string>(["bitcoin", "solana", "kaspa", "tao", ...EVM_CHAIN_IDS]);
+
+/** Vrai pour un compte suivi par adresse publique sur une chaîne. */
+export function isBlockchainAccount(provider: string): boolean {
+  return BLOCKCHAINS.has(provider.toLowerCase());
+}
 
 const PLATFORMS: Record<string, PlatformEntity> = {
   kraken: {
