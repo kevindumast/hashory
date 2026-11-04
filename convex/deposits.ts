@@ -48,6 +48,8 @@ export const listByUser = query({
       addressTag?: string;
       insertTime: number;
       txId?: string;
+      counterparty?: string;
+      protocol?: string;
       depositId: string;
     }> = [];
 
@@ -68,6 +70,8 @@ export const listByUser = query({
           addressTag: deposit.addressTag ?? undefined,
           insertTime: deposit.insertTime,
           txId: deposit.txId ?? undefined,
+          counterparty: deposit.counterparty,
+          protocol: deposit.protocol || undefined,
           depositId: deposit.depositId,
         });
       }
@@ -91,6 +95,8 @@ export const listByUser = query({
         addressTag: record.addressTag ?? null,
         insertTime: record.insertTime,
         txId: record.txId ?? null,
+        counterparty: record.counterparty ?? null,
+        protocol: record.protocol ?? null,
         depositId: record.depositId,
       };
     });

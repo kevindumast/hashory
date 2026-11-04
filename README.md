@@ -18,14 +18,22 @@ en open source et en lecture seule.
 
 ## Ce que fait Hashory
 
-- **Agrège vos sources.** Binance et KuCoin via API en lecture seule ; Bitcoin, Ethereum, Arbitrum,
-  Base, BNB Smart Chain, Solana, Kaspa et Bittensor via adresse publique ; Bitstack, Finary et Strike via import CSV.
+- **Agrège vos sources.** Binance, Kraken et KuCoin via API en lecture seule ; Bitcoin, Ethereum, Arbitrum,
+  Base, BNB Smart Chain, Polygon, OP Mainnet, Avalanche, Linea, Solana, Kaspa et Bittensor via adresse
+  publique ; Bitstack, Finary et Strike via import CSV.
+- **Reconnaît vos swaps on-chain.** Un échange sur un DEX (Uniswap, PancakeSwap, Jupiter, 1inch…) tient
+  sur une ligne, avec le DEX utilisé : un échange crypto contre crypto, non imposable.
 - **Reconstitue votre historique.** Trades, conversions, dépôts, retraits, ordres, soldes et
   poussière — l'intégralité de votre activité, sans ressaisie.
 - **Calcule votre performance.** P&L par actif, par période et par plateforme, prix de revient
   moyen, répartition et évolution de la valeur du portefeuille.
 - **Prépare votre déclaration.** Plus-values de cession d'actifs numériques calculées selon
   l'article 150 VH bis du CGI, avec le détail cession par cession.
+- **Prépare un contrôle fiscal.** Chaque entrée ou sortie inexpliquée se pointe à la main (achat
+  ailleurs, airdrop, transfert entre vos comptes…) avec son justificatif ; le dossier de contrôle
+  s'exporte en classeur : méthode, cessions, acquisitions, pointages.
+- **Mesure le risque comme un gérant.** Sharpe, Sortino, Calmar, VaR et CVaR historiques, asymétrie,
+  queues épaisses, indice d'ulcère, et une Vue 360 notée de A à E.
 - **Analyse la saisonnalité.** Le comportement de vos actifs mois par mois, pour situer votre
   performance dans le cycle.
 

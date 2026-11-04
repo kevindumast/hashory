@@ -15,7 +15,7 @@
 
 import type { DataProviderId } from "./data-providers";
 
-export type EvmChainId = "ethereum" | "arbitrum" | "base" | "bsc";
+export type EvmChainId = "ethereum" | "arbitrum" | "base" | "bsc" | "polygon" | "optimism" | "avalanche" | "linea";
 
 export type EvmChain = {
   id: EvmChainId;
@@ -28,11 +28,14 @@ export type EvmChain = {
   dataProvider: Extract<DataProviderId, "etherscan" | "blockscout" | "alchemy">;
   /** Sous-domaine Alchemy du réseau, pour les chaînes lues par Alchemy. */
   alchemyNetwork?: string;
+  /** Explorateur public : `${explorer}/tx/…`, `${explorer}/address/…`. */
+  explorer: string;
 };
 
 export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
   ethereum: {
     id: "ethereum",
+    explorer: "https://etherscan.io",
     label: "Ethereum",
     chainId: 1,
     nativeSymbol: "ETH",
@@ -40,6 +43,7 @@ export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
   },
   arbitrum: {
     id: "arbitrum",
+    explorer: "https://arbiscan.io",
     label: "Arbitrum One",
     chainId: 42161,
     nativeSymbol: "ETH",
@@ -47,6 +51,7 @@ export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
   },
   base: {
     id: "base",
+    explorer: "https://basescan.org",
     label: "Base",
     chainId: 8453,
     nativeSymbol: "ETH",
@@ -54,11 +59,51 @@ export const EVM_CHAINS: Record<EvmChainId, EvmChain> = {
   },
   bsc: {
     id: "bsc",
+    explorer: "https://bscscan.com",
     label: "BNB Smart Chain",
     chainId: 56,
     nativeSymbol: "BNB",
     dataProvider: "alchemy",
     alchemyNetwork: "bnb-mainnet",
+  },
+  // Chaînes lues par Alchemy, comme BSC : l'offre gratuite d'Etherscan ne les
+  // couvre pas toutes, et une seule clé les ouvre. Chaque réseau doit être
+  // coché dans l'app Alchemy de l'utilisateur.
+  polygon: {
+    id: "polygon",
+    explorer: "https://polygonscan.com",
+    label: "Polygon PoS",
+    chainId: 137,
+    nativeSymbol: "POL",
+    dataProvider: "alchemy",
+    alchemyNetwork: "polygon-mainnet",
+  },
+  optimism: {
+    id: "optimism",
+    explorer: "https://optimistic.etherscan.io",
+    label: "OP Mainnet",
+    chainId: 10,
+    nativeSymbol: "ETH",
+    dataProvider: "alchemy",
+    alchemyNetwork: "opt-mainnet",
+  },
+  avalanche: {
+    id: "avalanche",
+    explorer: "https://snowtrace.io",
+    label: "Avalanche C-Chain",
+    chainId: 43114,
+    nativeSymbol: "AVAX",
+    dataProvider: "alchemy",
+    alchemyNetwork: "avax-mainnet",
+  },
+  linea: {
+    id: "linea",
+    explorer: "https://lineascan.build",
+    label: "Linea",
+    chainId: 59144,
+    nativeSymbol: "ETH",
+    dataProvider: "alchemy",
+    alchemyNetwork: "linea-mainnet",
   },
 };
 
@@ -98,6 +143,6 @@ export function alchemyRpcUrl(chain: EvmChain, apiKey: string): string | null {
  * jetons pour les API à la Etherscan, reçus et envois pour Alchemy, qui
  * filtre sur l'un ou l'autre côté du transfert.
  */
-export function evmDataset(chain: EvmChain, stream: "native" | "erc20" | "in" | "out"): string {
+export function evmDataset(chain: EvmChain, stream: "native" | "erc20" | "internal" | "in" | "out"): string {
   return `${chain.id}_${stream}`;
 }

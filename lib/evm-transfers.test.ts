@@ -15,6 +15,14 @@ import {
   type EtherscanTx,
 } from "./evm-transfers";
 
+/** L'adresse d'en face s'ajoute aux champs historiques sans changer les identifiants. */
+const withoutCounterparty = <T extends { counterparty?: string }>(rows: T[]) =>
+  rows.map((row) => {
+    const copy = { ...row };
+    delete copy.counterparty;
+    return copy;
+  });
+
 const ME = "0xe62cd3e7b0afe4d43b03435c737072e77cbf1fb4";
 // Saisie telle que l'utilisateur la colle : casse mixte.
 const ME_MIXED = "0xE62cD3e7b0Afe4D43b03435C737072E77cbF1FB4";
@@ -64,7 +72,7 @@ describe("Ethereum — non-régression", () => {
       EVM_CHAINS.ethereum
     );
 
-    assert.deepEqual(parsed.deposits, [
+    assert.deepEqual(withoutCounterparty(parsed.deposits), [
       {
         depositId: "0xin-eth-in",
         coin: "ETH",
@@ -75,7 +83,7 @@ describe("Ethereum — non-régression", () => {
         txId: "0xin",
       },
     ]);
-    assert.deepEqual(parsed.withdrawals, [
+    assert.deepEqual(withoutCounterparty(parsed.withdrawals), [
       {
         withdrawId: "0xout-eth-out",
         coin: "ETH",
@@ -100,7 +108,7 @@ describe("Ethereum — non-régression", () => {
       EVM_CHAINS.ethereum
     );
 
-    assert.deepEqual(parsed.deposits, [
+    assert.deepEqual(withoutCounterparty(parsed.deposits), [
       {
         depositId: `0xtin-${USDC.toLowerCase()}-in`,
         coin: "USDC",
@@ -111,7 +119,7 @@ describe("Ethereum — non-régression", () => {
         txId: "0xtin",
       },
     ]);
-    assert.deepEqual(parsed.withdrawals, [
+    assert.deepEqual(withoutCounterparty(parsed.withdrawals), [
       {
         withdrawId: `0xtout-${USDC.toLowerCase()}-out`,
         coin: "USDC",
@@ -267,7 +275,7 @@ describe("parseAlchemyTransfers (BNB Smart Chain)", () => {
 
   it("enregistre un BNB reçu, daté par le bloc, sans frais pour le destinataire", () => {
     const parsed = parseAlchemyTransfers([alchemyNative({})], ME_MIXED, bsc, { blockTimes, fees: noFees });
-    assert.deepEqual(parsed.deposits, [
+    assert.deepEqual(withoutCounterparty(parsed.deposits), [
       {
         depositId: "0xa1-bnb-in",
         coin: "BNB",
@@ -381,5 +389,20 @@ describe("lectures complémentaires Alchemy", () => {
   it("calcule les frais à partir du gas consommé et de son prix effectif", () => {
     // 21 000 gas à 1 gwei : 0,000021 BNB.
     assert.equal(feeFromReceipt({ gasUsed: "0x5208", effectiveGasPrice: "0x3b9aca00" }), 0.000021);
+  });
+});
+
+describe("adresse d'en face", () => {
+  it("garde l'émetteur d'un dépôt et le destinataire d'un retrait", () => {
+    const parsed = parseNativeTxs(
+      [
+        nativeTx({ hash: "0xin", blockNumber: "100" }),
+        nativeTx({ hash: "0xout", blockNumber: "105", from: ME_MIXED, to: OTHER, value: "500000000000000000" }),
+      ],
+      ME_MIXED,
+      EVM_CHAINS.ethereum
+    );
+    assert.ok(parsed.deposits[0].counterparty);
+    assert.equal(parsed.withdrawals[0].counterparty, OTHER.toLowerCase());
   });
 });

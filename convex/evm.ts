@@ -6,6 +6,7 @@ import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
 import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
 import { dataProviderLabel } from "../lib/data-providers";
+import { dexFromAddress } from "../lib/dex";
 import {
   alchemyRpcUrl,
   etherscanLikeBaseUrl,
@@ -19,9 +20,11 @@ import {
   feeFromReceipt,
   interpretEtherscanResponse,
   parseAlchemyTransfers,
+  parseInternalTxs,
   parseNativeTxs,
   parseTokenTxs,
   type AlchemyTransfer,
+  type EtherscanInternalTx,
   type EtherscanResponse,
   type EtherscanTokenTx,
   type EtherscanTx,
@@ -89,7 +92,16 @@ export async function runEvmWalletSync(
     } else {
       await syncEtherscanStream(ctx, integrationId, address, apiKey, chain, "native");
       await syncEtherscanStream(ctx, integrationId, address, apiKey, chain, "erc20");
+      // Secondaire : un indexeur qui ne le sert pas ne bloque pas la synchro.
+      await syncEtherscanStream(ctx, integrationId, address, apiKey, chain, "internal").catch((error) =>
+        console.warn(`[evm] transferts internes ${chain.label} non lus`, error)
+      );
     }
+
+    // Quel DEX derrière chaque swap : jamais bloquant pour la synchro.
+    await identifyEvmSwaps(ctx, integrationId, apiKey, chain).catch((error) =>
+      console.warn(`[evm] DEX non identifiés sur ${chain.label}`, error)
+    );
 
     await ctx.runMutation(internal.integrations.updateSyncStatus, {
       integrationId,
@@ -111,7 +123,7 @@ export async function runEvmWalletSync(
   }
 }
 
-/** Synchronisation d'un wallet Arbitrum, Base ou BNB Smart Chain. */
+/** Synchronisation d'un wallet EVM du référentiel (Arbitrum, Base, BSC, Polygon, OP, Avalanche, Linea…). */
 export const syncEvmWallet = action({
   args: {
     integrationId: v.id("integrations"),
@@ -170,7 +182,7 @@ async function syncEtherscanStream(
   address: string,
   apiKey: string,
   chain: EvmChain,
-  stream: "native" | "erc20"
+  stream: "native" | "erc20" | "internal"
 ) {
   const baseUrl = etherscanLikeBaseUrl(chain);
   if (!baseUrl) throw new Error(`Aucune API Etherscan pour ${chain.label}`);
@@ -180,7 +192,7 @@ async function syncEtherscanStream(
   const scope = address;
   const startBlock = await readCursor(ctx, integrationId, dataset, scope);
   let newMaxBlock = startBlock;
-  const actionName = stream === "native" ? "txlist" : "tokentx";
+  const actionName = stream === "native" ? "txlist" : stream === "internal" ? "txlistinternal" : "tokentx";
 
   for (let page = 1; page <= MAX_PAGES; page++) {
     const url = `${baseUrl}&module=account&action=${actionName}&address=${address}&startblock=${startBlock}&endblock=99999999&page=${page}&offset=${PAGE_SIZE}&sort=asc&apikey=${apiKey}`;
@@ -193,7 +205,7 @@ async function syncEtherscanStream(
       throw new Error(`${label} API error: ${response.statusText}`);
     }
 
-    const data = (await response.json()) as EtherscanResponse<EtherscanTx & EtherscanTokenTx>;
+    const data = (await response.json()) as EtherscanResponse<EtherscanTx & EtherscanTokenTx & EtherscanInternalTx>;
     const outcome = interpretEtherscanResponse(data);
 
     if (outcome.kind === "empty") break;
@@ -212,7 +224,9 @@ async function syncEtherscanStream(
     const parsed =
       stream === "native"
         ? parseNativeTxs(outcome.txs, address, chain)
-        : parseTokenTxs(outcome.txs, address, chain);
+        : stream === "internal"
+          ? parseInternalTxs(outcome.txs, address, chain)
+          : parseTokenTxs(outcome.txs, address, chain);
     if (parsed.maxBlock > newMaxBlock) newMaxBlock = parsed.maxBlock;
 
     await insertTransfers(ctx, integrationId, parsed);
@@ -230,7 +244,7 @@ type JsonRpcResponse<T> = {
 };
 
 /** Appel JSON-RPC Alchemy, unitaire ou par lot, avec ses erreurs traduites. */
-async function alchemyRpc<T>(url: string, body: unknown): Promise<T> {
+async function alchemyRpc<T>(url: string, body: unknown, chainLabel = "ce réseau"): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -246,7 +260,7 @@ async function alchemyRpc<T>(url: string, body: unknown): Promise<T> {
         code: "network_not_enabled",
         provider: "alchemy",
         message:
-          "Votre app Alchemy n'a pas accès à BNB Smart Chain : activez ce réseau dans le tableau de bord Alchemy.",
+          `Votre app Alchemy n'a pas accès à ${chainLabel} : activez ce réseau dans le tableau de bord Alchemy.`,
       });
     }
     throw rejectedDataProviderKey("alchemy");
@@ -334,7 +348,7 @@ async function syncAlchemyTransfers(
           ...(pageKey ? { pageKey } : {}),
         },
       ],
-    });
+    }, chain.label);
     const result = rpcResult(payload);
     const transfers = result?.transfers ?? [];
 
@@ -373,4 +387,54 @@ async function syncAlchemyTransfers(
   }
 
   await writeCursor(ctx, integrationId, dataset, scope, newMaxBlock);
+}
+
+/** Swaps traités par synchronisation : l'historique se complète par lots. */
+const SWAP_LOOKUPS_PER_SYNC = 60;
+
+/**
+ * Nomme le DEX des swaps du wallet : le contrat que la transaction appelle
+ * (le champ `to` de la transaction, pas celui des transferts) est comparé
+ * aux routeurs connus. Un contrat inconnu est noté tel quel, pour être
+ * montré à l'utilisateur.
+ */
+async function identifyEvmSwaps(ctx: ActionCtx, integrationId: Id<"integrations">, apiKey: string, chain: EvmChain) {
+  const hashes: string[] = await ctx.runQuery(internal.blockchainSync.swapHashesToIdentify, {
+    integrationId,
+    limit: SWAP_LOOKUPS_PER_SYNC,
+  });
+  if (hashes.length === 0) return;
+
+  const contracts = new Map<string, string | null>();
+  const rpcUrl = alchemyRpcUrl(chain, apiKey);
+  if (chain.dataProvider === "alchemy" && rpcUrl) {
+    const rows = await alchemyBatch<{ to: string | null } | null>(
+      rpcUrl,
+      "eth_getTransactionByHash",
+      hashes.map((hash) => [hash])
+    );
+    hashes.forEach((hash, index) => contracts.set(hash, rows[index]?.to ?? null));
+  } else {
+    const baseUrl = etherscanLikeBaseUrl(chain);
+    if (!baseUrl) return;
+    for (const hash of hashes) {
+      const response = await fetch(
+        `${baseUrl}&module=proxy&action=eth_getTransactionByHash&txhash=${hash}&apikey=${apiKey}`
+      );
+      if (!response.ok) break;
+      const data = (await response.json()) as { result?: { to?: string | null } | string | null };
+      // Une limite de débit se lit dans le texte de `result` : on reprendra plus tard.
+      if (typeof data.result === "string") break;
+      contracts.set(hash, data.result?.to ?? null);
+      // Offre gratuite : quelques appels par seconde au plus.
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+
+  const items = [...contracts].map(([txId, contract]) => ({
+    txId,
+    protocol: dexFromAddress(chain.id, contract) ?? "",
+    ...(contract ? { contract: contract.toLowerCase() } : {}),
+  }));
+  await ctx.runMutation(internal.blockchainSync.setSwapProtocols, { integrationId, items });
 }

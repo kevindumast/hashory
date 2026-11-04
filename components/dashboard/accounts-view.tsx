@@ -1,5 +1,6 @@
 "use client"
 
+import { isEvmChain } from "@/lib/evm-chains"
 import * as React from "react"
 import Link from "next/link"
 import {
@@ -267,7 +268,7 @@ export function AccountsView() {
           await syncKaspaWallet({ integrationId: accountId })
         } else if (providerKey === "ethereum") {
           await syncEthereumWallet({ integrationId: accountId })
-        } else if (providerKey === "arbitrum" || providerKey === "base" || providerKey === "bsc") {
+        } else if (isEvmChain(providerKey)) {
           await syncEvmWallet({ integrationId: accountId })
         } else if (providerKey === "solana") {
           await syncSolanaWallet({ integrationId: accountId })

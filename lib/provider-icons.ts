@@ -21,6 +21,10 @@ const FINARY_ICON =
 const BASE_ICON =
   "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230000FF'/%3E%3C/svg%3E";
 
+/** Linea n'a pas de fiche CoinMarketCap stable : sa marque, noir sur cyan. */
+const LINEA_ICON =
+  "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23121212'/%3E%3Cpath d='M22 18h6v22h14v6H22z' fill='%2361DFFF'/%3E%3C/svg%3E";
+
 const CMC_EXCHANGE = "https://s2.coinmarketcap.com/static/img/exchanges/64x64";
 const CMC_COIN = "https://s2.coinmarketcap.com/static/img/coins/64x64";
 
@@ -33,6 +37,10 @@ export const PROVIDER_ICONS: Record<string, string> = {
   arbitrum: `${CMC_COIN}/11841.png`,
   base: BASE_ICON,
   bsc: `${CMC_COIN}/1839.png`,
+  polygon: `${CMC_COIN}/28321.png`,
+  optimism: `${CMC_COIN}/11840.png`,
+  avalanche: `${CMC_COIN}/5805.png`,
+  linea: LINEA_ICON,
   solana: `${CMC_COIN}/5426.png`,
   kaspa: `${CMC_COIN}/20396.png`,
   tao: `${CMC_COIN}/22974.png`,

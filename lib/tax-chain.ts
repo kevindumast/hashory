@@ -29,6 +29,7 @@
  */
 
 import { isFiat, type Operation, type TransferOperation } from "./ledger";
+import { categoryInfo, type FlowJustification } from "./justification";
 import type { PriceBook } from "./valuation";
 import { isBelowAnnualExemption } from "./tax";
 
@@ -53,7 +54,25 @@ export type Cession = {
   /** Euros par dollar au jour de la cession, pour l'affichage en dollars. */
   eurPerUsd: number | null;
   source: "trade" | "fiat" | "convert";
+  /** Compte et opération d'origine : la pièce à produire pour cette cession. */
+  account?: string;
+  operationId?: string;
 };
+
+/** Acquisition retenue dans le prix total d'acquisition. */
+export type Acquisition = {
+  date: number;
+  account: string;
+  asset: string;
+  quantity: number;
+  costEur: number;
+  /** Achat contre monnaie sur un compte suivi, ou pointage manuel. */
+  kind: "fiat" | "justified";
+  operationId: string;
+};
+
+/** Pointage retenu pour une opération signalée. */
+export type AppliedJustification = Pick<FlowJustification, "category" | "costEur" | "note" | "linkedOperationId">;
 
 /** Jetons entrés sans coût d'acquisition connu. */
 export type UnknownCostInflow = {
@@ -66,6 +85,12 @@ export type UnknownCostInflow = {
   reason: "untracked-deposit" | "missing-history";
   /** Hash de la transaction on-chain, pour un dépôt. */
   txId?: string;
+  /** Opération en cause : c'est elle qu'on pointe. */
+  id: string;
+  /** Adresse émettrice, quand la chaîne la donne. */
+  counterparty?: string;
+  protocol?: string;
+  justification?: AppliedJustification;
 };
 
 /** Jetons sortis vers un compte non suivi : peut-être une cession non vue. */
@@ -76,6 +101,10 @@ export type UntrackedOutflow = {
   quantity: number;
   valueEur: number | null;
   txId?: string;
+  id: string;
+  /** Adresse destinataire, quand la chaîne la donne. */
+  counterparty?: string;
+  justification?: AppliedJustification;
 };
 
 /**
@@ -91,17 +120,35 @@ export type FlaggedFlow = {
   /** Entrées seulement : dépôt d'un compte non suivi, ou vente sans achat connu. */
   reason?: UnknownCostInflow["reason"];
   txId?: string;
+  /** Opération à pointer. Absent des rapports enregistrés avant le pointage. */
+  id?: string;
+  counterparty?: string;
+  protocol?: string;
+  justification?: AppliedJustification;
+  /**
+   * Opération jumelle probable sur un autre compte suivi : même actif,
+   * quantité voisine, dans les trente jours. Une piste, à confirmer.
+   */
+  suggestion?: { id: string; account: string; date: number; quantity: number; txId?: string };
 };
 
 /** Au-delà, le détail est tronqué : le rapport enregistré reste petit. */
 export const MAX_FLAGGED_ITEMS = 200;
 
-/** Les plus grosses d'abord, ce sont elles qui pèsent sur l'impôt ; à valeur égale, les plus récentes. */
+/**
+ * Les opérations à pointer d'abord, puis les plus grosses, ce sont elles qui
+ * pèsent sur l'impôt ; à valeur égale, les plus récentes.
+ */
 export function flaggedItems(list: FlaggedFlow[]): FlaggedFlow[] {
   return [...list]
-    .sort((a, b) => (b.valueEur ?? 0) - (a.valueEur ?? 0) || b.date - a.date)
+    .sort(
+      (a, b) =>
+        Number(Boolean(a.justification)) - Number(Boolean(b.justification)) ||
+        (b.valueEur ?? 0) - (a.valueEur ?? 0) ||
+        b.date - a.date
+    )
     .slice(0, MAX_FLAGGED_ITEMS)
-    .map(({ date, account, asset, quantity, valueEur, reason, txId }) => ({
+    .map(({ date, account, asset, quantity, valueEur, reason, txId, id, counterparty, protocol, justification, suggestion }) => ({
       date,
       account,
       asset,
@@ -109,7 +156,53 @@ export function flaggedItems(list: FlaggedFlow[]): FlaggedFlow[] {
       valueEur,
       ...(reason ? { reason } : {}),
       ...(txId ? { txId } : {}),
+      ...(id ? { id } : {}),
+      ...(counterparty ? { counterparty } : {}),
+      ...(protocol ? { protocol } : {}),
+      ...(justification ? { justification } : {}),
+      ...(suggestion ? { suggestion } : {}),
     }));
+}
+
+const SUGGESTION_WINDOW_MS = 30 * 86_400_000;
+
+/**
+ * Pistes de rapprochement : une entrée d'origine inconnue et un envoi non
+ * suivi du même actif, sur deux comptes différents, à quantités voisines
+ * (l'entrée vaut de 90 % à 100,5 % de l'envoi) et à trente jours d'écart au
+ * plus, l'envoi d'abord. Le rapprochement automatique, plus strict, les a
+ * laissés de côté ; l'utilisateur confirme ou non.
+ */
+export function suggestCounterparts(
+  inflows: UnknownCostInflow[],
+  outflows: UntrackedOutflow[]
+): { inflows: Map<string, UntrackedOutflow>; outflows: Map<string, UnknownCostInflow> } {
+  const forInflow = new Map<string, UntrackedOutflow>();
+  const forOutflow = new Map<string, UnknownCostInflow>();
+  const used = new Set<string>();
+  const candidates = inflows
+    .filter((inflow) => inflow.reason === "untracked-deposit" && !inflow.justification)
+    .sort((a, b) => a.date - b.date);
+  for (const inflow of candidates) {
+    const match = outflows
+      .filter(
+        (outflow) =>
+          !used.has(outflow.id) &&
+          !outflow.justification &&
+          outflow.asset === inflow.asset &&
+          outflow.account !== inflow.account &&
+          outflow.date <= inflow.date &&
+          inflow.date - outflow.date <= SUGGESTION_WINDOW_MS &&
+          inflow.quantity >= outflow.quantity * 0.9 &&
+          inflow.quantity <= outflow.quantity * 1.005
+      )
+      .sort((a, b) => inflow.date - a.date - (inflow.date - b.date))[0];
+    if (!match) continue;
+    used.add(match.id);
+    forInflow.set(inflow.id, match);
+    forOutflow.set(match.id, inflow);
+  }
+  return { inflows: forInflow, outflows: forOutflow };
 }
 
 /**
@@ -222,14 +315,37 @@ export type CessionChain = {
   hasIncompleteValuation: boolean;
   unknownCostInflows: UnknownCostInflow[];
   untrackedOutflows: UntrackedOutflow[];
+  /** Ce qui compose le prix total d'acquisition, opération par opération. */
+  acquisitions: Acquisition[];
 };
 
 function sourceOf(origin: string): Cession["source"] {
   return origin === "fiat" ? "fiat" : origin === "convert" ? "convert" : "trade";
 }
 
-export function computeCessionChain(operations: Operation[], book: PriceBook): CessionChain {
+export function computeCessionChain(
+  operations: Operation[],
+  book: PriceBook,
+  justifications: FlowJustification[] = []
+): CessionChain {
   const ordered = [...operations].sort((a, b) => a.timestamp - b.timestamp);
+  const pointed = new Map(justifications.map((justification) => [justification.operationId, justification]));
+  const acquisitions: Acquisition[] = [];
+  const applied = (justification: FlowJustification | undefined): AppliedJustification | undefined =>
+    justification
+      ? {
+          category: justification.category,
+          ...(justification.costEur !== undefined ? { costEur: justification.costEur } : {}),
+          ...(justification.note ? { note: justification.note } : {}),
+          ...(justification.linkedOperationId ? { linkedOperationId: justification.linkedOperationId } : {}),
+        }
+      : undefined;
+  /** Prix d'acquisition pointé pour une entrée : retenu s'il est saisi et que la catégorie l'appelle. */
+  const pointedCost = (justification: FlowJustification | undefined): number => {
+    if (!justification || justification.direction !== "in") return 0;
+    const info = categoryInfo("in", justification.category);
+    return info?.needsCost && justification.costEur && justification.costEur > 0 ? justification.costEur : 0;
+  };
 
   // Stock d'actifs numériques par compte, et coût d'acquisition porté par
   // chaque ligne. La valeur globale additionne tous les comptes ; le suivi
@@ -268,10 +384,12 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
    * Retire une quantité d'un actif et rend le coût qu'elle emporte. Ce qui
    * manque au stock est d'abord ajouté à coût nul, et signalé.
    */
-  const remove = (account: string, asset: string, quantity: number, timestamp: number): number => {
+  const remove = (account: string, asset: string, quantity: number, timestamp: number, operationId: string): number => {
     const source = line(account, asset);
     const shortfall = quantity - source.quantity;
     if (shortfall > DUST) {
+      const justification = pointed.get(operationId);
+      const cost = pointedCost(justification);
       unknownCostInflows.push({
         date: timestamp,
         account,
@@ -279,8 +397,15 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         quantity: shortfall,
         valueEur: valueEur(asset, shortfall, timestamp),
         reason: "missing-history",
+        id: operationId,
+        ...(justification ? { justification: applied(justification) } : {}),
       });
       source.quantity += shortfall;
+      if (cost > 0) {
+        source.costEur += cost;
+        acquisitionCostEur += cost;
+        acquisitions.push({ date: timestamp, account, asset, quantity: shortfall, costEur: cost, kind: "justified", operationId });
+      }
     }
     const share = source.quantity > DUST ? Math.min(1, quantity / source.quantity) : 0;
     const carried = source.costEur * share;
@@ -308,7 +433,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
     const swap = operation.kind === "withdrawal" ? swaps.get(operation.id) : undefined;
     if (operation.kind === "withdrawal" && swap) {
       const swapDeposit = swap.deposit;
-      const carried = remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp);
+      const carried = remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp, operation.id);
       add(swapDeposit.account, swapDeposit.asset, swapDeposit.quantity, carried);
       settled.add(swapDeposit.id);
       const givenEur = valueEur(operation.asset, operation.quantity, operation.timestamp);
@@ -344,7 +469,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
       // Frais en fiat : ajoutés à l'acquisition, déduits de la cession.
       const feeFiatEur = fee && isFiat(fee.asset) ? fiatToEur(fee.asset, fee.quantity, timestamp) ?? 0 : 0;
       // Frais en jetons : une simple sortie de stock.
-      if (fee && !isFiat(fee.asset)) remove(account, fee.asset, fee.quantity, timestamp);
+      if (fee && !isFiat(fee.asset)) remove(account, fee.asset, fee.quantity, timestamp, operation.id);
 
       if (givenFiat) {
         // Acquisition contre monnaie ayant cours légal.
@@ -355,13 +480,22 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         const costEur = paidEur + feeFiatEur;
         acquisitionCostEur += costEur;
         add(account, received.asset, received.quantity, costEur);
+        acquisitions.push({
+          date: timestamp,
+          account,
+          asset: received.asset,
+          quantity: received.quantity,
+          costEur,
+          kind: "fiat",
+          operationId: operation.id,
+        });
         continue;
       }
 
       if (!receivedFiat) {
         // Échange crypto contre crypto : le coût suit les jetons, le prix
         // total d'acquisition ne bouge pas.
-        const carried = remove(account, given.asset, given.quantity, timestamp);
+        const carried = remove(account, given.asset, given.quantity, timestamp, operation.id);
         add(account, received.asset, received.quantity, carried);
         continue;
       }
@@ -376,6 +510,8 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
       const sold = line(account, given.asset);
       if (given.quantity - sold.quantity > DUST) {
         const shortfall = given.quantity - sold.quantity;
+        const justification = pointed.get(operation.id);
+        const cost = pointedCost(justification);
         unknownCostInflows.push({
           date: timestamp,
           account,
@@ -383,8 +519,23 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
           quantity: shortfall,
           valueEur: valueEur(given.asset, shortfall, timestamp),
           reason: "missing-history",
+          id: operation.id,
+          ...(justification ? { justification: applied(justification) } : {}),
         });
         sold.quantity = given.quantity;
+        if (cost > 0) {
+          sold.costEur += cost;
+          acquisitionCostEur += cost;
+          acquisitions.push({
+            date: timestamp,
+            account,
+            asset: given.asset,
+            quantity: shortfall,
+            costEur: cost,
+            kind: "justified",
+            operationId: operation.id,
+          });
+        }
       }
 
       // Valeur globale juste avant la cession.
@@ -421,10 +572,12 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         valuationCoverage: portfolioValueEur > 0 ? coveredEur / portfolioValueEur : 0,
         eurPerUsd: book.eurPerUsd(timestamp),
         source: sourceOf(operation.origin),
+        account,
+        operationId: operation.id,
       });
 
       acquisitionCostEur = Math.max(0, acquisitionCostEur - costBasisEur);
-      remove(account, given.asset, given.quantity, timestamp);
+      remove(account, given.asset, given.quantity, timestamp, operation.id);
       continue;
     }
 
@@ -441,7 +594,8 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
           withdrawal.account,
           withdrawal.asset,
           withdrawal.quantity + withdrawal.fee,
-          operation.timestamp
+          operation.timestamp,
+          withdrawal.id
         );
         add(deposit.account, deposit.asset, deposit.quantity, carried);
         settled.add(withdrawal.id);
@@ -450,9 +604,24 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
       }
     }
 
+    const justification = pointed.get(operation.id);
     if (operation.kind === "deposit") {
-      // Jetons venus d'un compte non suivi : détenus, mais sans coût connu.
-      add(operation.account, operation.asset, operation.quantity, 0);
+      // Jetons venus d'un compte non suivi : détenus, sans coût connu — sauf
+      // si l'utilisateur a pointé le prix payé.
+      const cost = pointedCost(justification);
+      add(operation.account, operation.asset, operation.quantity, cost);
+      if (cost > 0) {
+        acquisitionCostEur += cost;
+        acquisitions.push({
+          date: operation.timestamp,
+          account: operation.account,
+          asset: operation.asset,
+          quantity: operation.quantity,
+          costEur: cost,
+          kind: "justified",
+          operationId: operation.id,
+        });
+      }
       unknownCostInflows.push({
         date: operation.timestamp,
         account: operation.account,
@@ -461,9 +630,13 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         valueEur: valueEur(operation.asset, operation.quantity, operation.timestamp),
         reason: "untracked-deposit",
         txId: operation.txId,
+        id: operation.id,
+        ...(operation.counterparty ? { counterparty: operation.counterparty } : {}),
+        ...(operation.protocol ? { protocol: operation.protocol } : {}),
+        ...(justification ? { justification: applied(justification) } : {}),
       });
     } else {
-      remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp);
+      remove(operation.account, operation.asset, operation.quantity + operation.fee, operation.timestamp, operation.id);
       untrackedOutflows.push({
         date: operation.timestamp,
         account: operation.account,
@@ -471,6 +644,9 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
         quantity: operation.quantity,
         valueEur: valueEur(operation.asset, operation.quantity, operation.timestamp),
         txId: operation.txId,
+        id: operation.id,
+        ...(operation.counterparty ? { counterparty: operation.counterparty } : {}),
+        ...(justification ? { justification: applied(justification) } : {}),
       });
     }
   }
@@ -482,6 +658,7 @@ export function computeCessionChain(operations: Operation[], book: PriceBook): C
     hasIncompleteValuation,
     unknownCostInflows,
     untrackedOutflows,
+    acquisitions,
   };
 }
 

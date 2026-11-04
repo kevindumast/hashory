@@ -2,7 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeftRight, CheckCircle2, Copy, Download } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCircle2, Copy, Download, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useActiveQuery } from "@/hooks/usePageActivity";
 import { api } from "@/convex/_generated/api";
@@ -233,7 +233,15 @@ function EventsTable({ events }: { events: TaxableEvent[] }) {
 }
 
 /** Ce qui fonde le calcul, et ce qui pourrait le fausser. */
-type Check = { ok: boolean; title: string; okText: string; warnText: string; detail?: ReactNode };
+type Check = {
+  ok: boolean;
+  title: string;
+  okText: string;
+  warnText: string;
+  detail?: ReactNode;
+  /** Détail à garder même une fois tout pointé, pour revoir les pointages. */
+  alwaysDetail?: boolean;
+};
 
 function Reliability({ result }: { result: TaxReportResult }) {
   const checks: Check[] = [
@@ -253,12 +261,18 @@ function Reliability({ result }: { result: TaxReportResult }) {
     {
       ok: result.unknownCostInflows.count === 0,
       title: "Origine des jetons",
-      okText: "Tous les jetons détenus ont un prix d'acquisition connu.",
-      warnText: `${result.unknownCostInflows.count} entrée${result.unknownCostInflows.count > 1 ? "s" : ""} de jetons (environ ${eur.format(result.unknownCostInflows.valueEur)}) sans prix d'acquisition connu : il est compté nul, ce qui peut majorer l'impôt. Connectez la plateforme d'origine pour le réduire.`,
+      okText:
+        (result.unknownCostInflows.justifiedCount ?? 0) > 0
+          ? "Toutes les entrées sans prix d'achat connu sont pointées."
+          : "Tous les jetons détenus ont un prix d'acquisition connu.",
+      alwaysDetail: (result.unknownCostInflows.justifiedCount ?? 0) > 0,
+      warnText: `${result.unknownCostInflows.count} entrée${result.unknownCostInflows.count > 1 ? "s" : ""} de jetons (environ ${eur.format(result.unknownCostInflows.valueEur)}) sans prix d'acquisition connu : il est compté nul, ce qui peut majorer l'impôt. Connectez la plateforme d'origine, ou pointez chaque entrée (achat ailleurs, airdrop, transfert) avec son justificatif.`,
       detail: (
         <FlaggedFlows
           items={result.unknownCostInflows.items}
           total={result.unknownCostInflows.count}
+          justified={result.unknownCostInflows.justifiedCount ?? 0}
+          counterparts={result.untrackedOutflows.items}
           direction="in"
         />
       ),
@@ -266,12 +280,18 @@ function Reliability({ result }: { result: TaxReportResult }) {
     {
       ok: result.untrackedOutflows.count === 0,
       title: "Sorties suivies",
-      okText: "Aucun envoi vers un compte que Hashory ne suit pas.",
+      okText:
+        (result.untrackedOutflows.justifiedCount ?? 0) > 0
+          ? "Tous les envois vers un compte non suivi sont pointés."
+          : "Aucun envoi vers un compte que Hashory ne suit pas.",
+      alwaysDetail: (result.untrackedOutflows.justifiedCount ?? 0) > 0,
       warnText: `${result.untrackedOutflows.count} envoi${result.untrackedOutflows.count > 1 ? "s" : ""} (environ ${eur.format(result.untrackedOutflows.valueEur)}) vers un compte non suivi : une vente réalisée là-bas n'apparaît pas ici.`,
       detail: (
         <FlaggedFlows
           items={result.untrackedOutflows.items}
           total={result.untrackedOutflows.count}
+          justified={result.untrackedOutflows.justifiedCount ?? 0}
+          counterparts={result.unknownCostInflows.items}
           direction="out"
         />
       ),
@@ -307,7 +327,7 @@ function Reliability({ result }: { result: TaxReportResult }) {
             <div className="min-w-0">
               <p className="text-sm font-bold text-foreground">{check.title}</p>
               <p className="text-xs leading-relaxed text-muted-foreground">{check.ok ? check.okText : check.warnText}</p>
-              {!check.ok && check.detail}
+              {(!check.ok || check.alwaysDetail) && check.detail}
             </div>
           </li>
         ))}
@@ -390,6 +410,12 @@ export function TaxReportView() {
                 ))}
               </div>
             )}
+            <Button variant="outline" asChild className="rounded-full">
+              <Link href="/dashboard/audit">
+                <ShieldCheck />
+                Dossier de contrôle
+              </Link>
+            </Button>
             {report && (
               <Button variant="outline" onClick={() => downloadCsv(taxSheet(report.year, report.events))} className="rounded-full">
                 <Download />

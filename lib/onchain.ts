@@ -5,16 +5,18 @@
  */
 
 import { isSpoofedSymbol } from "./tax-chain";
+import { EVM_CHAINS, EVM_CHAIN_IDS } from "./evm-chains";
 
 export { isSpoofedSymbol };
 
 /** Comptes lus sur la blockchain, et le nom de leur réseau. */
 export const BLOCKCHAIN_NETWORKS: Record<string, string> = {
-  bitcoin: "Bitcoin",
+  ...Object.fromEntries(EVM_CHAIN_IDS.map((id) => [id, EVM_CHAINS[id].label])),
   ethereum: "Ethereum",
   arbitrum: "Arbitrum",
   base: "Base",
   bsc: "BNB Chain",
+  bitcoin: "Bitcoin",
   solana: "Solana",
   kaspa: "Kaspa",
   tao: "Bittensor",
@@ -25,11 +27,8 @@ export function isOnchainProvider(provider: string): boolean {
 }
 
 const EXPLORERS: Partial<Record<string, (txId: string) => string>> = {
+  ...Object.fromEntries(EVM_CHAIN_IDS.map((id) => [id, (tx: string) => `${EVM_CHAINS[id].explorer}/tx/${tx}`])),
   bitcoin: (tx) => `https://mempool.space/tx/${tx}`,
-  ethereum: (tx) => `https://etherscan.io/tx/${tx}`,
-  arbitrum: (tx) => `https://arbiscan.io/tx/${tx}`,
-  base: (tx) => `https://basescan.org/tx/${tx}`,
-  bsc: (tx) => `https://bscscan.com/tx/${tx}`,
   solana: (tx) => `https://solscan.io/tx/${tx}`,
   kaspa: (tx) => `https://explorer.kaspa.org/txs/${tx}`,
   tao: (tx) => `https://taostats.io/extrinsic/${tx}`,

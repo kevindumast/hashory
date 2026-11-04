@@ -21,6 +21,9 @@
  * qui garantit que les chiffres concordent d'un écran à l'autre.
  */
 
+import { applyLinkedTransfers, type FlowJustification } from "./justification";
+import { EVM_CHAINS, EVM_CHAIN_IDS } from "./evm-chains";
+
 // ─── Classes d'actifs ─────────────────────────────────────────────────────
 
 /** Monnaies ayant cours légal : leur cession contre crypto est une acquisition. */
@@ -147,6 +150,10 @@ export type LedgerTransferInput = {
   status?: string;
   timestamp: number;
   txId?: string;
+  /** Adresse d'en face : l'émetteur d'un dépôt, le destinataire d'un retrait. */
+  counterparty?: string;
+  /** DEX ou service identifié pour la transaction on-chain (Uniswap, Jupiter…). */
+  protocol?: string;
 };
 
 export type LedgerFiatInput = {
@@ -172,6 +179,8 @@ export type LedgerInput = {
   fiat?: LedgerFiatInput[];
   /** Plateforme de chaque compte : certains codes de statut en dépendent. */
   providers?: Record<string, string>;
+  /** Pointages manuels de l'utilisateur (transferts internes déclarés, prix saisis). */
+  justifications?: FlowJustification[];
 };
 
 // ─── Sortie : les opérations canoniques ───────────────────────────────────
@@ -187,7 +196,10 @@ export type ExchangeOperation = {
   received: Amount;
   /** Frais débités en plus des montants échangés. */
   fee?: Amount;
-  origin: "spot" | "convert" | "fiat" | "dust" | "order";
+  origin: "spot" | "convert" | "fiat" | "dust" | "order" | "dex";
+  /** Swap on-chain : le hash de la transaction et le DEX utilisé, s'il est connu. */
+  txId?: string;
+  protocol?: string;
 };
 
 export type TransferOperation = {
@@ -203,6 +215,9 @@ export type TransferOperation = {
   txId?: string;
   /** Opération jumelle quand le transfert relie deux comptes suivis. */
   counterpart?: string;
+  /** Adresse d'en face, quand la chaîne la donne : c'est elle qui dit d'où viennent les fonds. */
+  counterparty?: string;
+  protocol?: string;
 };
 
 export type Operation = ExchangeOperation | TransferOperation;
@@ -499,6 +514,8 @@ export function buildLedger(input: LedgerInput): Operation[] {
       quantity,
       fee: 0,
       txId: deposit.txId,
+      ...(deposit.counterparty ? { counterparty: deposit.counterparty } : {}),
+      ...(deposit.protocol ? { protocol: deposit.protocol } : {}),
     });
   }
 
@@ -517,6 +534,8 @@ export function buildLedger(input: LedgerInput): Operation[] {
       quantity: providers[withdrawal.account] === "bitcoin" ? withdrawal.amount - fee : withdrawal.amount,
       fee,
       txId: withdrawal.txId,
+      ...(withdrawal.counterparty ? { counterparty: withdrawal.counterparty } : {}),
+      ...(withdrawal.protocol ? { protocol: withdrawal.protocol } : {}),
     });
   }
 
@@ -525,9 +544,89 @@ export function buildLedger(input: LedgerInput): Operation[] {
     if (operation) operations.push(operation);
   }
 
-  operations.sort((a, b) => a.timestamp - b.timestamp || rank(a) - rank(b));
-  matchInternalTransfers(operations);
-  return operations;
+  const ledger = pairOnchainSwaps(operations, providers);
+  ledger.sort((a, b) => a.timestamp - b.timestamp || rank(a) - rank(b));
+  matchInternalTransfers(ledger);
+  applyLinkedTransfers(ledger, input.justifications ?? []);
+  return ledger;
+}
+
+// ─── Swaps on-chain ───────────────────────────────────────────────────────
+
+/** Jeton qui paie le réseau, par plateforme lue sur la blockchain. */
+const NATIVE_ASSET: Record<string, string> = {
+  ...Object.fromEntries(EVM_CHAIN_IDS.map((id) => [id, EVM_CHAINS[id].nativeSymbol])),
+  solana: "SOL",
+};
+
+/**
+ * Un swap sur un DEX tient dans une seule transaction : le wallet envoie un
+ * actif et en reçoit un autre, sous le même hash. Lus séparément, ces deux
+ * transferts passaient pour un envoi vers l'extérieur et une réception
+ * d'origine inconnue — coût nul, impôt majoré. Réunis, ils redeviennent ce
+ * qu'ils sont : un échange crypto contre crypto, dont le coût suit les jetons.
+ *
+ * Le jeton natif envoyé en marge d'un autre actif (rente Solana, pourboire)
+ * passe en frais. Un groupe qui donne ou reçoit plusieurs actifs (apport de
+ * liquidité, par exemple) reste tel quel : ce n'est pas un simple échange.
+ */
+export function pairOnchainSwaps(operations: Operation[], providers: Record<string, string>): Operation[] {
+  const groups = new Map<string, TransferOperation[]>();
+  for (const operation of operations) {
+    if (operation.kind === "exchange" || !operation.txId || isFiat(operation.asset)) continue;
+    if (!NATIVE_ASSET[providers[operation.account] ?? ""]) continue;
+    // Symboles hors ASCII : faux jetons d'empoisonnement d'adresse.
+    if (/[^\x20-\x7E]/.test(operation.asset)) continue;
+    const key = `${operation.account}|${operation.txId.toLowerCase()}`;
+    groups.set(key, [...(groups.get(key) ?? []), operation]);
+  }
+
+  const replaced = new Set<string>();
+  const swaps: Operation[] = [];
+  for (const group of groups.values()) {
+    if (!group.some((op) => op.kind === "deposit") || !group.some((op) => op.kind === "withdrawal")) continue;
+    const native = NATIVE_ASSET[providers[group[0].account]];
+    const net = new Map<string, number>();
+    let gas = 0;
+    for (const op of group) {
+      net.set(op.asset, (net.get(op.asset) ?? 0) + (op.kind === "deposit" ? op.quantity : -op.quantity));
+      if (op.kind === "withdrawal") gas += op.fee;
+    }
+    const outs = [...net].filter(([, quantity]) => quantity < -1e-12);
+    const ins = [...net].filter(([, quantity]) => quantity > 1e-12);
+    const givenCandidates = outs.length > 1 ? outs.filter(([asset]) => asset !== native) : outs;
+    const receivedCandidates = ins.length > 1 ? ins.filter(([asset]) => asset !== native) : ins;
+    if (givenCandidates.length !== 1 || receivedCandidates.length !== 1) continue;
+    const [givenAsset, givenNet] = givenCandidates[0];
+    const [receivedAsset, receivedNet] = receivedCandidates[0];
+    if (givenAsset === receivedAsset) continue;
+
+    // Jeton natif envoyé en marge : des frais ; reçu en marge : un dépôt à part.
+    const nativeNet = net.get(native) ?? 0;
+    if (givenAsset !== native && receivedAsset !== native && nativeNet < 0) gas += -nativeNet;
+    const first = group.reduce((a, b) => (b.timestamp < a.timestamp ? b : a));
+    const protocol = group.find((op) => op.protocol)?.protocol;
+    for (const op of group) replaced.add(op.id);
+    swaps.push({
+      kind: "exchange",
+      id: `dex:${first.id}`,
+      account: first.account,
+      timestamp: first.timestamp,
+      given: { asset: givenAsset, quantity: -givenNet },
+      received: { asset: receivedAsset, quantity: receivedNet },
+      ...(gas > 0 ? { fee: { asset: native, quantity: gas } } : {}),
+      origin: "dex",
+      txId: first.txId,
+      ...(protocol ? { protocol } : {}),
+    });
+    if (givenAsset !== native && receivedAsset !== native && nativeNet > 1e-12) {
+      const refund = group.find((op) => op.kind === "deposit" && op.asset === native)!;
+      swaps.push({ ...refund, quantity: nativeNet });
+    }
+  }
+
+  if (swaps.length === 0) return operations;
+  return [...operations.filter((op) => !replaced.has(op.id)), ...swaps];
 }
 
 /**

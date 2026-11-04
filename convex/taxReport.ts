@@ -7,12 +7,15 @@ import {
   computeCessionChain,
   flaggedItems,
   MAX_FLAGGED_ITEMS,
+  suggestCounterparts,
   summarizeByYear,
+  type Acquisition,
   type Cession,
   type FlaggedFlow,
   type ServiceSwap,
 } from "../lib/tax-chain";
 import { buildLedger, isFiat, type Operation } from "../lib/ledger";
+import { categoryInfo, type FlowJustification } from "../lib/justification";
 import {
   createPriceBook,
   impliedPrices,
@@ -39,6 +42,9 @@ export type TaxableEvent = {
   gainLossUsd: number;
   /** Euros par dollar au jour de la cession. */
   fxRate: number | null;
+  /** Compte et opération d'origine, pour retrouver la pièce. */
+  account?: string;
+  operationId?: string;
 };
 
 export type TaxYearReport = {
@@ -70,12 +76,52 @@ export type TaxReportResult = {
   /** Une valeur globale a dû être complétée au coût, faute de cours. */
   hasIncompleteValuation: boolean;
   hasMissingFxRates: boolean;
-  /** Jetons détenus sans coût d'acquisition connu, comptés à coût nul. */
-  unknownCostInflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
+  /**
+   * Jetons détenus sans coût d'acquisition connu, comptés à coût nul.
+   * `count` et `valueEur` ne comptent que ce qui reste à pointer ; `items`
+   * garde aussi les opérations déjà pointées, pour les revoir.
+   */
+  unknownCostInflows: FlaggedSummary;
   /** Jetons partis vers un compte non suivi : cessions possibles non vues. */
-  untrackedOutflows: { count: number; valueEur: number; items?: FlaggedFlow[] };
+  untrackedOutflows: FlaggedSummary;
+  /** Ce qu'un contrôle demanderait de produire. Absent des rapports enregistrés avant son ajout. */
+  audit?: AuditTrail;
   /** Échanges via un service tiers reconnus. Absent des rapports enregistrés avant leur ajout. */
   serviceSwaps?: ServiceSwap[];
+};
+
+export type FlaggedSummary = {
+  count: number;
+  valueEur: number;
+  items?: FlaggedFlow[];
+  /** Opérations pointées par l'utilisateur. */
+  justifiedCount?: number;
+  justifiedValueEur?: number;
+};
+
+/** Acquisitions d'un mois, par compte et par actif : la base d'un relevé à produire. */
+export type AcquisitionGroup = {
+  month: string;
+  account: string;
+  asset: string;
+  count: number;
+  quantity: number;
+  costEur: number;
+  kind: Acquisition["kind"];
+};
+
+export type AuditTrail = {
+  /** Prix total d'acquisition cumulé, avant imputation aux cessions. */
+  totalAcquiredEur: number;
+  acquisitions: AcquisitionGroup[];
+  /** Transferts entre comptes suivis, reconnus ou pointés. */
+  internalTransfers: number;
+  /** Swaps on-chain reconnus, par DEX (« Inconnu » faute de l'avoir identifié). */
+  dexSwaps: { protocol: string; count: number }[];
+  /** Envois pointés comme une cession hors de Hashory (paiement, vente ailleurs). */
+  undeclaredCessions: { count: number; valueEur: number };
+  operations: number;
+  firstOperationAt: number | null;
 };
 
 export type { FlaggedFlow, ServiceSwap };
@@ -122,6 +168,15 @@ function emptyReport(): TaxReportResult {
     unknownCostInflows: { count: 0, valueEur: 0 },
     untrackedOutflows: { count: 0, valueEur: 0 },
     serviceSwaps: [],
+    audit: {
+      totalAcquiredEur: 0,
+      acquisitions: [],
+      internalTransfers: 0,
+      dexSwaps: [],
+      undeclaredCessions: { count: 0, valueEur: 0 },
+      operations: 0,
+      firstOperationAt: null,
+    },
   };
 }
 
@@ -154,14 +209,15 @@ export function findInSeries(series: PriceSeries, asset: string, dayUtc: number)
 export async function buildTaxReport(
   operations: Operation[],
   fx: { dayUtc: number; eurPerUsd: number }[],
-  findPrice: PriceFinder
+  findPrice: PriceFinder,
+  justifications: FlowJustification[] = []
 ): Promise<TaxReportResult> {
   if (operations.length === 0) return emptyReport();
   const implied = impliedPrices(operations, fx);
 
   // Passe à blanc : quels cours la chaîne va-t-elle demander ?
   const wanted = new Map<string, Set<number>>();
-  computeCessionChain(operations, recordingBook(createPriceBook({ prices: {}, fx, implied }), wanted));
+  computeCessionChain(operations, recordingBook(createPriceBook({ prices: {}, fx, implied }), wanted), justifications);
 
   // Un cours par couple demandé : le dernier connu à cette date.
   const prices: PriceSeries = {};
@@ -175,7 +231,7 @@ export async function buildTaxReport(
   }
 
   const book = createPriceBook({ prices, fx, implied });
-  const chain = computeCessionChain(operations, book);
+  const chain = computeCessionChain(operations, book, justifications);
   const years = summarizeByYear(chain.cessions, { threshold: ANNUAL_EXEMPTION_EUR, rate: PFU_RATE });
 
   const toUsd = (eur: number, rate: number | null) => (rate ? eur / rate : eur);
@@ -193,6 +249,8 @@ export async function buildTaxReport(
     costBasisUsd: toUsd(cession.costBasisEur, cession.eurPerUsd),
     gainLossUsd: toUsd(cession.gainLossEur, cession.eurPerUsd),
     fxRate: cession.eurPerUsd,
+    ...(cession.account ? { account: cession.account } : {}),
+    ...(cession.operationId ? { operationId: cession.operationId } : {}),
   });
 
   const reports: TaxYearReport[] = years.map((year) => {
@@ -229,6 +287,33 @@ export async function buildTaxReport(
   const total = (list: { valueEur: number | null }[]) => list.reduce((sum, item) => sum + (item.valueEur ?? 0), 0);
   // Le fiat retiré vers une banque n'est pas une sortie d'actif numérique.
   const outflows = chain.untrackedOutflows.filter((outflow) => !isFiat(outflow.asset));
+  const suggestions = suggestCounterparts(chain.unknownCostInflows, outflows);
+  const inflowItems: FlaggedFlow[] = chain.unknownCostInflows.map((inflow) => {
+    const match = suggestions.inflows.get(inflow.id);
+    return match
+      ? { ...inflow, suggestion: { id: match.id, account: match.account, date: match.date, quantity: match.quantity, txId: match.txId } }
+      : inflow;
+  });
+  const outflowItems: FlaggedFlow[] = outflows.map((outflow) => {
+    const match = suggestions.outflows.get(outflow.id);
+    return match
+      ? { ...outflow, suggestion: { id: match.id, account: match.account, date: match.date, quantity: match.quantity, txId: match.txId } }
+      : outflow;
+  });
+  const summary = (items: FlaggedFlow[]): FlaggedSummary => {
+    const open = items.filter((item) => !item.justification);
+    const done = items.filter((item) => item.justification);
+    return {
+      count: open.length,
+      valueEur: total(open),
+      items: flaggedItems(items),
+      justifiedCount: done.length,
+      justifiedValueEur: total(done),
+    };
+  };
+  const undeclared = outflowItems.filter(
+    (item) => item.justification && categoryInfo("out", item.justification.category)?.taxable
+  );
 
   return {
     reports,
@@ -239,18 +324,56 @@ export async function buildTaxReport(
     currentAcquisitionCostEur: chain.acquisitionCostEur,
     hasIncompleteValuation: chain.hasIncompleteValuation,
     hasMissingFxRates: fx.length === 0,
-    unknownCostInflows: {
-      count: chain.unknownCostInflows.length,
-      valueEur: total(chain.unknownCostInflows),
-      items: flaggedItems(chain.unknownCostInflows),
-    },
-    untrackedOutflows: {
-      count: outflows.length,
-      valueEur: total(outflows),
-      items: flaggedItems(outflows),
-    },
+    unknownCostInflows: summary(inflowItems),
+    untrackedOutflows: summary(outflowItems),
     serviceSwaps: chain.serviceSwaps.slice(-MAX_FLAGGED_ITEMS),
+    audit: {
+      totalAcquiredEur: chain.acquisitions.reduce((sum, acquisition) => sum + acquisition.costEur, 0),
+      acquisitions: groupAcquisitions(chain.acquisitions),
+      internalTransfers: operations.filter((op) => op.kind === "withdrawal" && op.counterpart).length,
+      dexSwaps: dexSwapCounts(operations),
+      undeclaredCessions: { count: undeclared.length, valueEur: total(undeclared) },
+      operations: operations.length,
+      firstOperationAt: operations[0]?.timestamp ?? null,
+    },
   };
+}
+
+/** Plafond de lignes du relevé d'acquisitions : le rapport enregistré reste petit. */
+const MAX_ACQUISITION_GROUPS = 1500;
+
+function groupAcquisitions(acquisitions: Acquisition[]): AcquisitionGroup[] {
+  const groups = new Map<string, AcquisitionGroup>();
+  for (const acquisition of acquisitions) {
+    const month = new Date(acquisition.date).toISOString().slice(0, 7);
+    const key = `${month}|${acquisition.account}|${acquisition.asset}|${acquisition.kind}`;
+    const group = groups.get(key) ?? {
+      month,
+      account: acquisition.account,
+      asset: acquisition.asset,
+      count: 0,
+      quantity: 0,
+      costEur: 0,
+      kind: acquisition.kind,
+    };
+    group.count += 1;
+    group.quantity += acquisition.quantity;
+    group.costEur += acquisition.costEur;
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .sort((a, b) => b.month.localeCompare(a.month) || b.costEur - a.costEur)
+    .slice(0, MAX_ACQUISITION_GROUPS);
+}
+
+function dexSwapCounts(operations: Operation[]): { protocol: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const operation of operations) {
+    if (operation.kind !== "exchange" || operation.origin !== "dex") continue;
+    const protocol = operation.protocol ?? "Inconnu";
+    counts.set(protocol, (counts.get(protocol) ?? 0) + 1);
+  }
+  return [...counts].map(([protocol, count]) => ({ protocol, count })).sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -300,7 +423,7 @@ export async function loadTaxReport(ctx: QueryCtx, clerkId: string): Promise<Tax
       .order("desc")
       .first();
     return row ? row.closeUsd : null;
-  });
+  }, input.justifications ?? []);
 }
 
 /** Taille au-delà de laquelle on ne stocke pas (limite d'un document : 1 Mo). */

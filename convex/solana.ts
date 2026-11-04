@@ -1,9 +1,11 @@
-import { action } from "./_generated/server";
+import { action, type ActionCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { decryptSecret } from "./utils/encryption";
 import { requireUserId } from "./auth";
 import { rejectedDataProviderKey, requireDataProviderKey } from "./dataProviderKeys";
+import { dexFromHelius } from "../lib/dex";
 
 const HELIUS_API_BASE = "https://api.helius.xyz/v0";
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -29,6 +31,10 @@ interface HeliusTx {
   fee: number;
   nativeTransfers: HeliusNativeTransfer[];
   tokenTransfers: HeliusTokenTransfer[];
+  /** Nature de la transaction selon Helius (SWAP, TRANSFER…). */
+  type?: string;
+  /** Programme ou service à l'origine (JUPITER, RAYDIUM…). */
+  source?: string;
 }
 
 interface SyncCursor {
@@ -216,6 +222,8 @@ export const syncSolanaWallet = action({
           status: string;
           insertTime: number;
           txId: string;
+          counterparty?: string;
+          protocol?: string;
         }> = [];
         const withdrawals: Array<{
           withdrawId: string;
@@ -226,6 +234,8 @@ export const syncSolanaWallet = action({
           applyTime: number;
           txId: string;
           fee: number;
+          counterparty?: string;
+          protocol?: string;
         }> = [];
 
         for (const tx of txs) {
@@ -236,6 +246,8 @@ export const syncSolanaWallet = action({
 
           const timestamp = tx.timestamp * 1000;
           const feeSol = tx.fee / LAMPORTS_PER_SOL;
+          // Chaîne vide : cherché, pas un DEX — pour ne pas redemander.
+          const protocol = dexFromHelius(tx.type, tx.source) ?? "";
 
           for (const transfer of tx.nativeTransfers) {
             const amount = transfer.amount / LAMPORTS_PER_SOL;
@@ -250,6 +262,8 @@ export const syncSolanaWallet = action({
                 status: "CONFIRMED",
                 insertTime: timestamp,
                 txId: tx.signature,
+                counterparty: transfer.fromUserAccount,
+                protocol,
               });
             } else if (transfer.fromUserAccount === walletAddress && transfer.toUserAccount !== walletAddress) {
               withdrawals.push({
@@ -261,6 +275,8 @@ export const syncSolanaWallet = action({
                 applyTime: timestamp,
                 txId: tx.signature,
                 fee: feeSol,
+                counterparty: transfer.toUserAccount,
+                protocol,
               });
             }
           }
@@ -279,6 +295,8 @@ export const syncSolanaWallet = action({
                 status: "CONFIRMED",
                 insertTime: timestamp,
                 txId: tx.signature,
+                counterparty: transfer.fromUserAccount,
+                protocol,
               });
             } else if (transfer.fromUserAccount === walletAddress && transfer.toUserAccount !== walletAddress) {
               withdrawals.push({
@@ -290,6 +308,8 @@ export const syncSolanaWallet = action({
                 applyTime: timestamp,
                 txId: tx.signature,
                 fee: 0,
+                counterparty: transfer.toUserAccount,
+                protocol,
               });
             }
           }
@@ -317,6 +337,11 @@ export const syncSolanaWallet = action({
         cursor: { lastSignature: newFirstSignature } as SyncCursor,
       });
 
+      // Historique importé avant la lecture des DEX : complété par lots.
+      await identifySolanaSwaps(ctx, args.integrationId, apiKey).catch((error) =>
+        console.warn("[solana] DEX non identifiés", error)
+      );
+
       await ctx.runMutation(internal.integrations.updateSyncStatus, {
         integrationId: args.integrationId,
         syncStatus: "synced",
@@ -337,3 +362,30 @@ export const syncSolanaWallet = action({
     }
   },
 });
+
+/** Signatures relues par synchronisation, dans la limite d'un appel Helius. */
+const SWAP_LOOKUPS_PER_SYNC = 100;
+
+/**
+ * Relit chez Helius les swaps enregistrés avant que le DEX soit noté :
+ * l'API d'analyse rend, pour chaque signature, la source de la transaction.
+ */
+async function identifySolanaSwaps(ctx: ActionCtx, integrationId: Id<"integrations">, apiKey: string) {
+  const signatures: string[] = await ctx.runQuery(internal.blockchainSync.swapHashesToIdentify, {
+    integrationId,
+    limit: SWAP_LOOKUPS_PER_SYNC,
+  });
+  if (signatures.length === 0) return;
+  const response = await fetch(`${HELIUS_API_BASE}/transactions?api-key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ transactions: signatures }),
+  });
+  if (!response.ok) return;
+  const txs = (await response.json()) as Array<Pick<HeliusTx, "signature" | "type" | "source">>;
+  if (!Array.isArray(txs)) return;
+  await ctx.runMutation(internal.blockchainSync.setSwapProtocols, {
+    integrationId,
+    items: txs.map((tx) => ({ txId: tx.signature, protocol: dexFromHelius(tx.type, tx.source) ?? "" })),
+  });
+}

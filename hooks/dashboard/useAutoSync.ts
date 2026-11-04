@@ -1,5 +1,6 @@
 "use client";
 
+import { isEvmChain } from "@/lib/evm-chains";
 import { useCallback, useEffect, useRef } from "react";
 import { useAction } from "convex/react";
 import { useActiveQuery } from "@/hooks/usePageActivity";
@@ -89,10 +90,6 @@ export function useAutoSync() {
           return syncKaspa(argument);
         case "ethereum":
           return syncEthereum(argument);
-        case "arbitrum":
-        case "base":
-        case "bsc":
-          return syncEvm(argument);
         case "solana":
           return syncSolana(argument);
         case "bitcoin":
@@ -100,7 +97,8 @@ export function useAutoSync() {
         case "tao":
           return syncTao(argument);
         default:
-          return null;
+          // Toute autre chaîne EVM du référentiel passe par la même lecture.
+          return isEvmChain(provider) ? syncEvm(argument) : null;
       }
     },
     [syncBinance, syncKucoin, syncKraken, syncKaspa, syncEthereum, syncEvm, syncSolana, syncBitcoin, syncTao]

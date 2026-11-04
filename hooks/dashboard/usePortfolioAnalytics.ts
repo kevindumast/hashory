@@ -19,7 +19,10 @@ import {
   sharpeRatio,
   shockImpact,
   sortinoRatio,
+  tailRisk,
+  ulcerIndex,
   volatility,
+  type TailRisk,
   type AttributionReport,
   type ConcentrationProfile,
   type DrawdownProfile,
@@ -86,6 +89,27 @@ export type PortfolioAnalytics = {
   topAssetShock: { key: string; impact: number } | null;
 
   totalValueUsd: number;
+
+  /** VaR, CVaR, distribution des rendements quotidiens. */
+  tail: TailRisk;
+  /** Indice d'ulcère : profondeur et durée des baisses. */
+  ulcer: number;
+  /** Rendement annualisé sur indice d'ulcère (Martin ratio). */
+  martin: number;
+};
+
+const EMPTY_TAIL: TailRisk = {
+  var95: 0,
+  cvar95: 0,
+  var99: 0,
+  hitRate: 0,
+  bestDay: null,
+  worstDay: null,
+  skewness: 0,
+  excessKurtosis: 0,
+  gainLossRatio: 0,
+  profitFactor: 0,
+  longestLosingStreak: 0,
 };
 
 const STABLECOINS = new Set([
@@ -240,6 +264,9 @@ export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): Portf
         beta: null,
         correlationToBenchmark: null,
         alpha: null,
+        tail: EMPTY_TAIL,
+        ulcer: 0,
+        martin: 0,
       };
     }
 
@@ -258,6 +285,7 @@ export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): Portf
 
     const index = growthIndex(returns, 100, points[0].dayUtc);
     const drawdown = drawdownProfile(index);
+    const ulcer = ulcerIndex(index);
 
     // ── Référence Bitcoin ───────────────────────────────────────
     // `btcPercent` est la variation cumulée de BTC depuis l'origine du
@@ -334,6 +362,9 @@ export function usePortfolioAnalytics(windowId: AnalysisWindowId = "all"): Portf
       beta: portfolioBeta,
       correlationToBenchmark,
       alpha,
+      tail: tailRisk(returns),
+      ulcer,
+      martin: ulcer > 0 ? annualizedReturn / ulcer : 0,
     };
   }, [windowed, holdings, totalValueUsd, isLoadingPortfolio, isComputing]);
 }

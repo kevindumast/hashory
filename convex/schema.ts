@@ -155,6 +155,10 @@ export default defineSchema({
      * Le montant crédité s'en trouvait surévalué d'autant.
      */
     fee: v.optional(v.number()),
+    /** Adresse émettrice, pour un dépôt lu sur la blockchain. */
+    counterparty: v.optional(v.string()),
+    /** DEX ou service identifié pour la transaction (Uniswap, Jupiter…). */
+    protocol: v.optional(v.string()),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })
@@ -173,6 +177,9 @@ export default defineSchema({
     status: v.string(),
     applyTime: v.number(),
     updateTime: v.optional(v.number()),
+    /** Adresse destinataire (le contrat appelé, pour un swap). */
+    counterparty: v.optional(v.string()),
+    protocol: v.optional(v.string()),
     raw: v.optional(v.any()),
     createdAt: v.number(),
   })
@@ -382,6 +389,24 @@ export default defineSchema({
    * Retours « bug ou idée » du tableau de bord, recopiés en issue GitHub.
    * L'issue manque si GitHub n'est pas configuré ou a refusé.
    */
+  /**
+   * Pointages manuels : ce que l'utilisateur dit d'une opération que le
+   * calcul ne sait pas expliquer (achat ailleurs, airdrop, transfert entre
+   * ses comptes…). Une ligne par opération pointée.
+   */
+  flowJustifications: defineTable({
+    clerkId: v.string(),
+    operationId: v.string(),
+    direction: v.union(v.literal("in"), v.literal("out")),
+    category: v.string(),
+    costEur: v.optional(v.number()),
+    linkedOperationId: v.optional(v.string()),
+    note: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_user", ["clerkId"])
+    .index("by_user_operation", ["clerkId", "operationId"]),
   feedback: defineTable({
     clerkId: v.string(),
     kind: v.union(v.literal("bug"), v.literal("idee")),
