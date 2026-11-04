@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.1.0](https://github.com/kevindumast/hashory/compare/hashory-v1.0.0...hashory-v1.1.0) (2026-11-04)
+
+
+### Features
+
+* **comptes:** remonter le tableau des transactions par an sous l'en-tête ([#108](https://github.com/kevindumast/hashory/issues/108)) ([b149901](https://github.com/kevindumast/hashory/commit/b149901535017e2816442106a2f7068e97389b97))
+* **comptes:** remonter le tableau des transactions par an sous l'en-tête ([#109](https://github.com/kevindumast/hashory/issues/109)) ([63d737c](https://github.com/kevindumast/hashory/commit/63d737ced4637560d156bcb4b018a28ecb75c845))
+* DEX des swaps on-chain, pointage des opérations, dossier de contrôle et Vue 360 ([#124](https://github.com/kevindumast/hashory/issues/124)) ([95ace40](https://github.com/kevindumast/hashory/commit/95ace40edb2bd2df283ea9b6861feefbb20346c0))
+* **exports:** séparateur décimal des CSV réglable dans le profil ([#110](https://github.com/kevindumast/hashory/issues/110)) ([e2c4022](https://github.com/kevindumast/hashory/commit/e2c4022f7ac41e0348023869c448542c27aba8d2))
+* **fiscalité:** détail des entrées et sorties non suivies ([#119](https://github.com/kevindumast/hashory/issues/119)) ([6e23730](https://github.com/kevindumast/hashory/commit/6e237308b6fe2482da5dec8b6dc7af9bdf690cbc))
+* **fiscalité:** leviers de fin d'année, export et outil Claude 3916-bis ([#118](https://github.com/kevindumast/hashory/issues/118)) ([e18fb80](https://github.com/kevindumast/hashory/commit/e18fb804852e85204a1cf358f2316f6accf89676))
+* **fiscalité:** refonte de la page et date de clôture des comptes (3916-bis) ([#117](https://github.com/kevindumast/hashory/issues/117)) ([9bf73b4](https://github.com/kevindumast/hashory/commit/9bf73b40fad5f8a3ca2334f1386a9de20476659c))
+* **performance:** confronter achats et ventes à l'indice Fear & Greed ([#104](https://github.com/kevindumast/hashory/issues/104)) ([b519918](https://github.com/kevindumast/hashory/commit/b51991802a189b391a340af9333285d2b87134bc))
+* **performance:** palette Fear & Greed façon CoinMarketCap ([#105](https://github.com/kevindumast/hashory/issues/105)) ([79df2ed](https://github.com/kevindumast/hashory/commit/79df2edd08f07e972d2b6dbc3db694c27f9313e2))
+* rétrospective annuelle et comptes à l'étranger (3916-bis) ([#116](https://github.com/kevindumast/hashory/issues/116)) ([89c0f04](https://github.com/kevindumast/hashory/commit/89c0f040b66e76d43a3035b6cf50d2ad3a5144e0))
+* **transactions:** icône dédiée pour l'euro et les devises fiat ([#114](https://github.com/kevindumast/hashory/issues/114)) ([358b1a5](https://github.com/kevindumast/hashory/commit/358b1a52c64fac218c05ce0c75230af5898096a1))
+* **transactions:** onglet On-chain et prix déduit des swaps ([#121](https://github.com/kevindumast/hashory/issues/121)) ([d7f5252](https://github.com/kevindumast/hashory/commit/d7f52524d722029ef42b094bfbccbf34700b03ff))
+* **transactions:** refonte de la table, onglets et boutons fonctionnels ([#113](https://github.com/kevindumast/hashory/issues/113)) ([fe5a61a](https://github.com/kevindumast/hashory/commit/fe5a61a86bb8e602a35c04cb2532c8f9a43c4452))
+* **transactions:** un swap via un service tient sur une ligne ([#122](https://github.com/kevindumast/hashory/issues/122)) ([11bffba](https://github.com/kevindumast/hashory/commit/11bffbaa940c65a997e6f7b83a91e1352a737cf9))
+* **ui:** finitions de design sur toutes les pages du tableau de bord ([#115](https://github.com/kevindumast/hashory/issues/115)) ([c71a6dc](https://github.com/kevindumast/hashory/commit/c71a6dcbc454ae185f7ef05bd751a4c8f231565c))
+* **wallets:** suivre les adresses Arbitrum, Base et BNB Smart Chain ([#111](https://github.com/kevindumast/hashory/issues/111)) ([ce169b8](https://github.com/kevindumast/hashory/commit/ce169b89fd5972a3ec2f40ef0c823c18482cf28e))
+
+
+### Bug Fixes
+
+* **bsc:** lire BNB Smart Chain via Alchemy, l'inscription Moralis échouant ([#112](https://github.com/kevindumast/hashory/issues/112)) ([b164cc3](https://github.com/kevindumast/hashory/commit/b164cc3bc70c60ab8f54d9d93843ec50b3b3e3c4))
+* **fiscalité:** cadeaux Bitstack et écarts d'arrondi nommés comme tels ([#123](https://github.com/kevindumast/hashory/issues/123)) ([3e3b3ba](https://github.com/kevindumast/hashory/commit/3e3b3ba1fce734b04421e6af42a7147858e3ce07))
+* **fiscalité:** swaps via un service, frais Bitcoin et faux jetons ([#120](https://github.com/kevindumast/hashory/issues/120)) ([7a3717b](https://github.com/kevindumast/hashory/commit/7a3717bd72d038ab5029cfde4e4d4ffdf53f3dc5))
+* **prices:** historique KAS via KuCoin, absent de Binance ([#107](https://github.com/kevindumast/hashory/issues/107)) ([15dd940](https://github.com/kevindumast/hashory/commit/15dd9406205f13ce109c75db38fe3118d57a03e9))
+* **site:** retirer contact@hashory.app, domaine qui n'appartient pas au projet ([#102](https://github.com/kevindumast/hashory/issues/102)) ([2e13dbb](https://github.com/kevindumast/hashory/commit/2e13dbbd72e19da2a6a7768763d4dd95e2273b1d))
+* **solana:** résoudre le ticker des jetons SPL au lieu du mint tronqué ([#106](https://github.com/kevindumast/hashory/issues/106)) ([c2dd83e](https://github.com/kevindumast/hashory/commit/c2dd83e12ea47fc2b2eca21eaf84c2234be58768))
+
 ## [1.0.0](https://github.com/kevindumast/hashory/compare/hashory-v0.1.14...hashory-v1.0.0) (2026-11-01)
 
 
