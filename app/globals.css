@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* La documentation (DESIGN.md, CHANGELOG.md…) cite des classes à ne pas
+   utiliser : elle ne doit pas les faire générer. */
+@source not "../**/*.md";
+
 @custom-variant dark (&:is(.dark *));
 
 /* Le survol n'existe qu'avec une souris ou un trackpad. Sur écran tactile,
