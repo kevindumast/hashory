@@ -3,6 +3,37 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Le survol n'existe qu'avec une souris ou un trackpad. Sur écran tactile,
+   le premier tap applique `:hover` et le laisse collé : tout `hover:`,
+   `group-hover:` et `peer-hover:` est donc réservé aux pointeurs précis. */
+@custom-variant hover {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
+}
+
+/* ─── Mouvement : courbes ──────────────────────────────────────
+   Les courbes CSS natives sont trop molles. Ces trois-là remplacent
+   `ease-out` / `ease-in-out` de Tailwind et ajoutent `ease-drawer`.
+   - ease-out    : tout ce qui entre ou sort (réponse immédiate) ;
+   - ease-in-out : ce qui se déplace à l'écran ;
+   - ease-drawer : feuilles et tiroirs (courbe iOS, très raide au départ).
+   `ease-in` n'est jamais utilisé sur l'interface.
+   `static` : les jetons restent définis même sans classe qui les utilise,
+   pour le CSS écrit à la main. */
+@theme static {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  /* `transition-colors` & co. : un changement de couleur se fait en `ease`. */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: ease;
+  /* Petits textes : légère approche positive pour la lisibilité. */
+  --text-xs--letter-spacing: 0.01em;
+}
+
 @theme inline {
   --color-positive: var(--positive);
   --color-negative: var(--negative);
@@ -118,6 +149,22 @@
   /* Quadrillage du hero et ombre portée des grandes cartes. */
   --grid-line: rgba(21, 27, 35, 0.045);
   --shadow-float: 0 30px 80px -40px rgba(21, 27, 35, 0.35);
+
+  /* ─── Mouvement : durées ─────────────────────────────────────
+     Interface sous 300 ms ; feuilles et modales sont les exceptions.
+     Une sortie est toujours plus rapide que l'entrée : l'utilisateur a
+     déjà décidé de partir. */
+  --duration-press: 140ms;
+  --duration-tooltip: 150ms;
+  --duration-tooltip-exit: 100ms;
+  --duration-popover: 180ms;
+  --duration-popover-exit: 120ms;
+  --duration-modal: 220ms;
+  --duration-modal-exit: 160ms;
+  --duration-sheet: 500ms;
+  --duration-sheet-exit: 300ms;
+  --duration-hover: 200ms;
+  --duration-theme: 250ms;
 }
 
 /* Thème sombre — dérivé : mêmes rôles, accents éclaircis pour garder le
@@ -159,9 +206,37 @@
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    /* Pas de voile gris au tap : chaque contrôle porte son propre `:active`. */
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground;
+  }
+  /* Tap immédiat (pas d'attente du double-tap). */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  label,
+  summary,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [role="option"] {
+    touch-action: manipulation;
+  }
+  /* Un appui long sur un contrôle ne sélectionne pas son libellé et
+     n'ouvre pas la bulle copier/partager. Le contenu, lui, reste
+     sélectionnable. */
+  button,
+  [role="button"],
+  [role="tab"],
+  [role="menuitem"],
+  [data-slot="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
   /* Anneau de focus au clavier uniquement — plus propre à la souris. */
   :focus-visible {
@@ -216,10 +291,13 @@
   color: var(--primary);
 }
 
-/* Titre : gras, serré, interligne court. */
+/* Titre : gras, serré, interligne court. L'approche dépend de la taille :
+   plus le titre est grand, plus il se resserre (−0,018em à 20 px,
+   −0,03em à 36 px, plafonné à −0,04em). `1em` vaut ici la taille du titre,
+   donc la règle suit aussi les tailles responsives (`sm:text-5xl`). */
 .title {
   font-weight: 700;
-  letter-spacing: -0.03em;
+  letter-spacing: max(calc((12px - 1em) * 0.045), -0.04em);
   line-height: 1.05;
   text-wrap: balance;
 }
@@ -301,17 +379,113 @@
 }
 }
 
-/* Bloc interactif : il se soulève légèrement au survol. */
+/* ─── Pression et zones tactiles ───────────────────────────── */
+
+/* Retour d'appui : le contrôle s'enfonce dès que le doigt se pose.
+   Tailwind v4 écrit l'échelle dans la propriété `scale` (pas `transform`) :
+   c'est elle qui est nommée dans la transition. */
+@utility pressable {
+  transition-property: scale, color, background-color, border-color, box-shadow, opacity;
+  transition-duration: var(--duration-press);
+  transition-timing-function: var(--ease-out);
+  &:active:not(:disabled):not([aria-disabled="true"]) {
+    scale: 0.97;
+  }
+}
+
+/* Zone tactile de 44 px autour d'une petite icône, sans changer la mise en
+   page. L'élément doit être positionné (`relative` ou `absolute`). */
+@utility touch-target {
+  @media (pointer: coarse) {
+    &::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      translate: -50% -50%;
+    }
+  }
+}
+
+/* ─── Tactile ──────────────────────────────────────────────── */
+
+/* iOS zoome sur un champ sous 16 px et ne dézoome pas. Hors calque pour
+   l'emporter sur `text-sm` ; jamais de `maximum-scale`. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select {
+    font-size: max(1rem, 16px);
+  }
+}
+
+/* Feuille glissable : le geste vertical appartient au composant. */
+[data-slot="sheet-content"][data-draggable="true"] {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+/* ─── Composants animés ────────────────────────────────────── */
+
+/* tw-animate-css anime aussi `filter: blur()` dans ses images clés, même à
+   0. `animate-in` / `animate-out` pointent ici vers des images clés qui
+   n'animent que `transform` et `opacity`, avec les mêmes variables
+   (`fade-in-0`, `zoom-in-95`, `slide-in-from-*`…). */
+@theme inline {
+  --animate-in: hk-enter var(--tw-animation-duration, var(--tw-duration, 0.15s)) var(--tw-ease, ease)
+    var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+  --animate-out: hk-exit var(--tw-animation-duration, var(--tw-duration, 0.15s)) var(--tw-ease, ease)
+    var(--tw-animation-delay, 0s) var(--tw-animation-iteration-count, 1) var(--tw-animation-direction, normal)
+    var(--tw-animation-fill-mode, none);
+}
+@keyframes hk-enter {
+  from {
+    opacity: var(--tw-enter-opacity, 1);
+    transform: translate3d(var(--tw-enter-translate-x, 0), var(--tw-enter-translate-y, 0), 0)
+      scale3d(var(--tw-enter-scale, 1), var(--tw-enter-scale, 1), var(--tw-enter-scale, 1))
+      rotate(var(--tw-enter-rotate, 0));
+  }
+}
+@keyframes hk-exit {
+  to {
+    opacity: var(--tw-exit-opacity, 1);
+    transform: translate3d(var(--tw-exit-translate-x, 0), var(--tw-exit-translate-y, 0), 0)
+      scale3d(var(--tw-exit-scale, 1), var(--tw-exit-scale, 1), var(--tw-exit-scale, 1))
+      rotate(var(--tw-exit-rotate, 0));
+  }
+}
+
+/* Bloc interactif : il se soulève légèrement au survol. L'ombre vit sur un
+   pseudo-élément dont seule l'opacité change : animer `box-shadow`
+   repeindrait la carte à chaque image. */
 .glow-card {
   position: relative;
+  isolation: isolate;
   transition:
-    transform 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 300ms cubic-bezier(0.22, 1, 0.36, 1),
-    border-color 300ms ease;
+    translate var(--duration-hover) var(--ease-out),
+    border-color var(--duration-hover) ease;
 }
-.glow-card:hover {
-  transform: translateY(-2px);
+.glow-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
   box-shadow: var(--shadow-float);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .glow-card:hover {
+    translate: 0 -2px;
+  }
+  .glow-card:hover::before {
+    opacity: 1;
+  }
 }
 
 /* Barre de progression de lecture : du violet au jade. */
@@ -320,13 +494,14 @@
   transform-origin: 0 50%;
 }
 
-/* Révélation à l'entrée dans le viewport. */
+/* Révélation à l'entrée dans le viewport (page d'accueil, vue une fois :
+   un peu plus long que l'interface, toujours en ease-out). */
 .reveal {
   opacity: 0;
-  transform: translateY(18px);
+  transform: translateY(14px);
   transition:
-    opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
-    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 600ms var(--ease-out),
+    transform 600ms var(--ease-out);
   transition-delay: var(--reveal-delay, 0ms);
 }
 .reveal[data-revealed="true"] {
@@ -334,7 +509,9 @@
   transform: none;
 }
 
-/* Titre révélé mot à mot : chaque mot monte depuis sous sa ligne. */
+/* Titre révélé mot à mot : chaque mot monte depuis sous sa ligne. Le délai
+   de chaque mot (`--word-delay`) est calculé en JS, avec des écarts qui
+   raccourcissent : une vague, pas un métronome. */
 .word-reveal .word {
   display: inline-block;
   overflow: hidden;
@@ -345,8 +522,8 @@
 .word-reveal .word > span {
   display: inline-block;
   transform: translateY(110%);
-  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1);
-  transition-delay: calc(var(--word-index, 0) * 70ms + var(--reveal-delay, 0ms));
+  transition: transform 700ms var(--ease-out);
+  transition-delay: calc(var(--word-delay, 0ms) + var(--reveal-delay, 0ms));
 }
 .word-reveal[data-revealed="true"] .word > span {
   transform: none;
@@ -363,19 +540,30 @@
   animation: dash-flow 1.6s linear infinite;
 }
 
+/* Pastille « synchronisé » : une onde s'en échappe. L'onde est un
+   pseudo-élément qui grandit et s'efface (`transform` + `opacity`), au lieu
+   d'un `box-shadow` animé qui repeint à chaque image. */
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--jade) 45%, transparent);
+    transform: scale(1);
+    opacity: 0.45;
   }
-  70% {
-    box-shadow: 0 0 0 10px transparent;
-  }
+  70%,
   100% {
-    box-shadow: 0 0 0 0 transparent;
+    transform: scale(3.2);
+    opacity: 0;
   }
 }
 .pulse-ring {
-  animation: pulse-ring 2.4s cubic-bezier(0.66, 0, 0, 1) infinite;
+  position: relative;
+}
+.pulse-ring::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--jade);
+  animation: pulse-ring 2.4s var(--ease-out) infinite;
 }
 
 /* Défilement infini pour la barre de plateformes. */
@@ -393,29 +581,106 @@
 .marquee-mask {
   mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent);
 }
-.marquee-host:hover .marquee-track {
-  animation-play-state: paused;
+@media (hover: hover) and (pointer: fine) {
+  .marquee-host:hover .marquee-track {
+    animation-play-state: paused;
+  }
 }
 
-/* Accessibilité : tout le mouvement est neutralisé si l'utilisateur
-   a demandé une réduction des animations au niveau système. */
+/* ─── Changement de thème ──────────────────────────────────────
+   Clair ↔ sombre en fondu (View Transitions) plutôt qu'en saut de
+   luminosité. Les transitions des éléments restent coupées pendant la
+   bascule (`disableTransitionOnChange`) : tout change en un seul fondu. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: var(--duration-theme);
+  animation-timing-function: ease;
+}
+
+/* ─── Accessibilité : réduction des animations ─────────────────
+   Réduire n'est pas supprimer : les fondus restent (ils aident à
+   comprendre ce qui change), les déplacements, zooms, rebonds et
+   mouvements en boucle disparaissent. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    /* Feuilles, modales, menus, infobulles : fondu seul. */
+    --tw-enter-translate-x: 0 !important;
+    --tw-enter-translate-y: 0 !important;
+    --tw-enter-scale: 1 !important;
+    --tw-enter-rotate: 0 !important;
+    --tw-exit-translate-x: 0 !important;
+    --tw-exit-translate-y: 0 !important;
+    --tw-exit-scale: 1 !important;
+    --tw-exit-rotate: 0 !important;
     scroll-behavior: auto !important;
   }
+  .pressable:active {
+    scale: none !important;
+  }
   .reveal {
-    opacity: 1;
     transform: none;
+    transition: opacity 300ms ease;
+    transition-delay: 0ms;
   }
   .word-reveal .word > span {
     transform: none;
+    transition: none;
   }
+  .word-reveal {
+    transition: opacity 300ms ease;
+  }
+  .word-reveal[data-revealed="false"] {
+    opacity: 0;
+  }
+  .glow-card,
   .glow-card:hover {
-    transform: none;
+    translate: none;
+  }
+  /* Mouvements en boucle : à l'arrêt. Les indicateurs de chargement
+     (`animate-spin`, `animate-pulse`) restent : ils disent « en cours ». */
+  .marquee-track,
+  .dash-flow,
+  .pulse-ring::after {
+    animation: none;
+  }
+}
+
+/* ─── Accessibilité : moins de transparence ──────────────────── */
+@media (prefers-reduced-transparency: reduce) {
+  [data-material] {
+    background-color: var(--background) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+  [data-sonner-toast] {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* ─── Accessibilité : contraste renforcé ─────────────────────── */
+@media (prefers-contrast: more) {
+  :root {
+    --line: #c5ccd5;
+    --border: #9aa4b1;
+    --input: #7d8896;
+    --muted-foreground: #46505c;
+    --faint: #5c6673;
+    --ring: var(--violet);
+  }
+  .dark {
+    --line: #3a4554;
+    --border: #5d6a7b;
+    --input: #74839a;
+    --muted-foreground: #c3cad3;
+    --faint: #a3adba;
+    --ring: var(--violet);
+  }
+  [data-material] {
+    background-color: var(--background) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
 }
