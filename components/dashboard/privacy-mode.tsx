@@ -70,7 +70,7 @@ export function PrivacyToggle({ className }: { className?: string }) {
       aria-label={hidden ? "Afficher les montants" : "Masquer les montants"}
       title={hidden ? "Afficher les montants" : "Masquer les montants"}
       className={cn(
-        "inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        "pressable touch-target relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
         hidden && "text-foreground",
         className
       )}

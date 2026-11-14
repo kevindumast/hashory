@@ -56,7 +56,7 @@ function fmt(v: number | null) {
 
 function ReturnCell({ value }: { value: number | null }) {
   return (
-    <td className={`num px-2 py-2 text-center text-[12px] font-bold rounded transition-all ${cellColor(value)}`} style={cellBg(value)}>
+    <td className={`num px-2 py-2 text-center text-[12px] font-bold rounded ${cellColor(value)}`} style={cellBg(value)}>
       {fmt(value)}
     </td>
   );

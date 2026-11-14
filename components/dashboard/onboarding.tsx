@@ -233,9 +233,10 @@ export function OnboardingChecklist({ className }: { className?: string }) {
 
       {/* Jauge en filet : une règle pleine sur une règle vide. */}
       <div className="mt-3 h-px w-full bg-border" role="presentation">
+        {/* La jauge s'allonge par `scaleX` (composité) et non par `width`. */}
         <div
-          className="h-px bg-primary transition-[width] duration-500"
-          style={{ width: `${(completed / total) * 100}%` }}
+          className="h-px w-full origin-left bg-primary transition-transform duration-(--duration-modal) ease-out"
+          style={{ transform: `scaleX(${completed / total})` }}
         />
       </div>
 

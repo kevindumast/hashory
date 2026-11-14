@@ -3,3 +3,4 @@ export { Reveal } from "./reveal";
 export { NumberTicker } from "./number-ticker";
 export { WordReveal, type WordRevealSegment } from "./word-reveal";
 export { ScrollProgress } from "./scroll-progress";
+export { staggerDelay, wordDelay } from "./timing";

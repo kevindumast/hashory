@@ -547,7 +547,7 @@ export function AccountsView() {
   const hasAnyAccounts = accountsWithTransactions.length > 0
 
   return (
-    <div className="flex flex-col h-full bg-background min-h-screen font-sans p-6 md:p-9 max-w-[1141px] mx-auto">
+    <div className="flex flex-col h-full bg-background min-h-svh font-sans p-6 md:p-9 max-w-[1141px] mx-auto">
       {/* Header */}
       <div className="flex flex-row justify-between items-center mb-9">
         <div className="flex flex-col gap-1">

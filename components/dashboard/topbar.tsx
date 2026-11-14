@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useTheme } from "next-themes";
+import { useThemeSwitch } from "@/hooks/useThemeSwitch";
 import { useDashboardData } from "@/components/dashboard/dashboard-data-context";
 import { SignalItem, useSignals } from "@/components/dashboard/signals-panel";
 import { ClaudeAccessPanel } from "@/components/dashboard/claude-access-panel";
@@ -39,8 +39,7 @@ export function DashboardTopbar({
   onOpenFeedback,
 }: DashboardTopbarProps) {
   const [mounted, setMounted] = useState(false);
-  const { resolvedTheme, setTheme } = useTheme();
-  const theme = resolvedTheme ?? "dark";
+  const { theme, toggle: toggleTheme } = useThemeSwitch();
   const { integrations, isLoadingIntegrations } = useDashboardData();
 
   useEffect(() => {
@@ -98,7 +97,7 @@ export function DashboardTopbar({
         <button
           type="button"
           onClick={onOpenCommandPalette}
-          className="group relative flex h-9 w-full max-w-md cursor-pointer items-center gap-2.5 rounded-full bg-surface px-4 text-sm text-muted-foreground transition-colors hover:bg-muted"
+          className="pressable group relative flex h-9 w-full max-w-md cursor-pointer items-center gap-2.5 rounded-full bg-surface px-4 text-sm text-muted-foreground hover:bg-muted"
         >
           <Search className="size-4 shrink-0" />
           <span className="flex-1 text-left">Rechercher une page, une action…</span>
@@ -132,7 +131,7 @@ export function DashboardTopbar({
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
-            className="max-h-[min(36rem,calc(100vh-5rem))] w-[min(24rem,calc(100vw-2rem))] overflow-y-auto scrollbar-subtle rounded-2xl p-2"
+            className="max-h-[min(36rem,calc(100dvh-5rem))] overscroll-contain w-[min(24rem,calc(100vw-2rem))] overflow-y-auto scrollbar-subtle rounded-2xl p-2"
           >
             <DropdownMenuLabel className="eyebrow px-3 pt-2 text-[11px]">
               Points d&apos;attention{signals.length > 0 ? ` · ${signals.length}` : ""}
@@ -224,7 +223,7 @@ export function DashboardTopbar({
                   : "Changer de thème"
               }
               className="size-8 rounded-full text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              onClick={toggleTheme}
             >
               {mounted && (theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />)}
             </Button>

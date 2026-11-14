@@ -6,6 +6,7 @@ import { Providers } from "./providers";
 import { SiteHeader } from "@/components/site-header";
 import { RootLayoutClient } from "./layout-client";
 import { getSiteUrl, siteConfig } from "@/lib/site";
+import { THEME_COLORS } from "@/lib/theme";
 
 // Calibri d'abord (installée sur Windows et macOS avec Office), Carlito
 // ensuite : métriquement identique, elle garantit le même rendu ailleurs.
@@ -84,14 +85,21 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0d1117" },
-  ],
+  // Le thème se choisit dans le site (classe `dark`), pas dans le système :
+  // une seule couleur au départ, celle du thème clair par défaut, puis le
+  // script ci-dessous et `ThemeColorSync` la recalent sur le thème actif.
+  themeColor: THEME_COLORS.light,
   colorScheme: "light dark",
-  // La barre d'onglets mobile tient compte de l'encoche et de l'indicateur d'accueil.
+  // La page passe sous l'encoche ; les barres fixes se décalent avec
+  // `env(safe-area-inset-*)`.
   viewportFit: "cover",
+  // Le clavier virtuel réduit la zone visible : `dvh` et les barres du bas suivent.
+  interactiveWidget: "resizes-content",
 };
+
+// Exécuté avant le premier rendu : la barre d'état prend la couleur du thème
+// enregistré, sans attendre l'hydratation (mêmes clé et valeurs que next-themes).
+const themeColorScript = `try{var t=localStorage.getItem("theme");if(t==="dark"){document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.setAttribute("content","${THEME_COLORS.dark}")})}}catch(e){}`;
 
 export default function RootLayout({
   children,
@@ -102,8 +110,9 @@ export default function RootLayout({
     <html lang="fr" suppressHydrationWarning>
       <body
         suppressHydrationWarning
-        className={`${sans.variable} ${mono.variable} min-h-screen bg-background font-sans antialiased`}
+        className={`${sans.variable} ${mono.variable} min-h-svh bg-background font-sans antialiased`}
       >
+        <script dangerouslySetInnerHTML={{ __html: themeColorScript }} />
         <a
           href="#contenu"
           className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100] focus:rounded-full focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"

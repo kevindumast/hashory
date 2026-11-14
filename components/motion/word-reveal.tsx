@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useRef, type ElementType } from "react";
 import { cn } from "@/lib/utils";
+import { wordDelay } from "./timing";
 
 /** Un fragment de titre et sa teinte : encre par défaut, ou un des accents. */
 export type WordRevealSegment = {
@@ -75,7 +76,7 @@ export function WordReveal({ segments, className, as: Tag = "h2", delay = 0 }: W
                 <span className="word">
                   <span
                     className={TONES[segment.tone ?? "ink"]}
-                    style={{ "--word-index": index++ } as React.CSSProperties}
+                    style={{ "--word-delay": `${wordDelay(index++)}ms` } as React.CSSProperties}
                   >
                     {word}
                   </span>

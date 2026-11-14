@@ -5,6 +5,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog"
 import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { useSheetDrag } from "@/hooks/useSheetDrag"
 
 function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />
@@ -36,7 +37,7 @@ function SheetOverlay({
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 ease-drawer animation-duration-(--duration-sheet) data-[state=closed]:animation-duration-(--duration-sheet-exit) data-[drag-dismissed=true]:animate-none fixed inset-0 z-50 overscroll-contain bg-black/50",
         className
       )}
       {...props}
@@ -44,38 +45,70 @@ function SheetOverlay({
   )
 }
 
+/**
+ * Feuille attachée à un bord. Entrée et sortie par le même bord, avec la
+ * courbe des tiroirs iOS ; la sortie est plus rapide que l'entrée.
+ *
+ * Une feuille du bas se ferme aussi d'un glisser vers le bas (`dragToDismiss`,
+ * activé par défaut pour `side="bottom"`). Réservé aux feuilles dont le
+ * contenu ne défile pas : le geste vertical appartient alors à la feuille.
+ * Un élément enfant marqué `data-sheet-no-drag` garde ses propres gestes.
+ */
 function SheetContent({
   className,
   children,
   side = "right",
+  dragToDismiss,
+  ref,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
+  dragToDismiss?: boolean
 }) {
+  const closeRef = React.useRef<HTMLButtonElement>(null)
+  const draggable = dragToDismiss ?? side === "bottom"
+  const drag = useSheetDrag({
+    enabled: draggable,
+    onDismiss: () => closeRef.current?.click(),
+  })
+  const setRefs = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      drag.ref.current = node
+      if (typeof ref === "function") ref(node)
+      else if (ref) ref.current = node
+    },
+    [drag.ref, ref]
+  )
+
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
+        ref={setRefs}
         data-slot="sheet-content"
+        data-draggable={draggable ? "true" : undefined}
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out fixed z-50 flex flex-col gap-4 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out ease-drawer animation-duration-(--duration-sheet) data-[state=closed]:animation-duration-(--duration-sheet-exit) data-[drag-dismissed=true]:animate-none fixed z-50 flex flex-col gap-4 overscroll-contain shadow-lg",
           side === "right" &&
-            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l sm:max-w-sm",
+            "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right inset-y-0 right-0 h-full w-3/4 border-l pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-sm",
           side === "left" &&
-            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r sm:max-w-sm",
+            "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left inset-y-0 left-0 h-full w-3/4 border-r pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-sm",
           side === "top" &&
-            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b",
+            "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top inset-x-0 top-0 h-auto border-b pt-[env(safe-area-inset-top)]",
           side === "bottom" &&
-            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t",
+            "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom inset-x-0 bottom-0 h-auto border-t pb-[env(safe-area-inset-bottom)]",
           className
         )}
+        {...drag.handlers}
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary touch-target absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
           <XIcon className="size-4" />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">Fermer</span>
         </SheetPrimitive.Close>
+        {/* Fermeture déclenchée par le glisser : passe par Radix (focus rendu au déclencheur). */}
+        {draggable && <SheetPrimitive.Close ref={closeRef} hidden tabIndex={-1} aria-hidden />}
       </SheetPrimitive.Content>
     </SheetPortal>
   )

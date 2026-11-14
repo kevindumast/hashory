@@ -23,8 +23,10 @@ Une seule famille pour le texte, une mono pour les chiffres.
 Calibri est servie d'abord quand elle est installée (Windows, macOS avec
 Office) ; Carlito, métriquement identique, garantit le même rendu ailleurs.
 
-**Titres** — la classe `.title` : gras, approche `-0.03em`, interligne `1.05`.
-Le grand titre du hero descend à `-0.035em` et `leading-[1]`.
+**Titres** — la classe `.title` : gras, interligne `1.05`, approche qui
+dépend de la taille (−0,018em à 20 px, −0,03em à 36 px, plafond −0,04em).
+Le grand titre du hero descend à `-0.035em` et `leading-[1]`. Les petits
+textes (`text-xs`) prennent une légère approche positive.
 
 ```tsx
 <h2 className="title text-4xl text-foreground sm:text-5xl">
@@ -112,13 +114,63 @@ Tous les jetons sont dans `app/globals.css`, déclinés en clair et en sombre.
 
 ## 7. Mouvement
 
-Le mouvement accompagne la lecture, il ne réagit pas au curseur. Tout est
-dans `@/components/motion` et respecte `prefers-reduced-motion`.
+Le mouvement accompagne la lecture et répond au geste ; il ne décore pas.
+Les règles viennent des skills `apple-design`, `emil-design-eng`,
+`mobile-native` et `gestures` (`.claude/skills/`).
+
+**Jetons** (`app/globals.css`) — jamais de courbe ni de durée en dur.
+
+| Jeton | Valeur | Usage |
+| --- | --- | --- |
+| `ease-out` | `cubic-bezier(0.23, 1, 0.32, 1)` | Tout ce qui entre ou sort, l'appui |
+| `ease-in-out` | `cubic-bezier(0.77, 0, 0.175, 1)` | Ce qui se déplace à l'écran |
+| `ease-drawer` | `cubic-bezier(0.32, 0.72, 0, 1)` | Feuilles et tiroirs (courbe iOS) |
+| `--duration-press` | 140 ms | Retour d'appui |
+| `--duration-tooltip` / `-exit` | 150 / 100 ms | Infobulles |
+| `--duration-popover` / `-exit` | 180 / 120 ms | Menus, listes |
+| `--duration-modal` / `-exit` | 220 / 160 ms | Modales |
+| `--duration-sheet` / `-exit` | 500 / 300 ms | Feuilles attachées à un bord |
+| `--duration-theme` | 250 ms | Fondu clair ↔ sombre |
+
+**Règles**
+
+- La sortie est toujours plus rapide que l'entrée. Jamais `ease-in`.
+- On n'anime que `transform` et `opacity` (hauteur mesurée d'un accordéon
+  exceptée). Jamais `transition-all`.
+- Tailwind v4 écrit `scale-*`, `translate-*`, `rotate-*` dans les propriétés
+  `scale`, `translate`, `rotate` : c'est elles qu'on nomme dans
+  `transition-[…]`, pas `transform`.
+- Sur un élément animé par images clés (`animate-in`), la durée passe par
+  `animation-duration-(--duration-…)`, pas `duration-*` : ce dernier pose
+  aussi `transition-duration`, ce qui fait tout transitionner.
+- Tout élément pressable porte `pressable` (`scale: 0.97` à l'appui). Une
+  petite icône porte `touch-target` (zone tactile de 44 px au doigt).
+- Les menus, listes et infobulles partent de leur déclencheur
+  (`origin-(--radix-…-transform-origin)`), depuis 95 % et jamais de
+  `scale(0)`. Les modales restent centrées.
+- Rien d'animé sur une action au clavier fréquente : la palette ⌘K s'ouvre
+  avec `animated={false}`. Une seconde infobulle voisine s'ouvre sans délai
+  ni animation.
+- `hover:` ne s'applique qu'aux pointeurs précis (`(hover: hover) and
+  (pointer: fine)`, variante redéfinie globalement). En CSS écrit à la main,
+  mettre le `:hover` dans ce même `@media`.
+- Une feuille du bas (`SheetContent side="bottom"`) se ferme d'un glisser :
+  suivi 1:1, résistance vers le haut, voile lié à la position, élan projeté,
+  rattrapable en vol. Son contenu ne doit pas défiler ; un enfant qui garde
+  ses gestes porte `data-sheet-no-drag`.
+- Cascades : écarts qui raccourcissent (`staggerDelay`, `wordDelay`), une
+  seule entrée par conteneur.
+
+**Préférences système** — gérées globalement dans `globals.css` :
+`prefers-reduced-motion` (fondus conservés, déplacements, zooms et boucles
+coupés), `prefers-reduced-transparency` (surfaces `data-material` opaques,
+sans flou), `prefers-contrast: more` (bordures et textes secondaires
+renforcés).
 
 | Composant | Usage |
 | --- | --- |
 | `WordReveal` | Titres de section : les mots montent un à un, segments teintables |
-| `Reveal` | Apparition au défilement, en cascade (`delay` de 60 à 100 ms) |
+| `Reveal` | Apparition au défilement, en cascade (`delay={staggerDelay(index)}`) |
 | `ScrollProgress` | Filet de lecture violet → jade sous l'en-tête |
 | `GlowCard` | Carte interactive qui se soulève légèrement au survol |
 | `NumberTicker` | Comptage des grandes valeurs. Options **sérialisables** (`prefix`, `suffix`, `decimals`) : une fonction ne franchit pas la frontière serveur → client |
@@ -132,7 +184,9 @@ dans `@/components/motion` et respecte `prefers-reduced-motion`.
 
 ## 8. Thèmes
 
-Le thème clair est le thème de référence et celui par défaut. Le sombre est
+Le thème clair est le thème de référence et celui par défaut. La bascule se
+fait en fondu (`useThemeSwitch`, View Transitions) et `theme-color` suit le
+thème actif (`ThemeColorSync`). Le sombre est
 une déclinaison : mêmes rôles, accents éclaircis (`#a48ff0`, `#4cc49e`) pour
 tenir le contraste sur fond bleu nuit. Clerk suit le thème actif
 (`app/providers.tsx`, `components/auth/clerk-appearance.ts`).

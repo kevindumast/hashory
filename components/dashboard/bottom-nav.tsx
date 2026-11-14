@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useState } from "react"
-import { motion, useReducedMotion } from "motion/react"
 import { MoreHorizontal, Plug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet"
@@ -12,17 +11,20 @@ import { useDashboardData } from "@/components/dashboard/dashboard-data-context"
 import { isActivePath, mobileMore as moreItems, mobileTabs as primaryTabs } from "@/components/dashboard/nav-config"
 
 const tabClass =
-  "relative flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-full text-[11px] font-bold transition-colors"
+  "pressable relative flex h-14 flex-1 cursor-pointer flex-col items-center justify-center gap-1 rounded-full text-[11px] font-bold"
 
 /**
  * Barre d'onglets flottante, mobile uniquement. Une pilule posée en bas de
- * l'écran ; l'onglet actif se détache sur une pilule intérieure qui glisse
- * d'un onglet à l'autre.
+ * l'écran ; l'onglet actif se détache sur une pilule intérieure.
+ *
+ * La pilule ne glisse pas d'un onglet à l'autre : le changement d'onglet
+ * coïncide avec le chargement de la page, moment où une animation pilotée
+ * en JS (layout de Motion) perd des images. Le retour vient de l'appui
+ * (`pressable`), immédiat.
  */
 export function BottomNav() {
   const pathname = usePathname()
   const [moreOpen, setMoreOpen] = useState(false)
-  const reduceMotion = useReducedMotion()
   const { openDialog } = useProviderDialog()
   const { transactions, isLoading } = useDashboardData()
 
@@ -30,14 +32,7 @@ export function BottomNav() {
   const activeKey =
     primaryTabs.find((tab) => isActivePath(pathname, tab.href))?.href ?? (moreActive ? "more" : null)
 
-  const indicator = (
-    <motion.span
-      layoutId="bottom-nav-indicator"
-      aria-hidden
-      className="absolute inset-0 -z-10 rounded-full bg-surface"
-      transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 38 }}
-    />
-  )
+  const indicator = <span aria-hidden className="absolute inset-0 -z-10 rounded-full bg-surface" />
 
   return (
     <>
@@ -46,7 +41,7 @@ export function BottomNav() {
 
       <nav
         aria-label="Navigation principale"
-        className="fixed inset-x-0 bottom-0 z-40 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:hidden"
       >
         <div className="isolate mx-auto flex max-w-md items-center gap-1 rounded-full border border-line bg-card p-1.5 shadow-[var(--shadow-float)]">
           {primaryTabs.map(({ href, label, shortLabel, icon: Icon }) => {
@@ -84,7 +79,8 @@ export function BottomNav() {
           side="bottom"
           className="gap-0 rounded-t-3xl border-line bg-card px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3"
         >
-          <span aria-hidden className="mx-auto mb-3 block h-1 w-10 rounded-full bg-line" />
+          {/* Poignée : signale que la feuille se ferme d'un glisser vers le bas. */}
+          <span aria-hidden className="mx-auto mb-3 block h-1 w-10 rounded-full bg-border" />
           <SheetTitle className="eyebrow px-2">Plus</SheetTitle>
           <SheetDescription className="sr-only">Autres pages du tableau de bord</SheetDescription>
 
@@ -100,7 +96,7 @@ export function BottomNav() {
                   onClick={() => setMoreOpen(false)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "flex flex-col gap-3 rounded-2xl p-4 text-sm font-bold transition-colors",
+                    "pressable flex flex-col gap-3 rounded-2xl p-4 text-sm font-bold",
                     active ? "bg-violet-soft text-foreground" : "bg-surface text-foreground hover:bg-muted"
                   )}
                 >
@@ -120,7 +116,7 @@ export function BottomNav() {
               setMoreOpen(false)
               openDialog()
             }}
-            className="mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-foreground px-4 py-3 text-sm font-bold text-background transition-opacity hover:opacity-90"
+            className="pressable mt-3 flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-foreground px-4 py-3 text-sm font-bold text-background hover:opacity-90"
           >
             <Plug className="size-4" />
             Connecter une source
