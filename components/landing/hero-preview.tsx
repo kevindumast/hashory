@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { NumberTicker } from "@/components/motion";
 
 const METRICS = [
@@ -17,6 +17,22 @@ const ALLOCATION = [
 
 const SOURCES = ["Binance", "KuCoin", "0x7f…3a2c", "sol:9K…mR"];
 
+/** Courbe ease-out forte, la même que `--ease-out` en CSS. */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const;
+
+/**
+ * Entrée d'un élément : opacité + courte montée. Les déplacements passent
+ * par la chaîne `transform` complète : avec Motion < 14.2, les raccourcis
+ * `x`/`y` tournent sur le thread principal, justement occupé par
+ * l'hydratation pendant que le hero s'anime. Animations réduites : fondu seul.
+ */
+function rise(distance: number, reduce: boolean | null) {
+  return {
+    initial: reduce ? { opacity: 0 } : { opacity: 0, transform: `translateY(${distance}px)` },
+    animate: reduce ? { opacity: 1 } : { opacity: 1, transform: "translateY(0px)" },
+  };
+}
+
 const SPARKLINE =
   "M0,65 L50,58 L100,52 L150,60 L200,45 L250,38 L300,42 L350,30 L400,25 L450,18 L500,22 L550,12 L600,8";
 
@@ -27,6 +43,7 @@ const SPARKLINE =
  * sans jamais bloquer le premier rendu.
  */
 export function HeroPreview() {
+  const reduce = useReducedMotion();
   return (
     <div className="float-card w-full overflow-hidden">
       <div>
@@ -51,9 +68,8 @@ export function HeroPreview() {
           {SOURCES.map((source, index) => (
             <motion.span
               key={source}
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.35 + index * 0.08, duration: 0.4 }}
+              {...rise(-4, reduce)}
+              transition={{ delay: 0.35 + index * 0.06, duration: 0.4, ease: EASE_OUT }}
               className="chip chip-violet py-0.5 text-[11px]"
             >
               {source}
@@ -70,9 +86,8 @@ export function HeroPreview() {
           {METRICS.map((metric, index) => (
             <motion.div
               key={metric.label}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + index * 0.1, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+              {...rise(8, reduce)}
+              transition={{ delay: 0.5 + index * 0.08, duration: 0.5, ease: EASE_OUT }}
               className="flex flex-col gap-1 bg-card px-5 py-4"
             >
               <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
@@ -124,7 +139,7 @@ export function HeroPreview() {
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
-              initial={{ pathLength: 0 }}
+              initial={{ pathLength: reduce ? 1 : 0 }}
               animate={{ pathLength: 1 }}
               transition={{ delay: 0.6, duration: 1.4, ease: "easeInOut" }}
             />
@@ -136,9 +151,8 @@ export function HeroPreview() {
           {ALLOCATION.map((item, index) => (
             <motion.div
               key={item.asset}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.9 + index * 0.08, duration: 0.5 }}
+              {...rise(10, reduce)}
+              transition={{ delay: 0.9 + index * 0.06, duration: 0.5, ease: EASE_OUT }}
               className="rounded-xl bg-surface px-3 py-2.5 text-left"
             >
               <p className="text-xs font-bold text-slate">{item.asset}</p>

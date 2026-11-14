@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { motion, useReducedMotion } from "motion/react"
 import { User, Settings, LogOut, MoreHorizontal, Plug, Sparkles, MessageSquareWarning } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
 import { cn } from "@/lib/utils"
@@ -101,8 +100,6 @@ function SidebarLink({
   collapsed: boolean
   badge: string | null
 }) {
-  const reduceMotion = useReducedMotion()
-
   const link = (
     <Link
       href={href}
@@ -116,14 +113,9 @@ function SidebarLink({
           : "text-muted-foreground hover:bg-surface/60 hover:text-sidebar-foreground"
       )}
     >
-      {active && (
-        <motion.span
-          layoutId="sidebar-indicator"
-          aria-hidden
-          className="absolute inset-0 -z-10 rounded-xl bg-surface"
-          transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 500, damping: 40 }}
-        />
-      )}
+      {/* Pas de pilule qui glisse : la navigation (souvent au clavier)
+          coïncide avec le chargement de la page. */}
+      {active && <span aria-hidden className="absolute inset-0 -z-10 rounded-xl bg-surface" />}
       <Icon className={cn("size-[18px] shrink-0", active && "text-violet")} strokeWidth={active ? 2.3 : 2} />
       {!collapsed && <span className="flex-1 truncate">{label}</span>}
       {!collapsed && badge && (
@@ -311,7 +303,10 @@ function UserMenu({ compact = false }: { compact?: boolean }) {
  */
 export function MobileNav({ onOpenFeedback }: { onOpenFeedback: () => void }) {
   return (
-    <div className="flex md:hidden sticky top-0 z-40 h-16 items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur px-4 pt-[env(safe-area-inset-top)] box-content">
+    <div
+      data-material
+      className="flex md:hidden sticky top-0 z-40 h-16 items-center justify-between border-b border-sidebar-border bg-sidebar/95 backdrop-blur pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[env(safe-area-inset-top)] box-content"
+    >
       <Link href="/dashboard" aria-label="Retour à la synthèse" className="flex items-center gap-2.5">
         <HashoryLogo size={32} />
         <span className="text-lg font-bold tracking-tight text-sidebar-foreground">Hashory</span>
@@ -323,7 +318,7 @@ export function MobileNav({ onOpenFeedback }: { onOpenFeedback: () => void }) {
           onClick={onOpenFeedback}
           aria-label="Signaler un bug ou une idée"
           title="Bug ou idée ?"
-          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          className="pressable touch-target relative inline-flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
         >
           <MessageSquareWarning className="size-4" />
         </button>

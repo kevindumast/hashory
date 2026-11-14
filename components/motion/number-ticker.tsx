@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type NumberTickerProps = {
@@ -37,7 +37,7 @@ export function NumberTicker({
   onViewport = true,
 }: NumberTickerProps) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [display, setDisplay] = useState(value);
+  const textRef = useRef<HTMLSpanElement>(null);
   const previous = useRef(value);
 
   const format = (input: number) =>
@@ -48,7 +48,13 @@ export function NumberTicker({
 
   useEffect(() => {
     const node = ref.current;
-    if (!node) return;
+    const text = textRef.current;
+    if (!node || !text) return;
+    // Chaque image écrit le texte directement : un `setState` par image
+    // re-rendrait le composant 60 fois par seconde.
+    const setDisplay = (input: number) => {
+      text.textContent = format(input);
+    };
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       previous.current = value;
@@ -93,11 +99,15 @@ export function NumberTicker({
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
-  }, [value, duration, onViewport]);
+    // `format` ne dépend que des props listées ci-dessous.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration, onViewport, prefix, suffix, decimals]);
 
   return (
     <span ref={ref} className={cn("num", className)}>
-      <span aria-hidden="true">{format(display)}</span>
+      <span ref={textRef} aria-hidden="true">
+        {format(previous.current)}
+      </span>
       <span className="sr-only">{format(value)}</span>
     </span>
   );

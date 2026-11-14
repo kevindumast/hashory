@@ -9,7 +9,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { GlowCard, NumberTicker, Reveal, WordReveal } from "@/components/motion";
+import { GlowCard, NumberTicker, Reveal, WordReveal, staggerDelay } from "@/components/motion";
 import { FlowDiagram } from "@/components/landing/flow-diagram";
 import { HeroPreview } from "@/components/landing/hero-preview";
 import { PlatformMarquee } from "@/components/landing/platform-marquee";
@@ -365,7 +365,7 @@ export default async function Home() {
 
           <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {capabilities.map((capability, index) => (
-              <Reveal key={capability.title} delay={index * 60}>
+              <Reveal key={capability.title} delay={staggerDelay(index, 60)}>
                 <GlowCard className="h-full rounded-2xl border border-line bg-card">
                   <article className="flex h-full flex-col p-7">
                     <span
@@ -411,7 +411,7 @@ export default async function Home() {
               />
               <ol className="grid gap-10 md:grid-cols-3 md:gap-8">
                 {workflow.map((item, index) => (
-                  <Reveal as="li" key={item.step} delay={index * 100}>
+                  <Reveal as="li" key={item.step} delay={staggerDelay(index, 100)}>
                     <span
                       className={cn(
                         "relative flex size-6 items-center justify-center rounded-full ring-4 ring-surface",
@@ -436,7 +436,7 @@ export default async function Home() {
 
             <div className="mt-20 grid gap-5 sm:grid-cols-3">
               {metrics.map((metric, index) => (
-                <Reveal key={metric.label} delay={index * 70}>
+                <Reveal key={metric.label} delay={staggerDelay(index, 70)}>
                   <div className="h-full rounded-2xl border border-line bg-card px-7 py-8">
                     <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-faint">
                       {metric.label}
@@ -480,7 +480,7 @@ export default async function Home() {
 
             <div className="grid gap-5 sm:grid-cols-2 lg:col-span-7">
               {transparency.map((item, index) => (
-                <Reveal key={item.title} delay={index * 60}>
+                <Reveal key={item.title} delay={staggerDelay(index, 60)}>
                   <div className="h-full rounded-2xl bg-surface p-7">
                     <h3 className="text-lg font-bold text-foreground">{item.title}</h3>
                     <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">

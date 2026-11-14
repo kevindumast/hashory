@@ -31,8 +31,11 @@ export function SiteHeader() {
   }
 
   return (
-    <div className="sticky top-0 z-40 border-b border-line bg-background/85 backdrop-blur">
-      <header className="mx-auto w-full max-w-7xl px-4 sm:px-8">
+    <div
+      data-material
+      className="sticky top-0 z-40 border-b border-line bg-background/85 pt-[env(safe-area-inset-top)] backdrop-blur"
+    >
+      <header className="mx-auto w-full max-w-7xl pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] sm:px-8">
         <div className="flex h-16 w-full items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 text-foreground">
             <HashoryLogo size={24} />
@@ -101,7 +104,7 @@ export function SiteHeader() {
                       href={link.href}
                       onClick={() => setIsOpen(false)}
                       className={cn(
-                        "rounded-xl px-3 py-3 text-base font-bold transition hover:bg-muted hover:text-foreground",
+                        "pressable rounded-xl px-3 py-3 text-base font-bold hover:bg-muted hover:text-foreground",
                         pathname === link.href && "bg-muted text-foreground"
                       )}
                     >

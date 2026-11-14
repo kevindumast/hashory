@@ -1349,7 +1349,7 @@ function TransactionDetail({
 }) {
   return (
     <Sheet open={row !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-full gap-0 overflow-y-auto bg-card p-0 sm:max-w-md">
+      <SheetContent className="w-full gap-0 overflow-y-auto bg-card p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-md">
         {row && (
           <>
             <SheetHeader className="border-b border-line p-6">

@@ -17,7 +17,7 @@ type AuthLayoutProps = {
 
 export default function AuthLayout({ children }: AuthLayoutProps) {
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-svh">
       {/* Colonne éditoriale — reprend le vocabulaire de la page d'accueil */}
       <div className="relative hidden flex-col justify-between overflow-hidden border-r border-line bg-surface px-10 py-12 lg:flex lg:w-[46%]">
         <div className="grid-paper pointer-events-none absolute inset-0" aria-hidden="true" />

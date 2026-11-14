@@ -81,10 +81,12 @@ export function DashboardShell({ children }: DashboardShellProps) {
         <PrivacyProvider>
           <AutoSync />
           <div className="flex h-dvh overflow-hidden bg-background">
-            {/* Sidebar — dépliée ou réduite à un rail d'icônes */}
+            {/* Sidebar — dépliée ou réduite à un rail d'icônes. La bascule est
+                instantanée : animer `width` recalculerait la mise en page de
+                tout le tableau de bord à chaque image. */}
             <div
               className={cn(
-                "hidden md:block shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out",
+                "hidden md:block shrink-0 overflow-hidden",
                 sidebarOpen ? "w-[232px]" : "w-[72px]"
               )}
             >
@@ -92,7 +94,9 @@ export function DashboardShell({ children }: DashboardShellProps) {
             </div>
 
             {/* Colonne principale — l'unique container scrollable */}
-            <div className="flex flex-col flex-1 min-w-0 overflow-y-auto scrollbar-subtle">
+            {/* `overscroll-contain` : en bout de défilement, la page derrière
+                ne bouge pas et le « tirer pour rafraîchir » ne se déclenche pas. */}
+            <div className="flex flex-col flex-1 min-w-0 overflow-y-auto overscroll-contain scrollbar-subtle">
               <MobileNav onOpenFeedback={() => setFeedbackOpen(true)} />
 
               <div className="hidden md:block sticky top-0 z-30">

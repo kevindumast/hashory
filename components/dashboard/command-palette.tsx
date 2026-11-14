@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
+import { useThemeSwitch } from "@/hooks/useThemeSwitch";
 import { useClerk } from "@clerk/nextjs";
 import {
   ArrowLeftRight,
@@ -48,7 +48,7 @@ type CommandPaletteProps = {
  */
 export function CommandPalette({ open, onOpenChange, onConnectProvider }: CommandPaletteProps) {
   const router = useRouter();
-  const { setTheme, resolvedTheme } = useTheme();
+  const { theme: resolvedTheme, toggle: toggleTheme } = useThemeSwitch();
   const { signOut } = useClerk();
   const { portfolioTokens, refresh } = useDashboardData();
   const [query, setQuery] = useState("");
@@ -99,8 +99,8 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
         group: "Actions",
         icon: resolvedTheme === "dark" ? Sun : Moon,
         run: () => {
-          setTheme(resolvedTheme === "dark" ? "light" : "dark");
           onOpenChange(false);
+          toggleTheme();
         },
         keywords: "theme dark light apparence",
       },
@@ -133,7 +133,7 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
       : [];
 
     return [...base, ...tokens];
-  }, [router, onOpenChange, onConnectProvider, refresh, resolvedTheme, setTheme, signOut, portfolioTokens, query]);
+  }, [router, onOpenChange, onConnectProvider, refresh, resolvedTheme, toggleTheme, signOut, portfolioTokens, query]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -175,8 +175,10 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* Ouverte au clavier des dizaines de fois par jour : aucune animation. */}
       <DialogContent
         showCloseButton={false}
+        animated={false}
         className="top-[15%] max-w-xl translate-y-0 gap-0 overflow-hidden p-0"
         onKeyDown={handleKeyDown}
       >
@@ -197,7 +199,7 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
           </kbd>
         </div>
 
-        <div ref={listRef} className="max-h-[min(60vh,420px)] overflow-y-auto scrollbar-subtle p-2">
+        <div ref={listRef} className="max-h-[min(60vh,420px)] overflow-y-auto overscroll-contain scrollbar-subtle p-2">
           {filtered.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">
               Aucun résultat pour « {query} ».
@@ -220,7 +222,7 @@ export function CommandPalette({ open, onOpenChange, onConnectProvider }: Comman
                     onMouseEnter={() => setActiveIndex(index)}
                     onClick={item.run}
                     className={cn(
-                      "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                      "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm",
                       index === activeIndex
                         ? "bg-accent text-accent-foreground"
                         : "text-muted-foreground hover:bg-accent/50"
