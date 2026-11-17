@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { HashoryLogo } from "@/components/hashory-logo";
-import { ScrollProgress } from "@/components/motion";
+import { RollingText, ScrollProgress } from "@/components/motion";
 
 const navLinks = [
   { href: "/#apercu", label: "Aperçu" },
@@ -47,11 +47,11 @@ export function SiteHeader() {
                 key={link.href}
                 href={link.href}
                 className={cn(
-                  "transition-colors hover:text-foreground",
+                  "group transition-colors hover:text-foreground",
                   pathname === link.href && "text-foreground"
                 )}
               >
-                {link.label}
+                <RollingText text={link.label} />
               </Link>
             ))}
           </nav>

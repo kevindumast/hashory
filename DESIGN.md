@@ -174,6 +174,21 @@ renforcés).
 | `ScrollProgress` | Filet de lecture violet → jade sous l'en-tête |
 | `GlowCard` | Carte interactive qui se soulève légèrement au survol |
 | `NumberTicker` | Comptage des grandes valeurs. Options **sérialisables** (`prefix`, `suffix`, `decimals`) : une fonction ne franchit pas la frontière serveur → client |
+| `Odometer` | Compteur à rouleaux pour les chiffres clés de la page d'accueil (les unités tournent en dernier). Mêmes options sérialisables que `NumberTicker` |
+| `RollingText` | Libellé dont les lettres roulent d'une ligne au survol du parent `group` : liens de navigation, CTA principaux |
+| `ScrollStack` | Étapes empilées au défilement (`sticky`), la carte recouverte recule légèrement |
+| `CapabilityIndex` | Fonctionnalités en index numéroté : panneau latéral au survol sur grand écran, accordéon au toucher |
+
+Ces quatre composants sont repris de React Bits (`Counter`, `ScrollStack`),
+Skiper UI (« Rolling text », « Animated number », « Card stack scroll »,
+« Hover expand ») et Vengeance UI (« Image reveal list »), puis réécrits
+aux jetons et aux règles ci-dessus : pas de dépendance ajoutée. Avant d'en
+reprendre un autre, vérifiez qu'il respecte les interdits de la section 3
+(la plupart des effets WebGL, halos, curseurs et bordures lumineuses de
+ces bibliothèques ne passent pas).
+
+Dans « Le problème », l'ancienne façon de faire est barrée au crayon ligne
+après ligne (`.strike-draw`), puis la coche se trace (`.check-draw`).
 
 ```tsx
 <WordReveal
