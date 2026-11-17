@@ -9,7 +9,8 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { GlowCard, NumberTicker, Reveal, WordReveal, staggerDelay } from "@/components/motion";
+import { Odometer, Reveal, RollingText, ScrollStack, WordReveal, staggerDelay } from "@/components/motion";
+import { CapabilityIndex } from "@/components/landing/capability-index";
 import { FlowDiagram } from "@/components/landing/flow-diagram";
 import { HeroPreview } from "@/components/landing/hero-preview";
 import { PlatformMarquee } from "@/components/landing/platform-marquee";
@@ -90,18 +91,21 @@ const workflow = [
   {
     step: "01",
     title: "Vous connectez",
+    chips: ["Clé API en lecture seule", "Adresse publique", "Export CSV"],
     description:
       "Une clé API en lecture seule, ou simplement l'adresse publique d'un wallet. Pas de clé sous la main ? Un export CSV suffit.",
   },
   {
     step: "02",
     title: "Hashory reconstitue",
+    chips: ["Historique complet", "Dédoublonnage", "Rejeu chronologique"],
     description:
       "L'intégralité de votre historique est récupérée, dédupliquée et rejouée pour reconstruire votre portefeuille depuis son premier achat.",
   },
   {
     step: "03",
     title: "Vous lisez, vous déclarez",
+    chips: ["Performance", "Saisonnalité", "150 VH bis"],
     description:
       "Performance, répartition, saisonnalité et déclaration fiscale sortent des mêmes données. Une seule source, aucune ressaisie.",
   },
@@ -227,9 +231,9 @@ export default async function Home() {
 
               <Reveal delay={320}>
                 <div className="mt-10 flex flex-wrap items-center gap-3">
-                  <Button asChild size="lg" className="px-7">
+                  <Button asChild size="lg" className="group px-7">
                     <Link href="/sign-up">
-                      Créer un compte gratuit
+                      <RollingText text="Créer un compte gratuit" />
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -279,7 +283,7 @@ export default async function Home() {
           />
 
           <Reveal delay={120}>
-            <div className="mt-14 overflow-hidden rounded-3xl border border-line">
+            <div className="mt-14 overflow-hidden rounded-3xl border border-line bg-card">
               <div className="grid grid-cols-1 gap-4 border-b border-line bg-surface/60 px-6 py-4 sm:grid-cols-2 sm:gap-10 sm:px-8">
                 <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-faint">
                   Aujourd&apos;hui
@@ -288,19 +292,31 @@ export default async function Home() {
                   Avec Hashory
                 </span>
               </div>
-              {comparison.map((row) => (
-                <div
+              {comparison.map((row, index) => (
+                <Reveal
                   key={row.before}
+                  delay={staggerDelay(index, 140)}
                   className="grid grid-cols-1 gap-2 border-b border-line px-6 py-5 last:border-b-0 sm:grid-cols-2 sm:gap-10 sm:px-8"
                 >
-                  <p className="text-[15px] leading-relaxed text-faint line-through decoration-faint/50">
-                    {row.before}
+                  <p className="text-[15px] leading-relaxed text-faint">
+                    <span className="strike-draw">{row.before}</span>
                   </p>
                   <p className="flex items-start gap-3 text-[15px] leading-relaxed text-foreground">
-                    <Check className="mt-1 h-4 w-4 shrink-0 text-jade" />
-                    {row.after}
+                    <svg
+                      viewBox="0 0 24 24"
+                      className="check-draw mt-1 h-4 w-4 shrink-0 text-jade"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M20 6 9 17l-5-5" pathLength={1} />
+                    </svg>
+                    <span className="after-ink">{row.after}</span>
                   </p>
-                </div>
+                </Reveal>
               ))}
             </div>
           </Reveal>
@@ -363,75 +379,69 @@ export default async function Home() {
             ]}
           />
 
-          <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {capabilities.map((capability, index) => (
-              <Reveal key={capability.title} delay={staggerDelay(index, 60)}>
-                <GlowCard className="h-full rounded-2xl border border-line bg-card">
-                  <article className="flex h-full flex-col p-7">
-                    <span
-                      className={cn(
-                        "chip w-fit",
-                        capability.tone === "violet" ? "chip-violet" : "chip-jade"
-                      )}
-                    >
-                      {capability.tag}
-                    </span>
-                    <h3 className="mt-5 text-xl font-bold tracking-[-0.01em] text-foreground">
-                      {capability.title}
-                    </h3>
-                    <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
-                      {capability.description}
-                    </p>
-                  </article>
-                </GlowCard>
-              </Reveal>
-            ))}
-          </div>
+          <Reveal delay={120} className="mt-14">
+            <CapabilityIndex items={capabilities} />
+          </Reveal>
         </section>
 
         {/* ─── COMMENT ÇA MARCHE ─── */}
         <section id="workflow" className="scroll-mt-16 bg-surface py-24 sm:py-32">
           <div className={container}>
-            <Reveal>
-              <p className="eyebrow mb-5">Comment ça marche</p>
-            </Reveal>
-            <WordReveal
-              className={sectionTitle}
-              segments={[
-                { text: "Trois étapes," },
-                { text: "deux minutes.", tone: "violet" },
-              ]}
-            />
-
-            <div className="relative mt-16">
-              {/* Le fil qui relie les étapes, du violet au jade */}
-              <div
-                className="scroll-progress absolute left-0 right-0 top-[11px] hidden h-px md:block"
-                aria-hidden="true"
-              />
-              <ol className="grid gap-10 md:grid-cols-3 md:gap-8">
-                {workflow.map((item, index) => (
-                  <Reveal as="li" key={item.step} delay={staggerDelay(index, 100)}>
-                    <span
-                      className={cn(
-                        "relative flex size-6 items-center justify-center rounded-full ring-4 ring-surface",
-                        index === 0 && "bg-violet",
-                        index === 1 && "bg-[color-mix(in_srgb,var(--violet),var(--jade))]",
-                        index === 2 && "bg-jade"
-                      )}
-                    >
-                      <span className="size-2 rounded-full bg-background" />
-                    </span>
-                    <p className="num mt-6 text-sm text-faint">{item.step}</p>
-                    <h3 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-foreground">
-                      {item.title}
-                    </h3>
-                    <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-muted-foreground">
-                      {item.description}
+            <div className="grid gap-12 lg:grid-cols-12">
+              <div className="lg:col-span-5">
+                <div className="lg:sticky lg:top-28">
+                  <Reveal>
+                    <p className="eyebrow mb-5">Comment ça marche</p>
+                  </Reveal>
+                  <WordReveal
+                    className="title text-4xl text-foreground sm:text-5xl"
+                    segments={[
+                      { text: "Trois étapes," },
+                      { text: "deux minutes.", tone: "violet" },
+                    ]}
+                  />
+                  <Reveal delay={120}>
+                    <p className="mt-6 max-w-sm text-[17px] leading-relaxed text-slate">
+                      Une seule fois. Ensuite, Hashory se tient à jour tout seul.
                     </p>
                   </Reveal>
+                </div>
+              </div>
+
+              <ScrollStack className="lg:col-span-7">
+                {workflow.map((item, index) => (
+                  <article
+                    key={item.step}
+                    className="rounded-3xl border border-line bg-card p-8 shadow-[var(--shadow-float)] sm:p-10"
+                  >
+                    <div className="flex items-baseline justify-between gap-6">
+                      <h3 className="text-2xl font-bold tracking-[-0.02em] text-foreground sm:text-3xl">
+                        {item.title}
+                      </h3>
+                      <span
+                        className={cn(
+                          "num text-5xl font-bold tracking-[-0.04em] sm:text-6xl",
+                          index === 0 && "text-violet",
+                          index === 1 && "text-[color-mix(in_srgb,var(--violet),var(--jade))]",
+                          index === 2 && "text-jade"
+                        )}
+                      >
+                        {item.step}
+                      </span>
+                    </div>
+                    <p className="mt-4 max-w-md text-[16px] leading-relaxed text-muted-foreground">
+                      {item.description}
+                    </p>
+                    <div className="mt-8 flex flex-wrap gap-2">
+                      {item.chips.map((chip) => (
+                        <span key={chip} className="chip">
+                          {chip}
+                        </span>
+                      ))}
+                    </div>
+                  </article>
                 ))}
-              </ol>
+              </ScrollStack>
             </div>
 
             <div className="mt-20 grid gap-5 sm:grid-cols-3">
@@ -442,7 +452,7 @@ export default async function Home() {
                       {metric.label}
                     </p>
                     <p className="mt-4 text-6xl font-bold tracking-[-0.04em] text-foreground">
-                      <NumberTicker value={metric.value} suffix={metric.suffix} className="font-sans" />
+                      <Odometer value={metric.value} suffix={metric.suffix} className="font-sans" />
                     </p>
                     <p className="mt-3 text-[15px] text-muted-foreground">{metric.description}</p>
                   </div>
@@ -548,9 +558,9 @@ export default async function Home() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 lg:col-span-4 lg:justify-end">
-                  <Button asChild size="lg" className="px-7">
+                  <Button asChild size="lg" className="group px-7">
                     <Link href="/sign-up">
-                      Créer un compte
+                      <RollingText text="Créer un compte" />
                       <ArrowRight className="h-4 w-4" />
                     </Link>
                   </Button>
